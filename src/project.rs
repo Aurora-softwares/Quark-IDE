@@ -117,3 +117,78 @@ mod tests {
         fs::remove_dir_all(&base).unwrap();
     }
 }
+
+#[cfg(test)]
+mod extra_tests {
+    use super::*;
+    fn sandbox(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "quark-{}-{}-{:?}",
+            name,
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+    #[test]
+    fn detects_missing_source() {
+        let root = sandbox("missing");
+        fs::write(
+            root.join("p.hyproj"),
+            "name='missing'\nsources=['lost.hy']\n",
+        )
+        .unwrap();
+        let p = load(&root.join("p.hyproj"));
+        assert!(p.warnings.iter().any(|w| w.contains("Missing source")));
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn malformed_manifest_becomes_warning() {
+        let root = sandbox("malformed");
+        fs::write(root.join("p.hyproj"), "sources = [not valid").unwrap();
+        let p = load(&root.join("p.hyproj"));
+        assert!(p.warnings.iter().any(|w| w.contains("Invalid .hyproj")));
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn external_reference_loads_sources() {
+        let root = sandbox("external");
+        fs::create_dir_all(root.join("outer")).unwrap();
+        fs::create_dir_all(root.join("other")).unwrap();
+        fs::write(
+            root.join("outer/root.hyproj"),
+            "name='Root'\nproject_references=['../other/lib.hyproj']\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("other/lib.hyproj"),
+            "name='Lib'\nsources=['lib.hy']\n",
+        )
+        .unwrap();
+        fs::write(root.join("other/lib.hy"), "").unwrap();
+        let p = load(&root.join("outer/root.hyproj"));
+        let mut sources = vec![];
+        collect_sources(&p, &mut sources);
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].file_name().unwrap(), "lib.hy");
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn missing_reference_is_reported() {
+        let root = sandbox("missing-ref");
+        fs::write(
+            root.join("root.hyproj"),
+            "project_references=['notfound.hyproj']\n",
+        )
+        .unwrap();
+        let p = load(&root.join("root.hyproj"));
+        assert_eq!(p.references.len(), 1);
+        assert!(p.references[0]
+            .warnings
+            .iter()
+            .any(|w| w.contains("Cannot read")));
+        fs::remove_dir_all(root).unwrap();
+    }
+}

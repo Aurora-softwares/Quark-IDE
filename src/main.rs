@@ -1,11 +1,13 @@
+mod command;
+mod editor;
 mod project;
 
+use editor::{completion_candidates, highlight_hydrogen};
 use eframe::egui::{self, Color32, Key, KeyboardShortcut, Modifiers, RichText, TextEdit};
 use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
-    process::Command,
     sync::mpsc::{self, Receiver},
     thread,
 };
@@ -36,6 +38,8 @@ struct Settings {
     folders: Vec<PathBuf>,
     projects: Vec<PathBuf>,
     compiler: String,
+    #[serde(default)]
+    word_wrap: bool,
 }
 
 struct Quark {
@@ -50,8 +54,11 @@ struct Quark {
     show_quick_open: bool,
     show_terminal: bool,
     show_clone: bool,
+    show_completion: bool,
+    completion_query: String,
     clone_url: String,
     job_rx: Option<Receiver<String>>,
+    job_done: bool,
     status: String,
 }
 impl Quark {
@@ -72,8 +79,11 @@ impl Quark {
             show_quick_open: false,
             show_terminal: true,
             show_clone: false,
+            show_completion: false,
+            completion_query: String::new(),
             clone_url: String::new(),
             job_rx: None,
+            job_done: false,
             status: "Ready".into(),
         };
         if q.settings.compiler.is_empty() {
@@ -188,19 +198,8 @@ impl Quark {
             .push_str(&format!("\n$ {} {}\n", program, args.join(" ")));
         let (tx, rx) = mpsc::channel();
         self.job_rx = Some(rx);
-        thread::spawn(move || {
-            let result = Command::new(&program).args(&args).current_dir(cwd).output();
-            let message = match result {
-                Ok(result) => format!(
-                    "{}{}\n[Exit: {}]\n",
-                    String::from_utf8_lossy(&result.stdout),
-                    String::from_utf8_lossy(&result.stderr),
-                    result.status
-                ),
-                Err(e) => format!("Cannot start {program}: {e}\n"),
-            };
-            let _ = tx.send(message);
-        });
+        self.job_done = false;
+        thread::spawn(move || command::run_streamed(&program, &args, &cwd, tx));
     }
     fn shell(&mut self, command: String) {
         if command.trim().is_empty() {
@@ -271,6 +270,13 @@ impl Quark {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(cmd, Key::P))) {
             self.show_quick_open = true;
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(cmd, Key::Space))) {
+            self.show_completion = true;
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::ALT, Key::Z))) {
+            self.settings.word_wrap = !self.settings.word_wrap;
+            self.persist();
         }
         if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(cmd, Key::W))) {
             if let Some(i) = self.active {
@@ -429,10 +435,16 @@ fn settings_file() -> Option<PathBuf> {
 impl eframe::App for Quark {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(rx) = &self.job_rx {
-            if let Ok(msg) = rx.try_recv() {
+            while let Ok(msg) = rx.try_recv() {
                 self.output.push_str(&msg);
-                self.job_rx = None;
             }
+            if matches!(rx.try_recv(), Err(mpsc::TryRecvError::Disconnected)) {
+                self.job_done = true;
+            }
+        }
+        if self.job_done {
+            self.job_rx = None;
+            self.job_done = false;
         }
         self.shortcuts(ctx);
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
@@ -480,6 +492,10 @@ impl eframe::App for Quark {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
+                    if ui.button("Completion  Ctrl/Cmd+Space").clicked() {
+                        self.show_completion = true;
+                        ui.close_menu();
+                    }
                     if ui.button("Find  Ctrl+F").clicked() {
                         self.show_search = true;
                         ui.close_menu();
@@ -526,6 +542,12 @@ impl eframe::App for Quark {
                 });
                 ui.menu_button("View", |ui| {
                     ui.checkbox(&mut self.show_terminal, "Command terminal");
+                    if ui
+                        .checkbox(&mut self.settings.word_wrap, "Word wrap  Alt+Z")
+                        .changed()
+                    {
+                        self.persist();
+                    }
                 });
                 ui.separator();
                 if ui.button("▶ Build").clicked() {
@@ -543,7 +565,7 @@ impl eframe::App for Quark {
             ui.horizontal(|ui| {
                 ui.label(&self.status);
                 ui.separator();
-                ui.label("Hydrogen • UTF-8 • Quark IDE 0.2.1");
+                ui.label("Hydrogen • UTF-8 • Quark IDE 0.3.0");
             });
         });
         if self.show_terminal {
@@ -625,33 +647,54 @@ impl eframe::App for Quark {
             ui.separator();
             if let Some(i) = self.active {
                 if let Some(doc) = self.docs.get_mut(i) {
-                    let syntax = doc
+                    let is_hydrogen = doc
                         .path
                         .as_ref()
                         .and_then(|p| p.extension())
                         .and_then(|s| s.to_str())
-                        .unwrap_or("hy");
-                    let language = if syntax == "hyproj" { "toml" } else { "rs" };
-                    let mut layouter = |ui: &egui::Ui, text: &str, wrap_width: f32| {
-                        let mut job = egui::text::LayoutJob::simple(
-                            text.to_owned(),
-                            egui::FontId::monospace(14.0),
-                            ui.visuals().text_color(),
-                            wrap_width,
-                        );
-                        job.wrap.max_width = wrap_width;
+                        != Some("hyproj");
+                    let wrap = self.settings.word_wrap;
+                    let mut layouter = move |ui: &egui::Ui, text: &str, wrap_width: f32| {
+                        let width = if wrap { wrap_width } else { f32::INFINITY };
+                        let mut job = if is_hydrogen {
+                            highlight_hydrogen(text, ui.visuals().text_color())
+                        } else {
+                            egui::text::LayoutJob::simple(
+                                text.to_owned(),
+                                egui::FontId::monospace(14.0),
+                                ui.visuals().text_color(),
+                                width,
+                            )
+                        };
+                        job.wrap.max_width = width;
                         ui.fonts(|f| f.layout_job(job))
                     };
-                    let _ = language;
-                    ui.add_sized(
-                        ui.available_size(),
-                        TextEdit::multiline(&mut doc.text)
-                            .font(egui::TextStyle::Monospace)
-                            .code_editor()
-                            .desired_rows(25)
-                            .lock_focus(true)
-                            .layouter(&mut layouter),
-                    );
+                    // The editor owns its scroll area on both axes.  Unwrapped lines
+                    // retain their natural width, permitting horizontal scrolling.
+                    let viewport_height = ui.available_height();
+                    egui::ScrollArea::both()
+                        .id_salt("quark-editor-scroll")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            let width = if wrap {
+                                ui.available_width()
+                            } else {
+                                ui.available_width().max(960.0)
+                            };
+                            let response = ui.add_sized(
+                                [width, viewport_height.max(400.0)],
+                                TextEdit::multiline(&mut doc.text)
+                                    .font(egui::TextStyle::Monospace)
+                                    .code_editor()
+                                    .desired_rows(25)
+                                    .desired_width(if wrap { width } else { f32::INFINITY })
+                                    .lock_focus(true)
+                                    .layouter(&mut layouter),
+                            );
+                            if response.changed() {
+                                self.status = "Modified".into();
+                            }
+                        });
                 }
             } else {
                 ui.centered_and_justified(|ui| {
@@ -702,16 +745,14 @@ impl eframe::App for Quark {
                     egui::ScrollArea::vertical()
                         .max_height(360.)
                         .show(ui, |ui| {
-                            let search = self.search.to_lowercase();
-
-                            let matching_paths: Vec<_> = self
+                            let query = self.search.to_lowercase();
+                            let matches: Vec<_> = self
                                 .quick_paths()
                                 .into_iter()
-                                .filter(|p| p.to_string_lossy().to_lowercase().contains(&search))
+                                .filter(|p| p.to_string_lossy().to_lowercase().contains(&query))
                                 .take(60)
                                 .collect();
-
-                            for p in matching_paths {
+                            for p in matches {
                                 if ui.button(p.display().to_string()).clicked() {
                                     self.open(p);
                                     self.show_quick_open = false;
@@ -722,6 +763,27 @@ impl eframe::App for Quark {
                 });
             if !open {
                 self.show_quick_open = false;
+            }
+        }
+        if self.show_completion {
+            let mut open = true;
+            egui::Window::new("Hydrogen completion").open(&mut open).default_width(380.0).show(ctx,|ui| {
+                ui.label("Filter symbols / keywords (Ctrl/Cmd+Space)");
+                ui.text_edit_singleline(&mut self.completion_query);
+                let symbols = self.active.and_then(|i|self.docs.get(i))
+                    .map(|d|completion_candidates(&d.text,&self.completion_query)).unwrap_or_default();
+                egui::ScrollArea::vertical().max_height(260.0).show(ui,|ui| {
+                    for item in symbols.into_iter().take(50) {
+                        if ui.button(&item).clicked() {
+                            if let Some(i)=self.active { self.docs[i].text.push_str(&item); }
+                            self.show_completion=false;
+                        }
+                    }
+                });
+                ui.small("Initial local completion. Cursor-aware insertion and compiler semantic completion require LSP support.");
+            });
+            if !open {
+                self.show_completion = false;
             }
         }
         if self.show_clone {

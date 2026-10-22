@@ -1,4 +1,4 @@
-# Quark IDE — Rust native edition (v0.2.1)
+# Quark IDE — Rust native edition (v0.3.0)
 
 A **native desktop** Hydrogen code editor written in **Rust**, using `egui/eframe`'s native OpenGL renderer. **No Python, JavaScript, Electron, Chromium, Tauri or webview**.
 
@@ -47,6 +47,27 @@ The project module is intentionally independent of the UI, suitable for future i
 
 `cargo`/`rustc` are not installed in the artifact-authoring environment. This Rust source was written but **has not been compiled or tested here**. Run `cargo test` and `cargo build --release` on a Rust-equipped machine; the first build will fetch crates.io dependencies.
 
-## v0.2.1 compiler compatibility fix
+## v0.3.0 compiler compatibility fix
 
 Corrected 12 `Ui::close` usages to `Ui::close_menu` and updated the editor layouter closure and `LayoutJob::simple` parameters to match egui/eframe 0.31. This addresses the 14 errors reported from the 0.2.0 build. The complete GUI has not been compiled in this packaging environment (no Rust toolchain available).
+
+
+## v0.3.0 changes and verification
+
+- **View → Word wrap** toggle (`Alt+Z`), persisted in settings. Both-axis editor scroll area and unbounded layout width when wrapping is disabled. Very large files may still be slow with egui's full-buffer text layout.
+- Basic Hydrogen lexical highlighting in a pure, tested Rust module (`src/editor.rs`): keywords, comments, strings, numbers and UTF-8 safety.
+- Initial **local** completion popup (`Ctrl/Cmd+Space`), not LSP or cursor-aware completion. It appends the chosen completion to the document; this is a placeholder for real semantic completion.
+- Shell / build command output is streamed line by line to the command pane. **This is not a PTY terminal**, and interactive stdin/full-screen terminal applications are not supported yet.
+- Fixed the quick-open borrow-check failure seen in v0.2.1.
+- `src/project.rs` includes tests for recursive references, cycles, external references, missing files and malformed manifests. `src/editor.rs` includes lexer/completion tests; `src/command.rs` includes spawn/output tests.
+- CI checks Linux/macOS/Windows: formatting, clippy, tests, release build; manual acceptance checklist is in `scripts/manual-acceptance.md`.
+
+### Release gate
+
+```sh
+./scripts/release-check.sh
+```
+
+On Windows, run `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets`, `cargo build --release` in PowerShell.
+
+**Verification limitation:** no Rust toolchain is available in the package creation environment. This version's code and tests have *not* been compiled here. CI must pass on all three systems and manual acceptance tests must be completed before publishing a binary release. The test suite does not yet include automated UI driving, Git network tests, full Hydrogen compiler integration, or PTY/LSP tests. Do not claim complete feature verification based solely on unit tests.
