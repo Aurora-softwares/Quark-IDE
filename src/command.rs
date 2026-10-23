@@ -41,7 +41,10 @@ pub fn run_streamed(program: &str, args: &[String], cwd: &Path, tx: Sender<Strin
     for reader in readers {
         let _ = reader.join();
     }
-    let _ = tx.send(format!("[Exit: {:?}]\n", status));
+    let _ = tx.send(match status {
+        Ok(code) => format!("[Exit code: {}]\n", code.code().unwrap_or(-1)),
+        Err(err) => format!("[Process wait failed: {err}]\n"),
+    });
 }
 
 #[cfg(test)]

@@ -1,0 +1,11 @@
+{
+  "api_version": 1,
+  "id": "workspace-tools",
+  "name": "Workspace Tools",
+  "description": "Example Quark command plugin using Git (not enabled by default).",
+  "commands": [
+    {"title": "Recent commits", "program": "git", "args": ["log", "-5", "--oneline"]},
+    {"title": "Change summary", "program": "git", "args": ["diff", "--stat"]},
+    {"title": "Active file history", "program": "git", "args": ["log", "-5", "--", "{file}"], "needs_file": true}
+  ]
+}
