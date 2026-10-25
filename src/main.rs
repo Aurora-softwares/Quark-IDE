@@ -1,4 +1,5 @@
 mod command;
+mod diagnostics;
 mod editor;
 mod hydrogen;
 mod navigation;
@@ -123,6 +124,13 @@ struct Quark {
     job_rx: Option<Receiver<String>>,
     job_done: bool,
     status: String,
+    diagnostics: diagnostics::ByFile,
+    diagnostics_revision: u64,
+    diagnostics_requested: bool,
+    diagnostics_due: f64,
+    diagnostic_rx: Option<Receiver<diagnostics::ScanResult>>,
+    analysis_complete: bool,
+    files_scanned: usize,
 }
 impl Quark {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
@@ -168,12 +176,67 @@ impl Quark {
             job_rx: None,
             job_done: false,
             status: "Ready".into(),
+            diagnostics: HashMap::new(),
+            diagnostics_revision: 0,
+            diagnostics_requested: true,
+            diagnostics_due: 0.0,
+            diagnostic_rx: None,
+            analysis_complete: false,
+            files_scanned: 0,
         };
         if q.settings.compiler.is_empty() {
             q.settings.compiler = "hy".into();
         }
         q
     }
+    fn request_diagnostic_scan(&mut self) {
+        self.diagnostics.clear();
+        self.diagnostics_revision = self.diagnostics_revision.wrapping_add(1);
+        self.diagnostics_requested = true;
+        self.diagnostics_due = 0.0;
+    }
+
+    fn diagnostic_tick(&mut self, ctx: &egui::Context) {
+        if let Some(result) = self.diagnostic_rx.as_ref().map(|rx| rx.try_recv()) {
+            match result {
+                Ok(result) => {
+                    if result.revision == self.diagnostics_revision {
+                        self.diagnostics = result.by_file;
+                        self.files_scanned = result.files_scanned;
+                        self.analysis_complete = result.complete;
+                    }
+                    self.diagnostic_rx = None;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.diagnostic_rx = None;
+                    self.diagnostics_requested = true;
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        let now = ctx.input(|i| i.time);
+        if self.diagnostics_requested && self.diagnostic_rx.is_none() && now >= self.diagnostics_due
+        {
+            self.diagnostics_requested = false;
+            let revision = self.diagnostics_revision;
+            let project = self.selected_project();
+            let docs: Vec<_> = self
+                .docs
+                .iter()
+                .filter_map(|d| d.path.as_ref().map(|p| (p.clone(), d.text.clone())))
+                .collect();
+            let (send, rx) = mpsc::channel();
+            self.diagnostic_rx = Some(rx);
+            thread::spawn(move || {
+                let result = diagnostics::scan(revision, project.as_deref(), &docs);
+                let _ = send.send(result);
+            });
+        }
+        if self.diagnostic_rx.is_some() || self.diagnostics_requested {
+            ctx.request_repaint_after(std::time::Duration::from_millis(160));
+        }
+    }
+
     fn persist(&self) {
         if let Some(path) = settings_file() {
             if let Some(parent) = path.parent() {
@@ -203,6 +266,7 @@ impl Quark {
         self.persist();
         self.outline_cache.clear();
         self.open(path);
+        self.request_diagnostic_scan();
     }
     fn open(&mut self, path: PathBuf) {
         let path = path.canonicalize().unwrap_or(path);
@@ -231,6 +295,7 @@ impl Quark {
                 });
                 self.next_doc_id += 1;
                 self.active = Some(self.docs.len() - 1);
+                self.request_diagnostic_scan();
             }
             Err(e) => self.status = format!("Open failed: {e}"),
         }
@@ -255,6 +320,7 @@ impl Quark {
                 self.docs[idx].saved = self.docs[idx].text.clone();
                 self.outline_cache.clear();
                 self.status = "Saved".into();
+                self.request_diagnostic_scan();
                 true
             }
             Err(e) => {
@@ -511,6 +577,7 @@ impl Quark {
                     navigation::replace_at(&mut doc.text, (start, end), &self.replace_with);
                 self.set_selection(ctx, updated, updated);
                 self.status = "Replaced occurrence".into();
+                self.request_diagnostic_scan();
             }
         } else {
             self.status = "No matching text".into();
@@ -527,6 +594,9 @@ impl Quark {
             }
             self.status = format!("Replaced {count} occurrence(s)");
             self.set_selection(ctx, 0, 0);
+            if count > 0 {
+                self.request_diagnostic_scan();
+            }
         }
     }
     fn go_to_line(&mut self, ctx: &egui::Context) {
@@ -556,6 +626,7 @@ impl Quark {
             self.set_selection(ctx, index, index);
             self.completion = None;
             self.status = "Line duplicated".into();
+            self.request_diagnostic_scan();
         }
     }
     fn next_tab(&mut self, backwards: bool) {
@@ -676,6 +747,7 @@ impl Quark {
             return;
         }
         self.docs.remove(idx);
+        self.request_diagnostic_scan();
         self.completion = None;
         self.active = match self.active {
             None => None,
@@ -770,6 +842,7 @@ impl Quark {
                 ctx.memory_mut(|m| m.request_focus(popup.edit_id));
                 self.dismissed_completion = Some((doc.id, new_index, candidate.to_owned()));
                 self.status = "Modified".into();
+                self.request_diagnostic_scan();
             }
         }
     }
@@ -980,6 +1053,7 @@ impl eframe::App for Quark {
         }
         self.shortcuts(ctx);
         self.completion_keys(ctx);
+        self.diagnostic_tick(ctx);
         egui::TopBottomPanel::top("menu").show(ctx,|ui|{
             egui::menu::bar(ui,|ui|{
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -987,11 +1061,11 @@ impl eframe::App for Quark {
                 ui.separator();
                 if ui.small_button("☰").on_hover_text("Toggle Explorer · Ctrl+B").clicked(){
                     self.settings.sidebar_visible = !self.settings.sidebar_visible;
-                    self.persist();
+            self.persist();
                 }
                 if ui.small_button("▣").on_hover_text("Toggle Terminal · F1").clicked(){
                     self.settings.terminal_visible = !self.settings.terminal_visible;
-                    self.persist();
+            self.persist();
                 }
                 ui.separator();
                 ui.menu_button("File",|ui|{
@@ -1063,22 +1137,29 @@ impl eframe::App for Quark {
 
             });
         });
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("●").small().color(theme::ACCENT));
-                ui.label(RichText::new(&self.status).small().color(theme::MUTED));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let Some((line, col)) = self.caret_position {
-                        ui.label(
-                            RichText::new(format!("Ln {line}, Col {col}"))
-                                .small()
-                                .color(theme::MUTED),
-                        );
-                    }
-                    ui.label(RichText::new("UTF-8").small().color(theme::MUTED));
-                });
+        egui::TopBottomPanel::bottom("status").show(ctx,|ui|{ui.horizontal(|ui|{
+            ui.label(RichText::new("●").small().color(theme::ACCENT));
+            ui.label(RichText::new(&self.status).small().color(theme::MUTED));
+            let (errors, hints) = self.diagnostics.values().flatten().fold((0_usize,0_usize), |(e,h),d| {
+                match d.severity {
+                    diagnostics::Severity::Error => (e+1,h),
+                    diagnostics::Severity::Hint => (e,h+1),
+                    diagnostics::Severity::Warning => (e+1,h),
+                }
             });
-        });
+            if errors > 0 || hints > 0 {
+                ui.separator();
+                ui.label(RichText::new(format!("! {errors}  ◌ {hints}")).small().color(theme::MUTED))
+                    .on_hover_text(format!("{errors} problems · {hints} possible unused declarations · {} scanned files{}",
+                        self.files_scanned, if self.analysis_complete {""} else {" (analysis incomplete)"}));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
+                if let Some((line,col))=self.caret_position {
+                    ui.label(RichText::new(format!("Ln {line}, Col {col}")).small().color(theme::MUTED));
+                }
+                ui.label(RichText::new("UTF-8").small().color(theme::MUTED));
+            });
+        });});
         if self.settings.terminal_visible {
             egui::TopBottomPanel::bottom("terminal")
                 .resizable(true)
@@ -1207,6 +1288,7 @@ impl eframe::App for Quark {
                                     {
                                         self.settings.selected_project = Some(path);
                                         self.persist();
+                                        self.request_diagnostic_scan();
                                     }
                                 }
                             });
@@ -1356,6 +1438,13 @@ impl eframe::App for Quark {
             }
             ui.separator();
             if let Some(i) = self.active {
+                let active_diags = self
+                    .docs
+                    .get(i)
+                    .and_then(|d| d.path.as_ref())
+                    .and_then(|p| self.diagnostics.get(p))
+                    .cloned()
+                    .unwrap_or_default();
                 if let Some(doc) = self.docs.get_mut(i) {
                     let is_hydrogen = doc
                         .path
@@ -1367,8 +1456,13 @@ impl eframe::App for Quark {
                     let wrap = self.settings.word_wrap;
                     let doc_id = doc.id;
                     let edit_id = egui::Id::new(("quark-document-editor", doc_id));
-                    let viewport_width = ui.available_width().max(180.0);
                     let viewport_height = ui.available_height().max(120.0);
+                    let line_count =
+                        doc.text.as_bytes().iter().filter(|b| **b == b'\n').count() + 1;
+                    let digits = line_count.to_string().len() as f32;
+                    let gutter_width = 28.0 + (digits.max(2.0) * 8.5);
+                    let viewport_width = (ui.available_width() - gutter_width).max(150.0);
+                    let decoration_diags = active_diags.clone();
                     let mut layouter = move |ui: &egui::Ui, text: &str, wrap_width: f32| {
                         let width = if wrap { wrap_width } else { f32::INFINITY };
                         let mut job = if is_hydrogen {
@@ -1381,36 +1475,164 @@ impl eframe::App for Quark {
                                 width,
                             )
                         };
+                        if is_hydrogen {
+                            // Both sections and diagnostics are source-order sorted:
+                            // sweep once instead of checking every token against
+                            // every warning in large Hydrogen files.
+                            let mut diagnostic_index = 0_usize;
+                            for section in &mut job.sections {
+                                while diagnostic_index < decoration_diags.len()
+                                    && decoration_diags[diagnostic_index].end
+                                        <= section.byte_range.start
+                                {
+                                    diagnostic_index += 1;
+                                }
+                                if let Some(diag) = decoration_diags.get(diagnostic_index) {
+                                    if section.byte_range.start < diag.end
+                                        && diag.start < section.byte_range.end
+                                    {
+                                        let colour = match diag.severity {
+                                            diagnostics::Severity::Error => {
+                                                ui.visuals().error_fg_color
+                                            }
+                                            diagnostics::Severity::Warning => theme::WARM,
+                                            diagnostics::Severity::Hint => theme::MUTED,
+                                        };
+                                        section.format.underline =
+                                            egui::Stroke::new(1.0_f32, colour);
+                                    }
+                                }
+                            }
+                        }
                         job.wrap.max_width = width;
                         ui.fonts(|fonts| fonts.layout_job(job))
                     };
-                    // Keep the editor anchored to the left edge of the central
-                    // panel. The scroll area owns scrolling, while TextEdit
-                    // determines its own natural width for unwrapped long lines.
-                    // No 960px minimum or infinite desired widget width.
-                    let output = egui::ScrollArea::new([!wrap, true])
-                        .id_salt(("quark-scroll", doc_id))
-                        .auto_shrink([false, false])
-                        .max_width(viewport_width)
-                        .max_height(viewport_height)
-                        .show(ui, |ui| {
-                            ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                                ui.set_min_width(viewport_width);
-                                TextEdit::multiline(&mut doc.text)
-                                    .id(edit_id)
-                                    .font(egui::TextStyle::Monospace)
-                                    .code_editor()
-                                    .desired_rows(25)
-                                    .desired_width(viewport_width)
-                                    .lock_focus(true)
-                                    .layouter(&mut layouter)
-                                    .show(ui)
-                            })
-                            .inner
+                    // The diagnostic gutter is pinned outside the independently
+                    // scrollable editor viewport. Its Y positions come from the
+                    // *same* galley, so soft-wrapped rows remain aligned.
+                    let output = ui
+                        .horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            let (gutter_rect, _) = ui.allocate_exact_size(
+                                egui::vec2(gutter_width, viewport_height),
+                                egui::Sense::hover(),
+                            );
+                            let output = egui::ScrollArea::new([!wrap, true])
+                                .id_salt(("quark-scroll", doc_id))
+                                .auto_shrink([false, false])
+                                .max_width(viewport_width)
+                                .max_height(viewport_height)
+                                .show(ui, |ui| {
+                                    ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                                        ui.set_min_width(viewport_width);
+                                        TextEdit::multiline(&mut doc.text)
+                                            .id(edit_id)
+                                            .font(egui::TextStyle::Monospace)
+                                            .code_editor()
+                                            .desired_rows(25)
+                                            .desired_width(viewport_width)
+                                            .lock_focus(true)
+                                            .layouter(&mut layouter)
+                                            .show(ui)
+                                    })
+                                    .inner
+                                })
+                                .inner;
+                            let painter = ui.painter_at(gutter_rect);
+                            painter.rect_filled(gutter_rect, 0.0, theme::SURFACE);
+                            painter.line_segment(
+                                [
+                                    egui::pos2(gutter_rect.right() - 1.0, gutter_rect.top()),
+                                    egui::pos2(gutter_rect.right() - 1.0, gutter_rect.bottom()),
+                                ],
+                                egui::Stroke::new(
+                                    1.0_f32,
+                                    ui.visuals().widgets.noninteractive.bg_stroke.color,
+                                ),
+                            );
+                            let mut markers = std::collections::BTreeMap::<
+                                usize,
+                                Vec<&diagnostics::Diagnostic>,
+                            >::new();
+                            for diagnostic in &active_diags {
+                                markers.entry(diagnostic.line).or_default().push(diagnostic);
+                            }
+                            let mut logical_line = 1_usize;
+                            let mut first_visual_row = true;
+                            for row in &output.galley.rows {
+                                let y = output.galley_pos.y + row.rect.top();
+                                let visible = y + row.rect.height() >= gutter_rect.top()
+                                    && y <= gutter_rect.bottom();
+                                if first_visual_row && visible {
+                                    painter.text(
+                                        egui::pos2(gutter_rect.right() - 6.0, y),
+                                        egui::Align2::RIGHT_TOP,
+                                        logical_line.to_string(),
+                                        egui::FontId::monospace(12.0),
+                                        theme::MUTED,
+                                    );
+                                    if let Some(on_line) = markers.get(&logical_line) {
+                                        let severity = if on_line
+                                            .iter()
+                                            .any(|d| d.severity == diagnostics::Severity::Error)
+                                        {
+                                            diagnostics::Severity::Error
+                                        } else if on_line
+                                            .iter()
+                                            .any(|d| d.severity == diagnostics::Severity::Warning)
+                                        {
+                                            diagnostics::Severity::Warning
+                                        } else {
+                                            diagnostics::Severity::Hint
+                                        };
+                                        let (symbol, colour) = match severity {
+                                            diagnostics::Severity::Error => {
+                                                ("!", ui.visuals().error_fg_color)
+                                            }
+                                            diagnostics::Severity::Warning => ("!", theme::WARM),
+                                            diagnostics::Severity::Hint => ("●", theme::MUTED),
+                                        };
+                                        let marker = egui::Rect::from_min_size(
+                                            egui::pos2(gutter_rect.left() + 3.0, y),
+                                            egui::vec2(16.0, 18.0),
+                                        );
+                                        painter.text(
+                                            marker.center(),
+                                            egui::Align2::CENTER_CENTER,
+                                            symbol,
+                                            egui::FontId::proportional(13.0),
+                                            colour,
+                                        );
+                                        ui.interact(
+                                            marker,
+                                            ui.id().with(("diag-marker", doc_id, logical_line)),
+                                            egui::Sense::hover(),
+                                        )
+                                        .on_hover_ui(
+                                            |ui| {
+                                                for d in on_line {
+                                                    ui.label(&d.message);
+                                                }
+                                            },
+                                        );
+                                    }
+                                }
+                                if row.ends_with_newline {
+                                    logical_line += 1;
+                                    first_visual_row = true;
+                                } else {
+                                    first_visual_row = false;
+                                }
+                            }
+                            output
                         })
                         .inner;
                     if output.response.changed() {
                         self.status = "Modified".into();
+                        self.diagnostics.clear();
+                        self.diagnostics_revision = self.diagnostics_revision.wrapping_add(1);
+                        self.diagnostics_requested = true;
+                        self.diagnostics_due = ctx.input(|i| i.time) + 0.5;
                     }
                     self.caret_position = output
                         .cursor_range

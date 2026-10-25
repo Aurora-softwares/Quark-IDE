@@ -19,10 +19,10 @@ In **Hydrogen → Compiler settings**, set the compiler path, e.g.:
 
 `/home/rsmith/Projects/Aurora-Softwares/Hylang-Compiler/build/self_hosting/hydrogen-stage1`
 
-Open the `.hyproj` using **File → Open .hyproj**, and select the correct project in Explorer. For `Australis-OS/src/australlis.hyproj`, the generated command has this form:
+Open the `.hyproj` using **File → Open .hyproj**, and select the correct project in Explorer. For `Australis-OS/src/australis.hyproj`, the generated command has this form:
 
 ```sh
-/path/to/hydrogen-stage1 build /path/to/Australis-OS/src/australlis.hyproj -o /path/to/Australis-OS/src/.quark/build/australlis
+/path/to/hydrogen-stage1 build /path/to/Australis-OS/src/australis.hyproj -o /path/to/Australis-OS/src/.quark/build/australis
 ```
 
 The final argument is a **directory** for an OS project. This directly addresses the missing `-o` compiler usage error in the report. Other build/semantic errors, if any, need separate troubleshooting.

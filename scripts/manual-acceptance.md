@@ -22,7 +22,7 @@ Release blocker: any checklist item that fails or any CI matrix failure.
 
 ## Project-build, explorer and plugins (next UI update)
 
-- 🔴 Open `Australis-OS/src/australlis.hyproj`, then a source `.hy` file. Click **Build**: verify command begins with `build` and the `.hyproj`, includes `-o` and writes to `.quark/build/australlis` directory.
+- 🔴 Open `Australis-OS/src/australis.hyproj`, then a source `.hy` file. Click **Build**: verify command begins with `build` and the `.hyproj`, includes `-o` and writes to `.quark/build/australis` directory.
 - 🔴 Hold Shift and click **Build** with a `.hy` active: verify command begins with `compile` and the open `.hy`, includes `-o`, and does not build the entire project.
 - 🔴 With `.hyproj` selected, Shift+Build reports that a `.hy` file must be open.
 - 🔴 Add two different `.hyproj` projects and change active project from the Explorer selector; Build should follow the selected project, not the active editor tab.
@@ -46,3 +46,11 @@ Release blocker: any checklist item that fails or any CI matrix failure.
 - 🔴 Status bar displays UTF-8 and the caret's 1-based line/column.
 - 🔴 Verify default and existing settings files preserve sidebar/terminal visibility correctly.
 - 🔴 Keyboard completion, plugin commands, active-project builds and window resizing still function after panel changes.
+
+## Diagnostic gutter / reference-aware hints
+
+- 🔴 Check line numbers with no wrap, word wrap, long lines and multiple-line scroll.
+- 🔴 Hover a syntax error icon and a possible-unused icon; check tooltip and underline.
+- 🔴 Verify unused hints consider references in files and `.hyproj` dependencies.
+- 🔴 Verify no hints for an incomplete reference graph, public API or comment-only usages.
+- 🔴 Verify editor does not stall during project-wide rescan after editing.
