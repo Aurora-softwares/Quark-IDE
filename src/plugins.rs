@@ -235,4 +235,93 @@ mod loading_tests {
         assert_eq!(warnings.len(), 1);
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn duplicate_ids_and_malformed_files_are_reported_once_per_bad_entry() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["a", "b", "broken"] {
+            fs::create_dir(root.path().join(name)).unwrap();
+        }
+        let json = r#"{"api_version":1,"id":"same","name":"Tool","commands":[{"title":"Run","program":"git"}]}"#;
+        fs::write(root.path().join("a/plugin.json"), json).unwrap();
+        fs::write(root.path().join("b/plugin.json"), json).unwrap();
+        fs::write(root.path().join("broken/plugin.json"), "not json").unwrap();
+        let (plugins, warnings) = load_all(root.path());
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings.iter().any(|w| w.contains("Duplicate plugin ID")));
+    }
+    #[test]
+    fn missing_plugin_folder_and_non_manifest_entries_are_ignored() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(load_all(&root.path().join("missing")).0.is_empty());
+        fs::write(root.path().join("text.txt"), "not a plugin").unwrap();
+        fs::create_dir(root.path().join("empty")).unwrap();
+        let (p, w) = load_all(root.path());
+        assert!(p.is_empty() && w.is_empty());
+    }
+    #[test]
+    fn missing_file_context_is_rejected_even_without_needs_file_flag() {
+        let plugin = Plugin {
+            id: "test".into(),
+            name: "Test".into(),
+            description: String::new(),
+            directory: PathBuf::from("tools"),
+            commands: vec![],
+        };
+        let c = PluginCommand {
+            title: "Run".into(),
+            program: "tool".into(),
+            args: vec!["{file}".into()],
+            needs_project: false,
+            needs_file: false,
+        };
+        assert!(invoke(&plugin, &c, None, None, Path::new("."))
+            .unwrap_err()
+            .contains("active saved file"));
+        let c = PluginCommand {
+            args: vec![],
+            needs_file: true,
+            ..c
+        };
+        assert!(invoke(&plugin, &c, None, None, Path::new("."))
+            .unwrap_err()
+            .contains("save a source"));
+    }
+    #[test]
+    fn plugin_template_expands_every_context_without_shell_interpretation() {
+        let plugin = Plugin {
+            id: "test".into(),
+            name: "Test".into(),
+            description: String::new(),
+            directory: PathBuf::from("plugin folder"),
+            commands: vec![],
+        };
+        let c = PluginCommand {
+            title: "Run".into(),
+            program: "./tool".into(),
+            args: vec![
+                "{plugin_dir}".into(),
+                "{workspace}".into(),
+                "{project}".into(),
+                "{file}".into(),
+            ],
+            needs_project: true,
+            needs_file: true,
+        };
+        let p = Path::new("project folder/app.hyproj");
+        let f = Path::new("file $(echo unsafe).hy");
+        let w = Path::new("workspace folder");
+        let inv = invoke(&plugin, &c, Some(p), Some(f), w).unwrap();
+        assert_eq!(
+            inv.args,
+            vec![
+                "plugin folder",
+                "workspace folder",
+                "project folder/app.hyproj",
+                "file $(echo unsafe).hy"
+            ]
+        );
+        assert_eq!(inv.cwd, w);
+    }
 }

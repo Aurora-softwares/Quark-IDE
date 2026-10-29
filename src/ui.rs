@@ -15,10 +15,10 @@ const ACTIONS: &[&str] = &[
     "Hydrogen: Check",
     "Hydrogen: Run",
     "View: Toggle Explorer",
-    "View: Toggle Output",
+    "View: Toggle Bottom Panel",
     "View: Welcome",
     "Preferences: Open Settings",
-    "Plugins: Manage Plugins",
+    "Extensions: Manage Extensions",
     "Workspace: Refresh Index",
     "Git: Status",
     "Git: Diff",
@@ -26,6 +26,9 @@ const ACTIONS: &[&str] = &[
     "Edit: Find",
     "Edit: Replace",
     "Go: Go to Line",
+    "Preferences: Themes",
+    "View: Show Terminal",
+    "View: Show Output",
 ];
 impl Quark {
     pub(crate) fn welcome(&mut self, ui: &mut egui::Ui) {
@@ -37,12 +40,12 @@ impl Quark {
                     ui.label(
                         RichText::new("Quark")
                             .size(48.0)
-                            .color(egui::Color32::from_rgb(225, 225, 225)),
+                            .color(theme::colors(ui.ctx()).text.color()),
                     );
                     ui.label(
                         RichText::new("Your workspace for Hydrogen")
                             .size(21.0)
-                            .color(theme::MUTED),
+                            .color(theme::colors(ui.ctx()).muted.color()),
                     );
                     ui.add_space(10.0);
                     ui.label("Open a project, settle in, and start building.");
@@ -63,7 +66,7 @@ impl Quark {
                             "Native Rust editor  ·  Local files and tools  ·  Made for Hydrogen",
                         )
                         .small()
-                        .color(theme::MUTED),
+                        .color(theme::colors(ui.ctx()).muted.color()),
                     );
                 });
             });
@@ -79,7 +82,12 @@ impl Quark {
             ("Open Hydrogen Project…", 3),
         ] {
             if ui
-                .add(egui::Button::new(RichText::new(title).color(theme::ACCENT)).frame(false))
+                .add(
+                    egui::Button::new(
+                        RichText::new(title).color(theme::colors(ui.ctx()).accent.color()),
+                    )
+                    .frame(false),
+                )
                 .clicked()
             {
                 self.action(action, ui.ctx());
@@ -88,74 +96,128 @@ impl Quark {
         ui.add_space(18.0);
         ui.heading("Recent workspaces");
         ui.add_space(6.0);
-        if self.settings.projects.is_empty() && self.settings.folders.is_empty() {
+        let recent = self.settings.recent_workspaces.clone().unwrap_or_default();
+        if recent.is_empty() {
             ui.label(
-                RichText::new("Your projects and folders will appear here.").color(theme::MUTED),
+                RichText::new("Your projects and folders will appear here.")
+                    .color(theme::colors(ui.ctx()).muted.color()),
             );
         }
-        for path in self.settings.projects.clone().into_iter().take(5) {
-            let title = path.file_stem().unwrap_or_default().to_string_lossy();
-            if ui
-                .link(title)
-                .on_hover_text(path.display().to_string())
-                .clicked()
-            {
-                self.add_project(path.clone());
-            }
-            ui.label(
-                RichText::new(path.parent().unwrap_or(Path::new("")).display().to_string())
-                    .small()
-                    .color(theme::MUTED),
-            );
-        }
-        for path in self.settings.folders.clone().into_iter().take(4) {
-            if ui.link(path.display().to_string()).clicked() {
-                self.settings.sidebar_visible = true;
-                self.show_source_control = false;
-                self.tree_default_open = true;
-                self.tree_revision += 1;
-                self.persist();
-            }
+        for entry in recent.into_iter().take(10) {
+            let path = &entry.path;
+            ui.push_id((&entry.path, entry.project), |ui| {
+                ui.horizontal(|ui| {
+                    let title = if entry.project {
+                        path.file_stem()
+                    } else {
+                        path.file_name()
+                    }
+                    .unwrap_or_default()
+                    .to_string_lossy();
+                    if ui
+                        .link(title)
+                        .on_hover_text(path.display().to_string())
+                        .clicked()
+                    {
+                        if entry.project {
+                            self.add_project(path.clone());
+                        } else {
+                            self.add_folder(path.clone());
+                            self.show_sidebar(SidebarView::Explorer);
+                            self.tree_default_open = true;
+                            self.tree_revision += 1;
+                        }
+                    }
+                    if ui
+                        .small_button("×")
+                        .on_hover_text("Remove from recent workspaces")
+                        .clicked()
+                    {
+                        self.remove_recent(&entry);
+                    }
+                });
+                ui.label(
+                    RichText::new(path.display().to_string())
+                        .small()
+                        .color(theme::colors(ui.ctx()).muted.color()),
+                );
+            });
         }
     }
+
     fn welcome_guide(&mut self, ui: &mut egui::Ui) {
         ui.heading("Get comfortable");
         ui.add_space(8.0);
-        egui::Frame::new()
-            .fill(theme::SURFACE)
-            .inner_margin(16)
-            .corner_radius(5)
-            .show(ui, |ui| {
-                ui.label(RichText::new("Coming from VS Code?").strong().size(16.0));
-                ui.add_space(8.0);
-                for (key, label) in [
-                    ("Ctrl/Cmd+P", "Find a file"),
-                    ("F1 / Ctrl/Cmd+Shift+P", "Run a command"),
-                    ("Ctrl/Cmd+B", "Toggle Explorer"),
-                    ("Ctrl+`", "Toggle command output"),
-                    ("Ctrl/Cmd+F", "Find in this file"),
-                    ("Ctrl/Cmd+Space", "Show suggestions"),
-                ] {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(key).monospace().color(theme::ACCENT));
-                        ui.label(label);
+        if (!self.settings.welcome_shortcuts_visible || !self.settings.welcome_build_visible)
+            && ui.small_button("Restore hidden sections").clicked()
+        {
+            self.settings.welcome_shortcuts_visible = true;
+            self.settings.welcome_build_visible = true;
+            self.persist();
+        }
+        if self.settings.welcome_shortcuts_visible {
+            egui::Frame::new()
+                .fill(theme::colors(ui.ctx()).surface.color())
+                .inner_margin(16)
+                .corner_radius(5)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Coming from VS Code?").strong().size(16.0));
+                        if ui
+                            .small_button("×")
+                            .on_hover_text("Hide shortcut guide")
+                            .clicked()
+                        {
+                            self.settings.welcome_shortcuts_visible = false;
+                            self.persist();
+                        }
                     });
-                }
-            });
-        ui.add_space(14.0);
-        egui::Frame::new()
-            .fill(theme::SURFACE)
-            .inner_margin(16)
-            .corner_radius(5)
-            .show(ui, |ui| {
-                ui.label(RichText::new("Your first build").strong().size(16.0));
-                ui.label("1. Open a .hyproj and select it in Explorer.");
-                ui.label("2. Configure and test your Hydrogen compiler.");
-                ui.label("3. Choose Build, then follow progress in Output.");
-                if ui.button("Configure compiler…").clicked() {
-                    self.show_settings = true;
-                }
-            });
+                    ui.add_space(8.0);
+                    for (key, label) in [
+                        ("Ctrl/Cmd+P", "Find a file"),
+                        ("F1 / Ctrl/Cmd+Shift+P", "Run a command"),
+                        ("Ctrl/Cmd+B", "Toggle Explorer"),
+                        ("Ctrl+`", "Toggle Terminal / Output"),
+                        ("Ctrl/Cmd+F", "Find in this file"),
+                        ("Ctrl/Cmd+Space", "Show suggestions"),
+                    ] {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(key)
+                                    .monospace()
+                                    .color(theme::colors(ui.ctx()).accent.color()),
+                            );
+                            ui.label(label);
+                        });
+                    }
+                });
+        }
+        if self.settings.welcome_build_visible {
+            ui.add_space(14.0);
+            egui::Frame::new()
+                .fill(theme::colors(ui.ctx()).surface.color())
+                .inner_margin(16)
+                .corner_radius(5)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Your first build").strong().size(16.0));
+                        if ui
+                            .small_button("×")
+                            .on_hover_text("Hide first-build guide")
+                            .clicked()
+                        {
+                            self.settings.welcome_build_visible = false;
+                            self.persist();
+                        }
+                    });
+                    ui.label("1. Open a .hyproj and select it in Explorer.");
+                    ui.label("2. Configure and test your Hydrogen compiler.");
+                    ui.label("3. Choose Build, then follow progress in Output.");
+                    if ui.button("Configure compiler…").clicked() {
+                        self.show_settings = true;
+                    }
+                });
+        }
     }
     pub(crate) fn action(&mut self, index: usize, ctx: &egui::Context) {
         match index {
@@ -215,7 +277,7 @@ impl Quark {
             }
             15 => self.active = None,
             16 => self.show_settings = true,
-            17 => self.show_plugins = true,
+            17 => self.show_sidebar(SidebarView::Plugins),
             18 => {
                 self.workspace_requested = true;
                 self.request_diagnostic_scan();
@@ -228,10 +290,12 @@ impl Quark {
                 }
             }
             22 => {
+                self.show_sidebar(SidebarView::Search);
                 self.show_search = true;
                 self.find_focus = true;
             }
             23 => {
+                self.show_sidebar(SidebarView::Search);
                 self.show_search = true;
                 self.show_replace = true;
                 self.find_focus = true;
@@ -239,6 +303,17 @@ impl Quark {
             24 => {
                 self.show_go_to_line = true;
                 self.go_focus = true;
+            }
+            25 => self.show_sidebar(SidebarView::Themes),
+            26 => {
+                self.settings.terminal_visible = true;
+                self.settings.bottom_tab = BottomTab::Terminal;
+                self.persist();
+            }
+            27 => {
+                self.settings.terminal_visible = true;
+                self.settings.bottom_tab = BottomTab::Output;
+                self.persist();
             }
             _ => {}
         }
@@ -317,7 +392,7 @@ impl Quark {
                 ui.label(
                     RichText::new("Up / Down select · Enter run · Esc close")
                         .small()
-                        .color(theme::MUTED),
+                        .color(theme::colors(ui.ctx()).muted.color()),
                 );
             });
         if response.should_close() {
@@ -330,8 +405,8 @@ impl Quark {
     }
     pub(crate) fn reset_persistence(&mut self) {
         for (path, blocked) in [
-            (settings_file(), self.settings_blocked),
-            (session_file(), self.session_blocked),
+            (self.settings_path.clone(), self.settings_blocked),
+            (self.session_path.clone(), self.session_blocked),
         ] {
             if !blocked {
                 continue;
@@ -400,8 +475,13 @@ impl Quark {
                         );
                     }
                 }
-                if self.job_rx.is_some() {
-                    ui.colored_label(theme::WARM, "Closing Quark will stop the running command.");
+                if self.job_rx.is_some()
+                    || self.terminal.as_ref().is_some_and(|t| t.exited.is_none())
+                {
+                    ui.colored_label(
+                        theme::colors(ui.ctx()).warning.color(),
+                        "Closing Quark will end the terminal session and stop running tool jobs.",
+                    );
                 }
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("Save all & close").clicked() && self.save_all() {
@@ -480,6 +560,7 @@ pub(crate) enum Icon {
     Git,
     Extensions,
     Settings,
+    Themes,
 }
 /// Draw icons as native vectors so missing Unicode glyphs never become boxes.
 pub(crate) fn activity_button(
@@ -488,33 +569,54 @@ pub(crate) fn activity_button(
     tip: &str,
     selected: bool,
 ) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(34.0, 42.0), egui::Sense::click());
+    let definition = theme::current(ui.ctx());
+    let colors = definition.colors;
+    let size = 28.0;
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::click());
     let p = ui.painter();
     if selected || response.hovered() {
         p.rect_filled(
             rect,
             2,
             if selected {
-                egui::Color32::from_rgb(34, 47, 57)
+                colors.selection.color()
             } else {
-                egui::Color32::from_rgb(44, 44, 44)
+                colors.surface.color()
             },
         );
     }
     if selected {
         p.line_segment(
-            [rect.left_top(), rect.left_bottom()],
-            egui::Stroke::new(2.0_f32, theme::ACCENT),
+            [rect.left_bottom(), rect.right_bottom()],
+            egui::Stroke::new(2.0_f32, theme::colors(ui.ctx()).accent.color()),
         );
     }
     let center = rect.center();
     let color = if selected || response.hovered() {
-        egui::Color32::from_rgb(230, 230, 230)
+        colors.text.color()
     } else {
-        theme::MUTED
+        theme::colors(ui.ctx()).muted.color()
     };
-    let stroke = egui::Stroke::new(1.6_f32, color);
-    let pt = |x: f32, y: f32| center + egui::vec2(x, y);
+    let color = if !selected && !response.hovered() {
+        colors.icon.color()
+    } else {
+        color
+    };
+    let stroke = egui::Stroke::new(
+        if definition.icon_style == theme::IconStyle::Solid {
+            2.5_f32
+        } else {
+            1.5_f32
+        },
+        color,
+    );
+    let rounding = if definition.icon_style == theme::IconStyle::Rounded {
+        3
+    } else {
+        0
+    };
+    let pt =
+        |x: f32, y: f32| center + egui::vec2(x, y) * (definition.icon_scale as f32 / 100.0) * 0.72;
     let line = |a: (f32, f32), b: (f32, f32)| {
         p.line_segment([pt(a.0, a.1), pt(b.0, b.1)], stroke);
     };
@@ -522,7 +624,7 @@ pub(crate) fn activity_button(
         Icon::Files => {
             p.rect_stroke(
                 egui::Rect::from_min_max(pt(-6.0, -8.0), pt(8.0, 9.0)),
-                0,
+                rounding,
                 stroke,
                 egui::StrokeKind::Inside,
             );
@@ -545,7 +647,7 @@ pub(crate) fn activity_button(
             for (x, y) in [(-9.0, -2.0), (1.0, -2.0), (-9.0, 8.0)] {
                 p.rect_stroke(
                     egui::Rect::from_min_size(pt(x, y - 7.0), egui::vec2(7.0, 7.0)),
-                    0,
+                    rounding,
                     stroke,
                     egui::StrokeKind::Inside,
                 );
@@ -554,6 +656,20 @@ pub(crate) fn activity_button(
                 vec![pt(6.0, -12.0), pt(11.0, -7.0), pt(6.0, -2.0), pt(1.0, -7.0)],
                 stroke,
             ));
+        }
+        Icon::Themes => {
+            p.circle_stroke(center, 8.0, stroke);
+            for (x, y) in [(-3.5, -3.5), (3.5, -3.5), (-3.5, 3.5), (3.5, 3.5)] {
+                p.circle_filled(
+                    pt(x, y),
+                    2.0,
+                    if x < 0.0 {
+                        colors.accent.color()
+                    } else {
+                        colors.warning.color()
+                    },
+                );
+            }
         }
         Icon::Settings => {
             p.circle_stroke(center, 7.0, stroke);
@@ -568,4 +684,46 @@ pub(crate) fn activity_button(
         }
     }
     response.on_hover_text(tip)
+}
+
+/// Two compact, right-aligned layout controls in the unified top bar.
+pub(crate) fn layout_button(ui: &mut egui::Ui, left: bool, selected: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(29.0, 24.0), egui::Sense::click());
+    let colors = theme::colors(ui.ctx());
+    if response.hovered() {
+        ui.painter().rect_filled(rect, 3, colors.selection.color());
+    }
+    let r = rect.shrink2(egui::vec2(5.0, 5.0));
+    let stroke = egui::Stroke::new(
+        1.4_f32,
+        if selected {
+            colors.accent.color()
+        } else {
+            colors.icon.color()
+        },
+    );
+    ui.painter()
+        .rect_stroke(r, 1, stroke, egui::StrokeKind::Inside);
+    let fill = if left {
+        egui::Rect::from_min_max(r.min, r.min + egui::vec2(r.width() * 0.32, r.height()))
+    } else {
+        egui::Rect::from_min_max(r.min + egui::vec2(0.0, r.height() * 0.65), r.max)
+    };
+    if selected {
+        ui.painter().rect_filled(fill, 0, stroke.color);
+    } else {
+        ui.painter().line_segment(
+            if left {
+                [fill.right_top(), fill.right_bottom()]
+            } else {
+                [fill.left_top(), fill.right_top()]
+            },
+            stroke,
+        );
+    }
+    response.on_hover_text(if left {
+        "Toggle left sidebar · Ctrl/Cmd+B"
+    } else {
+        "Toggle bottom panel · Ctrl+`"
+    })
 }

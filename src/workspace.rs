@@ -186,4 +186,56 @@ mod tests {
             1
         );
     }
+
+    #[test]
+    fn index_sorts_directories_first_and_deduplicates_repeated_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("z-dir")).unwrap();
+        fs::write(dir.path().join("a.hy"), "").unwrap();
+        let root = dir.path().to_path_buf();
+        let s = scan(&[root.clone(), root.clone()], &[], &[], false, 100);
+        assert_eq!(s.files.len(), 1);
+        assert!(s.directories[&root][0].directory);
+        assert!(s.notices.iter().any(|s| s.contains("Repeated")));
+    }
+    #[test]
+    fn git_folder_is_excluded_even_when_generated_folders_are_enabled() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        fs::write(dir.path().join(".git/secret"), "secret").unwrap();
+        fs::create_dir(dir.path().join(".quark")).unwrap();
+        fs::write(dir.path().join(".quark/artifact"), "").unwrap();
+        let s = scan(&[dir.path().to_path_buf()], &[], &[], true, 100);
+        assert_eq!(s.files.len(), 1);
+        assert!(s.files[0].ends_with("artifact"));
+    }
+    #[test]
+    fn symbols_use_unsaved_buffers_and_include_external_project_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = dir.path().join("app.hyproj");
+        let source = dir.path().join("main.hy");
+        fs::write(&manifest, "sources=['main.hy']").unwrap();
+        fs::write(&source, "class Old {}").unwrap();
+        let source = source.canonicalize().unwrap();
+        let manifest = manifest.canonicalize().unwrap();
+        let s = scan(
+            &[],
+            std::slice::from_ref(&manifest),
+            &[(source.clone(), "class Fresh {}".into())],
+            false,
+            100,
+        );
+        assert_eq!(s.files, vec![source]);
+        let debug = format!("{:?}", s.outlines[&manifest]);
+        assert!(debug.contains("Fresh"));
+        assert!(!debug.contains("Old"));
+    }
+    #[test]
+    fn zero_entry_limit_reports_cap_without_traversing() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.hy"), "").unwrap();
+        let s = scan(&[dir.path().to_path_buf()], &[], &[], false, 0);
+        assert!(s.files.is_empty());
+        assert!(s.notices.iter().any(|s| s.contains("limited to 0")));
+    }
 }

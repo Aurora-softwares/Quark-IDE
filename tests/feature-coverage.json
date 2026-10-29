@@ -1,0 +1,1725 @@
+{
+  "schema_version": 1,
+  "minimum_tests": 2,
+  "scope": "Current user-facing Quark features and shared behaviour handlers; native host integration remains a manual release gate.",
+  "features": [
+    {
+      "id": "files-new-document",
+      "category": "Files",
+      "feature": "New document",
+      "tests": [
+        "feature_tests::new_document_is_empty_and_has_a_unique_identity",
+        "feature_tests::new_document_action_keeps_existing_unsaved_text"
+      ]
+    },
+    {
+      "id": "files-open-file",
+      "category": "Files",
+      "feature": "Open file",
+      "tests": [
+        "feature_tests::opening_unicode_file_reuses_its_existing_tab",
+        "feature_tests::missing_or_binary_file_keeps_existing_editor"
+      ]
+    },
+    {
+      "id": "files-save",
+      "category": "Files",
+      "feature": "Save",
+      "tests": [
+        "feature_tests::save_updates_disk_baseline_and_recovery",
+        "feature_tests::save_failure_preserves_dirty_buffer_and_original"
+      ]
+    },
+    {
+      "id": "files-save-as",
+      "category": "Files",
+      "feature": "Save As",
+      "tests": [
+        "feature_tests::save_as_writes_new_path_and_preserves_original",
+        "feature_tests::save_as_rejects_another_open_document_destination"
+      ]
+    },
+    {
+      "id": "files-save-all",
+      "category": "Files",
+      "feature": "Save all",
+      "tests": [
+        "feature_tests::save_all_writes_each_dirty_file",
+        "feature_tests::save_all_stops_on_conflict_without_overwriting_later_files"
+      ]
+    },
+    {
+      "id": "files-close-editor",
+      "category": "Files",
+      "feature": "Close editor",
+      "tests": [
+        "feature_tests::clean_tab_close_selects_remaining_neighbour",
+        "reliability_tests::dirty_close_requests_a_decision_and_keeps_text"
+      ]
+    },
+    {
+      "id": "files-save-before-closing-tab",
+      "category": "Files",
+      "feature": "Save before closing tab",
+      "tests": [
+        "feature_tests::dirty_tab_save_button_writes_before_closing",
+        "feature_tests::save_failure_preserves_dirty_buffer_and_original"
+      ]
+    },
+    {
+      "id": "files-discard-or-cancel-tab-close",
+      "category": "Files",
+      "feature": "Discard or cancel tab close",
+      "tests": [
+        "reliability_tests::discard_and_cancel_buttons_preserve_their_expected_versions",
+        "feature_tests::conflict_cancel_preserves_both_versions"
+      ]
+    },
+    {
+      "id": "files-external-edit-conflict",
+      "category": "Files",
+      "feature": "External edit conflict",
+      "tests": [
+        "storage::tests::external_changes_and_deletion_are_never_silently_overwritten",
+        "feature_tests::conflict_cancel_preserves_both_versions"
+      ]
+    },
+    {
+      "id": "files-explicit-conflict-overwrite",
+      "category": "Files",
+      "feature": "Explicit conflict overwrite",
+      "tests": [
+        "feature_tests::conflict_overwrite_is_explicit_and_updates_baseline",
+        "feature_tests::save_all_stops_on_conflict_without_overwriting_later_files"
+      ]
+    },
+    {
+      "id": "files-reload-conflict-from-disk",
+      "category": "Files",
+      "feature": "Reload conflict from disk",
+      "tests": [
+        "reliability_tests::conflict_reload_reads_external_content_without_overwriting_disk",
+        "feature_tests::conflict_reload_failure_keeps_unsaved_edits"
+      ]
+    },
+    {
+      "id": "files-atomic-file-replacement",
+      "category": "Files",
+      "feature": "Atomic file replacement",
+      "tests": [
+        "storage::tests::successful_save_replaces_complete_utf8_and_leaves_no_temp_file",
+        "storage::tests::atomic_write_creates_parents_and_empty_files"
+      ]
+    },
+    {
+      "id": "files-read-only-and-failed-destinations",
+      "category": "Files",
+      "feature": "Read-only and failed destinations",
+      "tests": [
+        "storage::tests::readonly_file_failure_preserves_original_and_cleans_temporary_file",
+        "storage::tests::destination_directory_is_not_replaced_on_write_failure"
+      ]
+    },
+    {
+      "id": "files-dirty-markers-and-file-context",
+      "category": "Files",
+      "feature": "Dirty markers and file context",
+      "tests": [
+        "feature_tests::editor_and_status_render_unicode_path_and_dirty_tab_marker",
+        "feature_tests::document_labels_distinguish_clean_saved_and_dirty_untitled_tabs"
+      ]
+    },
+    {
+      "id": "files-manifest-edits-preserve-workspace-membership",
+      "category": "Files",
+      "feature": "Manifest edits preserve workspace membership",
+      "tests": [
+        "reliability_tests::editing_manifest_ids_never_adds_workspace_roots_or_changes_build_target",
+        "feature_tests::manifest_save_as_does_not_register_a_project"
+      ]
+    },
+    {
+      "id": "files-symlink-and-permission-preservation",
+      "category": "Files",
+      "feature": "Symlink and permission preservation",
+      "tests": [
+        "storage::tests::save_preserves_symlink",
+        "storage::tests::atomic_replace_retains_permissions_through_symlink"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-settings-persistence",
+      "category": "Recovery and preferences",
+      "feature": "Settings persistence",
+      "tests": [
+        "feature_tests::settings_persist_all_preferences_to_isolated_file",
+        "feature_tests::persistence_write_failure_is_visible_and_keeps_settings"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-settings-compatibility",
+      "category": "Recovery and preferences",
+      "feature": "Settings compatibility",
+      "tests": [
+        "settings_tests::old_settings_and_new_preferences_remain_compatible",
+        "theme::tests::old_preferences_default_to_graphite"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-corrupt-settings-and-recovery-preservation",
+      "category": "Recovery and preferences",
+      "feature": "Corrupt settings and recovery preservation",
+      "tests": [
+        "reliability_tests::corrupt_settings_are_preserved_with_a_visible_warning",
+        "feature_tests::corrupt_recovery_is_preserved_and_warned"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-backup-and-resume-persistence",
+      "category": "Recovery and preferences",
+      "feature": "Backup and resume persistence",
+      "tests": [
+        "feature_tests::reset_persistence_backs_up_unreadable_files_before_replacing",
+        "feature_tests::failed_backup_keeps_persistence_paused"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-recovery-snapshots",
+      "category": "Recovery and preferences",
+      "feature": "Recovery snapshots",
+      "tests": [
+        "feature_tests::recovery_snapshot_restores_untitled_text_and_active_tab",
+        "feature_tests::recovery_write_failure_is_visible_and_keeps_buffer"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-recovery-external-disk-baseline",
+      "category": "Recovery and preferences",
+      "feature": "Recovery external disk baseline",
+      "tests": [
+        "feature_tests::clean_restored_document_refreshes_from_disk_but_dirty_one_does_not",
+        "reliability_tests::recovery_retains_unsaved_baseline_for_conflict_detection"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-restored-tab-identity-and-selection",
+      "category": "Recovery and preferences",
+      "feature": "Restored tab identity and selection",
+      "tests": [
+        "feature_tests::invalid_restored_active_index_falls_back_to_existing_document",
+        "feature_tests::recovery_snapshot_restores_untitled_text_and_active_tab"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-settings-view-save-and-blocked-persistence",
+      "category": "Recovery and preferences",
+      "feature": "Settings view save and blocked persistence",
+      "tests": [
+        "feature_tests::settings_action_opens_and_save_button_persists_then_closes",
+        "feature_tests::blocked_settings_save_does_not_hide_recovery_warning"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-application-close-guard",
+      "category": "Recovery and preferences",
+      "feature": "Application close guard",
+      "tests": [
+        "reliability_tests::application_exit_is_cancelled_while_dirty",
+        "feature_tests::busy_exit_can_be_cancelled_without_stopping_job"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-save-all-and-exit",
+      "category": "Recovery and preferences",
+      "feature": "Save all and exit",
+      "tests": [
+        "feature_tests::exit_save_all_writes_dirty_files_then_requests_close",
+        "feature_tests::build_conflict_aborts_before_launching_compiler"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-discard-changes-and-exit",
+      "category": "Recovery and preferences",
+      "feature": "Discard changes and exit",
+      "tests": [
+        "feature_tests::exit_discard_removes_untitled_recovery_and_restores_saved_files",
+        "feature_tests::busy_exit_can_be_cancelled_without_stopping_job"
+      ]
+    },
+    {
+      "id": "recovery-and-preferences-clean-application-exit",
+      "category": "Recovery and preferences",
+      "feature": "Clean application exit",
+      "tests": [
+        "feature_tests::clean_exit_emits_close_without_confirmation",
+        "reliability_tests::integrated_window_controls_emit_native_commands_and_guard_dirty_close"
+      ]
+    },
+    {
+      "id": "welcome-welcome-page-and-startup-actions",
+      "category": "Welcome",
+      "feature": "Welcome page and startup actions",
+      "tests": [
+        "feature_tests::welcome_action_preserves_all_open_documents",
+        "feature_tests::welcome_new_file_and_configure_buttons_reach_their_actions"
+      ]
+    },
+    {
+      "id": "welcome-recent-workspace-reopening",
+      "category": "Welcome",
+      "feature": "Recent workspace reopening",
+      "tests": [
+        "feature_tests::reopening_removed_recent_workspace_restores_it_once_at_the_front",
+        "feature_tests::adding_project_selects_it_and_opens_its_manifest_once"
+      ]
+    },
+    {
+      "id": "welcome-remove-recent-project",
+      "category": "Welcome",
+      "feature": "Remove recent project",
+      "tests": [
+        "feature_tests::removing_recent_project_persists_without_removing_workspace_or_files",
+        "feature_tests::recent_history_migrates_old_settings_without_readding_removed_entries"
+      ]
+    },
+    {
+      "id": "welcome-remove-recent-folder",
+      "category": "Welcome",
+      "feature": "Remove recent folder",
+      "tests": [
+        "feature_tests::removing_recent_folder_keeps_workspace_and_stays_removed_after_reload",
+        "feature_tests::reopening_removed_recent_workspace_restores_it_once_at_the_front"
+      ]
+    },
+    {
+      "id": "welcome-recent-history-migration-and-retention",
+      "category": "Welcome",
+      "feature": "Recent history migration and retention",
+      "tests": [
+        "feature_tests::recent_history_migrates_old_settings_without_readding_removed_entries",
+        "feature_tests::recent_history_is_bounded_and_keeps_newest_first"
+      ]
+    },
+    {
+      "id": "welcome-hide-shortcut-guide",
+      "category": "Welcome",
+      "feature": "Hide shortcut guide",
+      "tests": [
+        "feature_tests::shortcut_guide_dismiss_button_hides_only_that_card_and_persists",
+        "feature_tests::shortcut_guide_can_be_restored_from_welcome_page"
+      ]
+    },
+    {
+      "id": "welcome-hide-first-build-guide",
+      "category": "Welcome",
+      "feature": "Hide first-build guide",
+      "tests": [
+        "feature_tests::first_build_dismiss_button_hides_only_that_card_and_persists",
+        "feature_tests::first_build_guide_can_be_restored_after_preferences_reload"
+      ]
+    },
+    {
+      "id": "welcome-restore-welcome-sections",
+      "category": "Welcome",
+      "feature": "Restore welcome sections",
+      "tests": [
+        "feature_tests::both_hidden_welcome_sections_leave_a_restore_control",
+        "feature_tests::welcome_visibility_settings_can_hide_each_guide_independently"
+      ]
+    },
+    {
+      "id": "layout-and-window-explorer-sidebar-tab",
+      "category": "Layout and window",
+      "feature": "Explorer sidebar tab",
+      "tests": [
+        "feature_tests::explorer_opens_and_persists",
+        "feature_tests::explorer_renders_controls"
+      ]
+    },
+    {
+      "id": "layout-and-window-search-sidebar-tab",
+      "category": "Layout and window",
+      "feature": "Search sidebar tab",
+      "tests": [
+        "feature_tests::search_opens_and_persists",
+        "feature_tests::search_renders_controls"
+      ]
+    },
+    {
+      "id": "layout-and-window-source-control-sidebar-tab",
+      "category": "Layout and window",
+      "feature": "Source Control sidebar tab",
+      "tests": [
+        "feature_tests::source_control_opens_and_persists",
+        "feature_tests::source_control_renders_controls"
+      ]
+    },
+    {
+      "id": "layout-and-window-extensions-sidebar-tab",
+      "category": "Layout and window",
+      "feature": "Extensions sidebar tab",
+      "tests": [
+        "feature_tests::plugins_opens_and_persists",
+        "feature_tests::plugins_renders_controls"
+      ]
+    },
+    {
+      "id": "layout-and-window-themes-sidebar-tab",
+      "category": "Layout and window",
+      "feature": "Themes sidebar tab",
+      "tests": [
+        "feature_tests::themes_opens_and_persists",
+        "feature_tests::themes_renders_controls"
+      ]
+    },
+    {
+      "id": "layout-and-window-unified-header-and-dominant-left-sidebar",
+      "category": "Layout and window",
+      "feature": "Unified header and dominant left sidebar",
+      "tests": [
+        "reliability_tests::sidebar_owns_lower_left_and_header_is_a_single_row",
+        "feature_tests::compact_header_and_left_sidebar_keep_their_layout_with_panels_hidden"
+      ]
+    },
+    {
+      "id": "layout-and-window-sidebar-toggle-button-and-shortcut",
+      "category": "Layout and window",
+      "feature": "Sidebar toggle button and shortcut",
+      "tests": [
+        "feature_tests::sidebar_toggle_button_hides_and_restores_without_losing_view",
+        "feature_tests::sidebar_shortcut_and_palette_toggle_keep_documents"
+      ]
+    },
+    {
+      "id": "layout-and-window-bottom-panel-toggle-button-and-shortcut",
+      "category": "Layout and window",
+      "feature": "Bottom panel toggle button and shortcut",
+      "tests": [
+        "feature_tests::bottom_toggle_button_changes_visibility_without_starting_output_shell",
+        "feature_tests::bottom_panel_shortcut_and_palette_action_are_reversible"
+      ]
+    },
+    {
+      "id": "layout-and-window-minimise",
+      "category": "Layout and window",
+      "feature": "Minimise",
+      "tests": [
+        "reliability_tests::integrated_window_controls_emit_native_commands_and_guard_dirty_close",
+        "feature_tests::minimising_window_preserves_dirty_document_and_running_job"
+      ]
+    },
+    {
+      "id": "layout-and-window-maximise-and-restore",
+      "category": "Layout and window",
+      "feature": "Maximise and restore",
+      "tests": [
+        "window::feature_coverage::maximise_command_works_when_backend_has_no_previous_state",
+        "window::feature_coverage::maximise_command_becomes_restore_when_already_maximised"
+      ]
+    },
+    {
+      "id": "layout-and-window-window-caption-double-click",
+      "category": "Layout and window",
+      "feature": "Window caption double click",
+      "tests": [
+        "window::feature_coverage::caption_double_click_maximises_a_restored_window",
+        "window::feature_coverage::caption_double_click_restores_a_maximised_window"
+      ]
+    },
+    {
+      "id": "layout-and-window-window-caption-dragging",
+      "category": "Layout and window",
+      "feature": "Window caption dragging",
+      "tests": [
+        "window::feature_coverage::integrated_caption_drag_hands_movement_to_os",
+        "window::feature_coverage::system_title_bar_caption_does_not_duplicate_window_drag_commands"
+      ]
+    },
+    {
+      "id": "layout-and-window-window-edge-and-corner-resize",
+      "category": "Layout and window",
+      "feature": "Window edge and corner resize",
+      "tests": [
+        "window::tests::edge_targets_cover_eight_directions_without_covering_controls",
+        "window::feature_coverage::edge_press_emits_native_resize_and_appropriate_cursor",
+        "window::feature_coverage::resize_is_disabled_when_maximised_fullscreen_or_pointer_in_body"
+      ]
+    },
+    {
+      "id": "layout-and-window-system-title-bar-preference",
+      "category": "Layout and window",
+      "feature": "System title bar preference",
+      "tests": [
+        "feature_tests::native_title_bar_setting_emits_decoration_command_and_persists",
+        "reliability_tests::integrated_window_controls_emit_native_commands_and_guard_dirty_close"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-add-workspace-folder",
+      "category": "Workspace and Explorer",
+      "feature": "Add workspace folder",
+      "tests": [
+        "feature_tests::adding_folder_is_canonical_and_deduplicated",
+        "feature_tests::removing_folder_clears_directory_override_and_preserves_files"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-open-workspace-project",
+      "category": "Workspace and Explorer",
+      "feature": "Open workspace project",
+      "tests": [
+        "feature_tests::adding_project_selects_it_and_opens_its_manifest_once",
+        "reliability_tests::editing_manifest_ids_never_adds_workspace_roots_or_changes_build_target"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-select-build-project",
+      "category": "Workspace and Explorer",
+      "feature": "Select build project",
+      "tests": [
+        "feature_tests::selected_project_falls_back_when_saved_selection_was_removed",
+        "feature_tests::explorer_files_and_symbols_views_switch_without_changing_build_target"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-remove-workspace-project",
+      "category": "Workspace and Explorer",
+      "feature": "Remove workspace project",
+      "tests": [
+        "feature_tests::removing_project_keeps_files_and_resets_selected_target",
+        "feature_tests::selected_project_falls_back_when_saved_selection_was_removed"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-remove-workspace-folder",
+      "category": "Workspace and Explorer",
+      "feature": "Remove workspace folder",
+      "tests": [
+        "feature_tests::removing_folder_clears_directory_override_and_preserves_files",
+        "feature_tests::removing_recent_folder_keeps_workspace_and_stays_removed_after_reload"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-directory-override-and-fallback",
+      "category": "Workspace and Explorer",
+      "feature": "Directory override and fallback",
+      "tests": [
+        "feature_tests::directory_override_takes_priority_over_project_and_workspace",
+        "feature_tests::directory_follows_first_folder_when_no_project_is_selected",
+        "reliability_tests::command_directory_does_not_change_when_tabs_change"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-background-workspace-refresh",
+      "category": "Workspace and Explorer",
+      "feature": "Background workspace refresh",
+      "tests": [
+        "feature_tests::refresh_action_invalidates_workspace_and_diagnostics",
+        "feature_tests::disconnected_workspace_worker_reports_retry_without_losing_snapshot"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-filesystem-index-limits-and-failures",
+      "category": "Workspace and Explorer",
+      "feature": "Filesystem index limits and failures",
+      "tests": [
+        "workspace::tests::indexes_all_extensions_and_reports_caps_and_missing_roots",
+        "workspace::tests::zero_entry_limit_reports_cap_without_traversing"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-generated-and-git-directory-filters",
+      "category": "Workspace and Explorer",
+      "feature": "Generated and Git directory filters",
+      "tests": [
+        "workspace::tests::generated_folders_can_be_included",
+        "workspace::tests::git_folder_is_excluded_even_when_generated_folders_are_enabled"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-index-ordering-and-duplicate-roots",
+      "category": "Workspace and Explorer",
+      "feature": "Index ordering and duplicate roots",
+      "tests": [
+        "workspace::tests::index_sorts_directories_first_and_deduplicates_repeated_roots",
+        "workspace::tests::indexes_all_extensions_and_reports_caps_and_missing_roots"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-explorer-pagination",
+      "category": "Workspace and Explorer",
+      "feature": "Explorer pagination",
+      "tests": [
+        "feature_tests::explorer_show_more_reveals_next_page_without_losing_prior_entries",
+        "feature_tests::explorer_page_boundary_and_missing_folder_do_not_panic"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-expand-and-collapse-explorer-trees",
+      "category": "Workspace and Explorer",
+      "feature": "Expand and collapse Explorer trees",
+      "tests": [
+        "feature_tests::explorer_expand_all_updates_tree_state_and_revision",
+        "feature_tests::explorer_collapse_all_updates_tree_state_without_removing_files"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-files-and-symbols-views",
+      "category": "Workspace and Explorer",
+      "feature": "Files and Symbols views",
+      "tests": [
+        "feature_tests::explorer_files_and_symbols_views_switch_without_changing_build_target",
+        "feature_tests::explorer_symbols_empty_state_explains_how_to_add_a_project"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-unsaved-buffer-symbol-indexing",
+      "category": "Workspace and Explorer",
+      "feature": "Unsaved-buffer symbol indexing",
+      "tests": [
+        "workspace::tests::symbols_use_unsaved_buffers_and_include_external_project_sources",
+        "symbols::tests::handles_nested_types_and_multiple_files"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-namespace-and-type-grouping",
+      "category": "Workspace and Explorer",
+      "feature": "Namespace and type grouping",
+      "tests": [
+        "symbols::tests::groups_namespace_and_class",
+        "symbols::tests::handles_nested_types_and_multiple_files",
+        "symbols::tests::no_class_files_are_kept_in_namespace"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-manifest-parsing-and-defaults",
+      "category": "Workspace and Explorer",
+      "feature": "Manifest parsing and defaults",
+      "tests": [
+        "project::extra_tests::manifest_defaults_preserve_filename_and_unknown_kind",
+        "project::extra_tests::malformed_manifest_becomes_warning",
+        "project::extra_tests::wrong_typed_sources_are_reported_without_panicking"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-referenced-projects-and-sources",
+      "category": "Workspace and Explorer",
+      "feature": "Referenced projects and sources",
+      "tests": [
+        "project::extra_tests::external_reference_loads_sources",
+        "project::extra_tests::missing_reference_is_reported",
+        "project::extra_tests::detects_missing_source"
+      ]
+    },
+    {
+      "id": "workspace-and-explorer-project-graph-cycle-protection",
+      "category": "Workspace and Explorer",
+      "feature": "Project graph cycle protection",
+      "tests": [
+        "project::tests::parses_recursive_references_and_cycles",
+        "project::extra_tests::self_reference_is_bounded_and_reported"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-exact-shortcut-modifiers",
+      "category": "Editor and navigation",
+      "feature": "Exact shortcut modifiers",
+      "tests": [
+        "reliability_tests::modified_shortcuts_never_trigger_the_unmodified_action",
+        "feature_tests::sidebar_shortcut_and_palette_toggle_keep_documents"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-command-palette-filtering-and-empty-results",
+      "category": "Editor and navigation",
+      "feature": "Command Palette filtering and empty results",
+      "tests": [
+        "feature_tests::command_palette_filters_case_insensitively_and_runs_matching_action",
+        "feature_tests::command_palette_no_matches_and_escape_do_not_run_actions"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-command-palette-keyboard-navigation",
+      "category": "Editor and navigation",
+      "feature": "Command Palette keyboard navigation",
+      "tests": [
+        "feature_tests::command_palette_arrows_wrap_and_query_change_resets_selection",
+        "reliability_tests::welcome_palette_and_editor_render_with_keyboard_navigation"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-go-to-file-filtering-and-opening",
+      "category": "Editor and navigation",
+      "feature": "Go to File filtering and opening",
+      "tests": [
+        "feature_tests::quick_open_filters_paths_and_enter_opens_the_selected_file",
+        "feature_tests::quick_open_empty_results_and_escape_leave_document_unchanged"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-go-to-file-keyboard-navigation",
+      "category": "Editor and navigation",
+      "feature": "Go to File keyboard navigation",
+      "tests": [
+        "feature_tests::quick_open_arrow_selection_wraps_both_directions",
+        "reliability_tests::escape_closes_go_to_file_without_losing_documents"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-go-to-line",
+      "category": "Editor and navigation",
+      "feature": "Go to line",
+      "tests": [
+        "feature_tests::go_to_line_positions_unicode_caret_without_changing_text",
+        "feature_tests::go_to_line_rejects_invalid_and_outside_lines"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-find-next-and-previous",
+      "category": "Editor and navigation",
+      "feature": "Find next and previous",
+      "tests": [
+        "feature_tests::find_next_and_previous_wrap_unicode_matches_without_editing",
+        "feature_tests::find_missing_text_keeps_caret_and_reports_no_match"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-search-and-replace-sidebar-activation",
+      "category": "Editor and navigation",
+      "feature": "Search and replace sidebar activation",
+      "tests": [
+        "feature_tests::search_keyboard_shortcut_focuses_sidebar_and_replace_action_shows_field",
+        "reliability_tests::enter_in_search_selects_a_match_without_editing_the_document"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-replace-one",
+      "category": "Editor and navigation",
+      "feature": "Replace one",
+      "tests": [
+        "feature_tests::replace_one_uses_selected_unicode_match",
+        "feature_tests::replace_one_missing_or_empty_query_does_not_modify_document"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-replace-all",
+      "category": "Editor and navigation",
+      "feature": "Replace all",
+      "tests": [
+        "feature_tests::replace_all_replaces_each_match_and_reports_count",
+        "feature_tests::replace_all_no_matches_or_empty_query_keeps_document"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-duplicate-line",
+      "category": "Editor and navigation",
+      "feature": "Duplicate line",
+      "tests": [
+        "feature_tests::duplicate_line_updates_cursor_and_invalidates_diagnostics",
+        "feature_tests::duplicate_line_on_empty_document_and_missing_editor_is_safe",
+        "navigation::tests::duplication_respects_crlf"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-switch-editor-tabs",
+      "category": "Editor and navigation",
+      "feature": "Switch editor tabs",
+      "tests": [
+        "feature_tests::next_tab_wraps_and_requests_editor_focus",
+        "feature_tests::tab_navigation_handles_welcome_and_no_open_documents"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-word-wrap",
+      "category": "Editor and navigation",
+      "feature": "Word wrap",
+      "tests": [
+        "feature_tests::word_wrap_shortcut_preserves_text_and_persists_choice",
+        "feature_tests::word_wrap_can_be_toggled_off_after_restoring_preferences"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-lexical-syntax-highlighting",
+      "category": "Editor and navigation",
+      "feature": "Lexical syntax highlighting",
+      "tests": [
+        "editor::tests::highlights_keywords_and_names",
+        "editor::tests::preserves_unicode_and_entire_input",
+        "editor::tests::numeric_and_modifiers"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-comments-strings-and-incomplete-syntax",
+      "category": "Editor and navigation",
+      "feature": "Comments strings and incomplete syntax",
+      "tests": [
+        "editor::tests::comments_do_not_highlight_embedded_keywords",
+        "editor::tests::strings_and_escapes",
+        "editor::tests::tokenizes_unterminated_comment_and_string"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-completion-candidate-filtering",
+      "category": "Editor and navigation",
+      "feature": "Completion candidate filtering",
+      "tests": [
+        "editor::tests::completion_deduplicates_and_filters",
+        "editor::tests::completions_stay_out_of_comments_and_strings"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-automatic-completion-preference",
+      "category": "Editor and navigation",
+      "feature": "Automatic completion preference",
+      "tests": [
+        "feature_tests::automatic_completion_appears_after_typing_an_identifier_prefix",
+        "feature_tests::disabled_automatic_completion_does_not_open_when_typing"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-manual-completion-and-acceptance",
+      "category": "Editor and navigation",
+      "feature": "Manual completion and acceptance",
+      "tests": [
+        "feature_tests::automatic_completion_can_be_disabled_without_disabling_manual_request",
+        "feature_tests::completion_accept_inserts_selected_candidate_at_unicode_caret"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-completion-dismissal-and-safe-insertion",
+      "category": "Editor and navigation",
+      "feature": "Completion dismissal and safe insertion",
+      "tests": [
+        "feature_tests::completion_escape_dismisses_without_changing_source",
+        "editor::tests::completion_replaces_at_caret_unicode_safe"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-lexical-diagnostics-across-buffers",
+      "category": "Editor and navigation",
+      "feature": "Lexical diagnostics across buffers",
+      "tests": [
+        "diagnostics::tests::lexical_error_and_unicode_byte_span",
+        "diagnostics::open_buffer_tests::unrelated_and_untitled_buffers_get_errors_with_a_project_selected"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-unused-reference-diagnostics",
+      "category": "Editor and navigation",
+      "feature": "Unused-reference diagnostics",
+      "tests": [
+        "diagnostics::tests::private_unused_and_referenced_across_projects",
+        "diagnostics::tests::references_in_hyproj_dependencies_prevent_unused_hint"
+      ]
+    },
+    {
+      "id": "editor-and-navigation-suppressing-speculative-diagnostics",
+      "category": "Editor and navigation",
+      "feature": "Suppressing speculative diagnostics",
+      "tests": [
+        "diagnostics::tests::incomplete_project_does_not_guess_about_unused",
+        "diagnostics::tests::ignores_comment_and_string_references",
+        "diagnostics::tests::namespaced_fields_without_private_modifier_are_not_locals"
+      ]
+    },
+    {
+      "id": "workspace-search-workspace-search-activation-and-results",
+      "category": "Workspace search",
+      "feature": "Workspace search activation and results",
+      "tests": [
+        "feature_tests::search_workspace_shortcut_selects_workspace_mode_without_changing_editor",
+        "panels::tests::workspace_search_uses_open_buffers_and_line_numbers"
+      ]
+    },
+    {
+      "id": "workspace-search-case-sensitive-workspace-search-and-deduplication",
+      "category": "Workspace search",
+      "feature": "Case-sensitive workspace search and deduplication",
+      "tests": [
+        "panels::tests::workspace_search_is_case_sensitive_and_deduplicates_paths",
+        "panels::tests::workspace_search_uses_open_buffers_and_line_numbers"
+      ]
+    },
+    {
+      "id": "workspace-search-workspace-search-limits-and-unreadable-files",
+      "category": "Workspace search",
+      "feature": "Workspace search limits and unreadable files",
+      "tests": [
+        "panels::tests::search_limits_are_visible",
+        "panels::tests::workspace_search_skips_binary_missing_and_oversized_files_with_notice"
+      ]
+    },
+    {
+      "id": "workspace-search-workspace-search-line-navigation",
+      "category": "Workspace search",
+      "feature": "Workspace search line navigation",
+      "tests": [
+        "feature_tests::workspace_search_result_opens_matching_file_at_its_line",
+        "feature_tests::workspace_search_result_does_not_register_a_manifest_project"
+      ]
+    },
+    {
+      "id": "workspace-search-stale-and-failed-workspace-search-workers",
+      "category": "Workspace search",
+      "feature": "Stale and failed workspace search workers",
+      "tests": [
+        "feature_tests::stale_workspace_search_results_are_discarded",
+        "feature_tests::disconnected_workspace_search_keeps_previous_results_and_warns"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-project-build",
+      "category": "Hydrogen tools",
+      "feature": "Project Build",
+      "tests": [
+        "feature_tests::project_build_saves_dirty_manifest_and_routes_generated_output_path",
+        "hydrogen::tests::project_build_passes_required_output",
+        "hydrogen::tests::project_build_does_not_fall_back_to_a_source_file"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-compile-active-file",
+      "category": "Hydrogen tools",
+      "feature": "Compile active file",
+      "tests": [
+        "feature_tests::active_file_compile_routes_only_source_and_explicit_output",
+        "hydrogen::tests::shift_build_compiles_only_active_file",
+        "hydrogen::tests::shift_build_rejects_a_manifest"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-check",
+      "category": "Hydrogen tools",
+      "feature": "Check",
+      "tests": [
+        "feature_tests::check_routes_selected_project_to_output",
+        "feature_tests::check_rejects_overlapping_job"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-run",
+      "category": "Hydrogen tools",
+      "feature": "Run",
+      "tests": [
+        "feature_tests::run_routes_selected_project_to_output",
+        "feature_tests::run_rejects_overlapping_job"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-save-before-tool-actions",
+      "category": "Hydrogen tools",
+      "feature": "Save before tool actions",
+      "tests": [
+        "feature_tests::project_build_saves_dirty_manifest_and_routes_generated_output_path",
+        "feature_tests::build_conflict_aborts_before_launching_compiler"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-artifact-paths-and-target-kinds",
+      "category": "Hydrogen tools",
+      "feature": "Artifact paths and target kinds",
+      "tests": [
+        "hydrogen::tests::os_manifest_build_plan_uses_directory_artifact",
+        "hydrogen::tests::target_artifact_extensions_follow_manifest_kind"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-compiler-profiles-and-capabilities",
+      "category": "Hydrogen tools",
+      "feature": "Compiler profiles and capabilities",
+      "tests": [
+        "feature_tests::sdk_and_single_file_profiles_set_only_supported_verbs",
+        "reliability_tests::unavailable_compiler_action_opens_settings_without_running"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-compiler-help-detection",
+      "category": "Hydrogen tools",
+      "feature": "Compiler help detection",
+      "tests": [
+        "feature_tests::capability_detection_applies_supported_help_output",
+        "feature_tests::capability_detection_empty_help_keeps_profile_and_warns",
+        "hydrogen::tests::help_detection_matches_whole_command_names"
+      ]
+    },
+    {
+      "id": "hydrogen-tools-tool-validation-errors",
+      "category": "Hydrogen tools",
+      "feature": "Tool validation errors",
+      "tests": [
+        "reliability_tests::invalid_tool_actions_report_to_the_output_tab",
+        "reliability_tests::unavailable_compiler_action_opens_settings_without_running"
+      ]
+    },
+    {
+      "id": "output-and-jobs-read-only-output-and-automatic-routing",
+      "category": "Output and jobs",
+      "feature": "Read-only Output and automatic routing",
+      "tests": [
+        "reliability_tests::tool_jobs_select_read_only_output_without_starting_a_shell",
+        "feature_tests::output_tab_is_read_only_under_text_paste_and_enter"
+      ]
+    },
+    {
+      "id": "output-and-jobs-clear-output",
+      "category": "Output and jobs",
+      "feature": "Clear Output",
+      "tests": [
+        "feature_tests::output_clear_button_empties_log_without_changing_document",
+        "feature_tests::output_clear_while_job_runs_does_not_cancel_it"
+      ]
+    },
+    {
+      "id": "output-and-jobs-copy-output",
+      "category": "Output and jobs",
+      "feature": "Copy Output",
+      "tests": [
+        "feature_tests::copy_log_exports_complete_unicode_output",
+        "feature_tests::copying_empty_log_does_not_change_running_job"
+      ]
+    },
+    {
+      "id": "output-and-jobs-stop-job-controls",
+      "category": "Output and jobs",
+      "feature": "Stop job controls",
+      "tests": [
+        "feature_tests::stop_job_button_sets_cancel_without_editing_output",
+        "feature_tests::stop_job_palette_action_handles_running_and_missing_jobs"
+      ]
+    },
+    {
+      "id": "output-and-jobs-output-retention-cap",
+      "category": "Output and jobs",
+      "feature": "Output retention cap",
+      "tests": [
+        "command::tests::scrollback_is_bounded_at_a_utf8_boundary",
+        "command::tests::bounded_output_keeps_latest_suffix_across_many_appends"
+      ]
+    },
+    {
+      "id": "output-and-jobs-streaming-encoding",
+      "category": "Output and jobs",
+      "feature": "Streaming encoding",
+      "tests": [
+        "command::tests::streaming_preserves_split_utf8",
+        "command::tests::invalid_utf8_output_is_replaced_without_losing_following_bytes"
+      ]
+    },
+    {
+      "id": "output-and-jobs-completion-and-worker-errors",
+      "category": "Output and jobs",
+      "feature": "Completion and worker errors",
+      "tests": [
+        "feature_tests::finished_tool_stream_retains_output_and_real_exit_status",
+        "feature_tests::disconnected_tool_worker_reports_failure_and_releases_job_slot"
+      ]
+    },
+    {
+      "id": "output-and-jobs-terminal-and-output-tab-switching",
+      "category": "Output and jobs",
+      "feature": "Terminal and Output tab switching",
+      "tests": [
+        "feature_tests::switching_output_and_terminal_tabs_preserves_log_and_reports_shell_error",
+        "feature_tests::output_tab_is_read_only_under_text_paste_and_enter"
+      ]
+    },
+    {
+      "id": "output-and-jobs-streaming-stdout-stderr-and-exit-code",
+      "category": "Output and jobs",
+      "feature": "Streaming stdout stderr and exit code",
+      "tests": [
+        "command::tests::streams_partial_lines_stderr_and_real_exit_code",
+        "feature_tests::finished_tool_stream_retains_output_and_real_exit_status"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "output-and-jobs-cancelling-process-trees",
+      "category": "Output and jobs",
+      "feature": "Cancelling process trees",
+      "tests": [
+        "command::tests::cancellation_kills_shell_descendants",
+        "command::tests::cancellation_before_first_output_still_finishes"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "output-and-jobs-configurable-job-timeout",
+      "category": "Output and jobs",
+      "feature": "Configurable job timeout",
+      "tests": [
+        "command::tests::timeout_releases_the_job",
+        "command::tests::disabled_timeout_allows_delayed_success"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "output-and-jobs-timeout-with-child-processes",
+      "category": "Output and jobs",
+      "feature": "Timeout with child processes",
+      "tests": [
+        "command::tests::timeout_also_stops_background_descendants",
+        "command::tests::timeout_releases_the_job"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "git-status-button",
+      "category": "Git",
+      "feature": "Status button",
+      "tests": [
+        "feature_tests::git_status_button_routes_cli_arguments",
+        "feature_tests::git_status_button_is_disabled_during_job"
+      ]
+    },
+    {
+      "id": "git-diff-button",
+      "category": "Git",
+      "feature": "Diff button",
+      "tests": [
+        "feature_tests::git_diff_button_routes_cli_arguments",
+        "feature_tests::git_diff_button_is_disabled_during_job"
+      ]
+    },
+    {
+      "id": "git-fetch-button",
+      "category": "Git",
+      "feature": "Fetch button",
+      "tests": [
+        "feature_tests::git_fetch_button_routes_cli_arguments",
+        "feature_tests::git_fetch_button_is_disabled_during_job"
+      ]
+    },
+    {
+      "id": "git-pull-button",
+      "category": "Git",
+      "feature": "Pull button",
+      "tests": [
+        "feature_tests::git_pull_button_routes_cli_arguments",
+        "feature_tests::git_pull_button_is_disabled_during_job"
+      ]
+    },
+    {
+      "id": "git-push-button",
+      "category": "Git",
+      "feature": "Push button",
+      "tests": [
+        "feature_tests::git_push_button_routes_cli_arguments",
+        "feature_tests::git_push_button_is_disabled_during_job"
+      ]
+    },
+    {
+      "id": "git-clone-registration-after-completion",
+      "category": "Git",
+      "feature": "Clone registration after completion",
+      "tests": [
+        "feature_tests::clone_success_registers_destination_after_completion",
+        "feature_tests::clone_failure_does_not_register_destination"
+      ]
+    },
+    {
+      "id": "themes-graphite",
+      "category": "Themes",
+      "feature": "Graphite",
+      "tests": [
+        "feature_tests::graphite_applies_to_interface_and_syntax",
+        "feature_tests::graphite_selection_clears_custom_theme_and_persists"
+      ]
+    },
+    {
+      "id": "themes-aurora",
+      "category": "Themes",
+      "feature": "Aurora",
+      "tests": [
+        "feature_tests::aurora_applies_to_interface_and_syntax",
+        "feature_tests::aurora_selection_clears_custom_theme_and_persists"
+      ]
+    },
+    {
+      "id": "themes-dawn",
+      "category": "Themes",
+      "feature": "Dawn",
+      "tests": [
+        "feature_tests::dawn_applies_to_interface_and_syntax",
+        "feature_tests::dawn_selection_clears_custom_theme_and_persists"
+      ]
+    },
+    {
+      "id": "themes-high-contrast",
+      "category": "Themes",
+      "feature": "High Contrast",
+      "tests": [
+        "feature_tests::contrast_applies_to_interface_and_syntax",
+        "feature_tests::contrast_selection_clears_custom_theme_and_persists"
+      ]
+    },
+    {
+      "id": "themes-search-installed-themes",
+      "category": "Themes",
+      "feature": "Search installed themes",
+      "tests": [
+        "feature_tests::theme_catalogue_search_filters_names_and_has_no_inline_editors",
+        "feature_tests::theme_search_empty_state_keeps_active_palette"
+      ]
+    },
+    {
+      "id": "themes-read-only-catalogue-and-options-menu",
+      "category": "Themes",
+      "feature": "Read-only catalogue and options menu",
+      "tests": [
+        "feature_tests::theme_options_expose_management_commands_without_editing_the_item",
+        "feature_tests::theme_catalogue_search_filters_names_and_has_no_inline_editors"
+      ]
+    },
+    {
+      "id": "themes-enable-globally",
+      "category": "Themes",
+      "feature": "Enable globally",
+      "tests": [
+        "feature_tests::theme_settings_opens_only_from_options_and_enable_applies_palette",
+        "feature_tests::global_theme_disable_falls_back_and_enable_restores_selection"
+      ]
+    },
+    {
+      "id": "themes-disable-globally",
+      "category": "Themes",
+      "feature": "Disable globally",
+      "tests": [
+        "feature_tests::global_theme_disable_falls_back_and_enable_restores_selection",
+        "feature_tests::workspace_theme_enable_can_override_global_disable"
+      ]
+    },
+    {
+      "id": "themes-enable-for-workspace",
+      "category": "Themes",
+      "feature": "Enable for workspace",
+      "tests": [
+        "feature_tests::workspace_theme_enable_does_not_change_global_theme_or_other_workspace",
+        "feature_tests::workspace_theme_enable_can_override_global_disable"
+      ]
+    },
+    {
+      "id": "themes-disable-for-workspace",
+      "category": "Themes",
+      "feature": "Disable for workspace",
+      "tests": [
+        "feature_tests::workspace_theme_disable_preserves_global_availability_and_persists_scope",
+        "feature_tests::workspace_theme_controls_reject_missing_workspace_without_mutation"
+      ]
+    },
+    {
+      "id": "themes-auto-update-preference-placeholder",
+      "category": "Themes",
+      "feature": "Auto update preference placeholder",
+      "tests": [
+        "feature_tests::theme_auto_update_option_persists_preference_without_starting_network_job",
+        "feature_tests::theme_auto_update_can_be_switched_off"
+      ]
+    },
+    {
+      "id": "themes-theme-settings-entry-point",
+      "category": "Themes",
+      "feature": "Theme Settings entry point",
+      "tests": [
+        "feature_tests::theme_settings_opens_only_from_options_and_enable_applies_palette",
+        "feature_tests::theme_settings_edits_are_local_overrides_not_bundled_file_writes"
+      ]
+    },
+    {
+      "id": "themes-theme-customisation-validation",
+      "category": "Themes",
+      "feature": "Theme customisation validation",
+      "tests": [
+        "feature_tests::theme_settings_reject_invalid_definition_without_altering_theme",
+        "theme::tests::theme_import_rejects_missing_fields_and_blank_names"
+      ]
+    },
+    {
+      "id": "themes-reset-theme-customisations",
+      "category": "Themes",
+      "feature": "Reset theme customisations",
+      "tests": [
+        "feature_tests::resetting_theme_customisations_restores_bundled_definition",
+        "feature_tests::resetting_inactive_theme_does_not_switch_active_palette"
+      ]
+    },
+    {
+      "id": "themes-theme-name-and-debounced-persistence",
+      "category": "Themes",
+      "feature": "Theme name and debounced persistence",
+      "tests": [
+        "feature_tests::theme_custom_name_edit_applies_live_and_is_debounced",
+        "feature_tests::custom_theme_is_saved_on_exit_before_debounce_expires"
+      ]
+    },
+    {
+      "id": "themes-interface-and-syntax-colour-customisation",
+      "category": "Themes",
+      "feature": "Interface and syntax colour customisation",
+      "tests": [
+        "feature_tests::theme_settings_edits_are_local_overrides_not_bundled_file_writes",
+        "feature_tests::workspace_theme_customisation_follows_selected_workspace_without_changing_global"
+      ]
+    },
+    {
+      "id": "themes-icon-style-and-scale",
+      "category": "Themes",
+      "feature": "Icon style and scale",
+      "tests": [
+        "theme::tests::icon_scale_limits_and_all_styles_roundtrip",
+        "theme::tests::invalid_versions_and_scales_are_rejected"
+      ]
+    },
+    {
+      "id": "themes-syntax-cache-recolouring",
+      "category": "Themes",
+      "feature": "Syntax cache recolouring",
+      "tests": [
+        "editor::tests::cached_syntax_updates_immediately_when_the_theme_changes",
+        "feature_tests::theme_settings_edits_are_local_overrides_not_bundled_file_writes"
+      ]
+    },
+    {
+      "id": "themes-terminal-palette-customisation",
+      "category": "Themes",
+      "feature": "Terminal palette customisation",
+      "tests": [
+        "feature_tests::theme_export_roundtrips_custom_interface_syntax_icons_and_terminal",
+        "terminal::feature_coverage::ansi_palette_changes_with_theme_while_truecolour_stays_exact"
+      ]
+    },
+    {
+      "id": "themes-add-theme-and-repository-placeholder",
+      "category": "Themes",
+      "feature": "Add theme and repository placeholder",
+      "tests": [
+        "feature_tests::add_themes_opens_a_local_import_and_clear_repository_placeholder",
+        "feature_tests::importing_local_theme_adds_one_catalogue_entry_and_preserves_bundled_themes"
+      ]
+    },
+    {
+      "id": "themes-local-theme-import",
+      "category": "Themes",
+      "feature": "Local theme import",
+      "tests": [
+        "feature_tests::theme_import_applies_and_persists_a_valid_custom_palette",
+        "feature_tests::invalid_or_missing_theme_import_preserves_current_theme"
+      ]
+    },
+    {
+      "id": "themes-theme-json-export",
+      "category": "Themes",
+      "feature": "Theme JSON export",
+      "tests": [
+        "feature_tests::theme_export_roundtrips_custom_interface_syntax_icons_and_terminal",
+        "feature_tests::theme_export_failure_preserves_existing_destination_and_reports_error"
+      ]
+    },
+    {
+      "id": "themes-open-containing-folder-resolution",
+      "category": "Themes",
+      "feature": "Open containing folder resolution",
+      "tests": [
+        "feature_tests::theme_folder_materialises_valid_local_json_without_touching_bundled_source",
+        "feature_tests::theme_folder_rejects_unknown_and_path_traversal_identifiers"
+      ]
+    },
+    {
+      "id": "themes-download-local-zip",
+      "category": "Themes",
+      "feature": "Download local ZIP",
+      "tests": [
+        "feature_tests::local_zip_export_preserves_nested_theme_and_extension_contents",
+        "feature_tests::failed_zip_export_preserves_existing_destination_and_leaves_no_temporary_file"
+      ]
+    },
+    {
+      "id": "themes-remove-local-theme",
+      "category": "Themes",
+      "feature": "Remove local theme",
+      "tests": [
+        "feature_tests::removing_local_theme_cleans_workspace_overrides_and_uses_default",
+        "feature_tests::removing_an_inactive_theme_keeps_other_customised_themes"
+      ]
+    },
+    {
+      "id": "themes-bundled-theme-removal-protection",
+      "category": "Themes",
+      "feature": "Bundled theme removal protection",
+      "tests": [
+        "feature_tests::bundled_theme_removal_is_rejected_and_missing_theme_is_safe",
+        "feature_tests::theme_settings_edits_are_local_overrides_not_bundled_file_writes"
+      ]
+    },
+    {
+      "id": "themes-legacy-custom-theme-migration",
+      "category": "Themes",
+      "feature": "Legacy custom-theme migration",
+      "tests": [
+        "feature_tests::local_catalogue_import_migrates_a_previous_custom_theme",
+        "reliability_tests::theme_choices_and_custom_colours_roundtrip_in_preferences"
+      ]
+    },
+    {
+      "id": "extensions-search-installed-extensions",
+      "category": "Extensions",
+      "feature": "Search installed extensions",
+      "tests": [
+        "feature_tests::extension_catalogue_search_matches_name_id_and_description",
+        "feature_tests::extension_search_empty_state_does_not_disable_or_remove_installed_items"
+      ]
+    },
+    {
+      "id": "extensions-read-only-catalogue-and-options-menu",
+      "category": "Extensions",
+      "feature": "Read-only catalogue and options menu",
+      "tests": [
+        "feature_tests::extension_options_have_the_same_management_menu_as_themes",
+        "feature_tests::extension_catalogue_search_matches_name_id_and_description"
+      ]
+    },
+    {
+      "id": "extensions-enable-globally",
+      "category": "Extensions",
+      "feature": "Enable globally",
+      "tests": [
+        "feature_tests::global_extension_disable_blocks_execution_and_enable_restores_it",
+        "feature_tests::globally_enabling_extension_does_not_clear_workspace_disable"
+      ]
+    },
+    {
+      "id": "extensions-disable-globally",
+      "category": "Extensions",
+      "feature": "Disable globally",
+      "tests": [
+        "feature_tests::global_extension_disable_blocks_execution_and_enable_restores_it",
+        "feature_tests::globally_disabling_extension_does_not_clear_workspace_enable"
+      ]
+    },
+    {
+      "id": "extensions-enable-for-workspace",
+      "category": "Extensions",
+      "feature": "Enable for workspace",
+      "tests": [
+        "feature_tests::workspace_extension_enable_overrides_global_disable_and_persists",
+        "feature_tests::extension_workspace_actions_require_a_workspace"
+      ]
+    },
+    {
+      "id": "extensions-disable-for-workspace",
+      "category": "Extensions",
+      "feature": "Disable for workspace",
+      "tests": [
+        "feature_tests::workspace_extension_disable_does_not_disable_other_workspaces",
+        "feature_tests::globally_enabling_extension_does_not_clear_workspace_disable"
+      ]
+    },
+    {
+      "id": "extensions-auto-update-preference-placeholder",
+      "category": "Extensions",
+      "feature": "Auto update preference placeholder",
+      "tests": [
+        "feature_tests::extension_auto_update_option_persists_without_launching_a_job",
+        "feature_tests::extension_auto_update_can_be_switched_off"
+      ]
+    },
+    {
+      "id": "extensions-extension-settings-and-manifest-editing",
+      "category": "Extensions",
+      "feature": "Extension Settings and manifest editing",
+      "tests": [
+        "feature_tests::extension_settings_opens_actions_and_manifest_editor_only_on_request",
+        "feature_tests::extension_reload_picks_up_saved_manifest_changes"
+      ]
+    },
+    {
+      "id": "extensions-open-containing-folder-resolution",
+      "category": "Extensions",
+      "feature": "Open containing folder resolution",
+      "tests": [
+        "plugins::tests::relative_program_resolves_to_plugin_folder",
+        "plugins::loading_tests::plugin_template_expands_every_context_without_shell_interpretation"
+      ]
+    },
+    {
+      "id": "extensions-download-local-zip",
+      "category": "Extensions",
+      "feature": "Download local ZIP",
+      "tests": [
+        "feature_tests::local_zip_export_preserves_nested_theme_and_extension_contents",
+        "feature_tests::failed_zip_export_preserves_existing_destination_and_leaves_no_temporary_file"
+      ]
+    },
+    {
+      "id": "extensions-remove-extension-with-backup",
+      "category": "Extensions",
+      "feature": "Remove extension with backup",
+      "tests": [
+        "feature_tests::removing_extension_moves_files_to_backup_and_cleans_preferences",
+        "feature_tests::removing_extension_via_confirmation_moves_its_folder_only"
+      ]
+    },
+    {
+      "id": "extensions-cancel-or-reject-extension-removal",
+      "category": "Extensions",
+      "feature": "Cancel or reject extension removal",
+      "tests": [
+        "feature_tests::extension_removal_confirmation_cancel_keeps_extension_installed",
+        "feature_tests::extension_removal_rejects_running_jobs_and_unmanaged_paths"
+      ]
+    },
+    {
+      "id": "extensions-add-extension-and-repository-placeholder",
+      "category": "Extensions",
+      "feature": "Add extension and repository placeholder",
+      "tests": [
+        "feature_tests::add_extensions_shows_local_install_instructions_and_repository_placeholder",
+        "plugins::loading_tests::missing_plugin_folder_and_non_manifest_entries_are_ignored"
+      ]
+    },
+    {
+      "id": "extensions-reload-installed-extensions",
+      "category": "Extensions",
+      "feature": "Reload installed extensions",
+      "tests": [
+        "feature_tests::extension_reload_picks_up_saved_manifest_changes",
+        "plugins::loading_tests::loads_v1_manifest_and_reports_invalid_versions"
+      ]
+    },
+    {
+      "id": "extensions-manifest-validation",
+      "category": "Extensions",
+      "feature": "Manifest validation",
+      "tests": [
+        "plugins::loading_tests::loads_v1_manifest_and_reports_invalid_versions",
+        "plugins::loading_tests::duplicate_ids_and_malformed_files_are_reported_once_per_bad_entry"
+      ]
+    },
+    {
+      "id": "extensions-run-extension-actions",
+      "category": "Extensions",
+      "feature": "Run extension actions",
+      "tests": [
+        "feature_tests::enabled_extension_action_routes_to_output_with_workspace_directory",
+        "feature_tests::extension_action_requires_selected_context_and_routes_errors_to_output"
+      ]
+    },
+    {
+      "id": "extensions-required-project-or-file-context",
+      "category": "Extensions",
+      "feature": "Required project or file context",
+      "tests": [
+        "plugins::tests::requires_explicit_context",
+        "plugins::loading_tests::missing_file_context_is_rejected_even_without_needs_file_flag"
+      ]
+    },
+    {
+      "id": "extensions-argument-expansion-without-shell-parsing",
+      "category": "Extensions",
+      "feature": "Argument expansion without shell parsing",
+      "tests": [
+        "plugins::tests::explicit_args_preserve_spaces_without_shell_quoting",
+        "plugins::loading_tests::plugin_template_expands_every_context_without_shell_interpretation"
+      ]
+    },
+    {
+      "id": "extensions-relative-executable-resolution",
+      "category": "Extensions",
+      "feature": "Relative executable resolution",
+      "tests": [
+        "plugins::tests::relative_program_resolves_to_plugin_folder",
+        "plugins::loading_tests::plugin_template_expands_every_context_without_shell_interpretation"
+      ]
+    },
+    {
+      "id": "terminal-protocol-normal-paste-and-newline-handling",
+      "category": "Terminal protocol",
+      "feature": "Normal paste and newline handling",
+      "tests": [
+        "terminal::feature_coverage::normal_paste_normalises_newlines_to_shell_returns",
+        "terminal::tests::control_keys_and_paste_reach_the_os"
+      ]
+    },
+    {
+      "id": "terminal-protocol-bracketed-paste-and-escape-sanitisation",
+      "category": "Terminal protocol",
+      "feature": "Bracketed paste and escape sanitisation",
+      "tests": [
+        "terminal::feature_coverage::bracketed_paste_cannot_inject_an_early_terminator",
+        "terminal::tests::control_keys_and_paste_reach_the_os"
+      ]
+    },
+    {
+      "id": "terminal-protocol-control-characters-and-function-keys",
+      "category": "Terminal protocol",
+      "feature": "Control characters and function keys",
+      "tests": [
+        "terminal::feature_coverage::control_characters_and_function_keys_have_distinct_encodings",
+        "terminal::feature_coverage::editing_keys_and_backtab_are_not_printable_text"
+      ]
+    },
+    {
+      "id": "terminal-protocol-normal-navigation-keys",
+      "category": "Terminal protocol",
+      "feature": "Normal navigation keys",
+      "tests": [
+        "terminal::feature_coverage::normal_arrow_and_navigation_keys_use_csi_sequences",
+        "terminal::feature_coverage::modified_arrows_preserve_control_and_shift"
+      ]
+    },
+    {
+      "id": "terminal-protocol-application-cursor-mode",
+      "category": "Terminal protocol",
+      "feature": "Application cursor mode",
+      "tests": [
+        "terminal::feature_coverage::application_cursor_mode_uses_ss3_for_each_direction",
+        "terminal::tests::control_keys_and_paste_reach_the_os"
+      ]
+    },
+    {
+      "id": "terminal-protocol-mouse-protocol-encoding",
+      "category": "Terminal protocol",
+      "feature": "Mouse protocol encoding",
+      "tests": [
+        "terminal::tests::mouse_reporting_uses_terminal_coordinates_and_release_codes",
+        "terminal::feature_coverage::legacy_mouse_encoding_clamps_large_cells_and_encodes_release",
+        "terminal::feature_coverage::utf8_mouse_encoding_retains_coordinates_beyond_legacy_limit"
+      ]
+    },
+    {
+      "id": "terminal-protocol-ansi-and-truecolour-rendering",
+      "category": "Terminal protocol",
+      "feature": "ANSI and truecolour rendering",
+      "tests": [
+        "terminal::feature_coverage::terminal_palette_resolves_default_ansi_rgb_and_greyscale",
+        "terminal::feature_coverage::ansi_palette_changes_with_theme_while_truecolour_stays_exact"
+      ]
+    },
+    {
+      "id": "terminal-protocol-vt-cursor-erase-and-unicode",
+      "category": "Terminal protocol",
+      "feature": "VT cursor erase and Unicode",
+      "tests": [
+        "terminal::feature_coverage::vt_screen_handles_unicode_wide_cells_erase_and_cursor",
+        "terminal::tests::ansi_screen_tracks_colours_cursor_and_alternate_screen"
+      ]
+    },
+    {
+      "id": "terminal-protocol-alternate-screen",
+      "category": "Terminal protocol",
+      "feature": "Alternate screen",
+      "tests": [
+        "terminal::feature_coverage::alternate_screen_restores_primary_contents_and_has_separate_cursor",
+        "terminal::tests::ansi_screen_tracks_colours_cursor_and_alternate_screen"
+      ]
+    },
+    {
+      "id": "terminal-protocol-terminal-scrollback",
+      "category": "Terminal protocol",
+      "feature": "Terminal scrollback",
+      "tests": [
+        "terminal::feature_coverage::terminal_scrollback_is_bounded_and_can_return_to_live_screen",
+        "terminal::feature_coverage::terminal_scrollback_selection_reads_visible_unicode"
+      ]
+    },
+    {
+      "id": "terminal-protocol-terminal-status-query-replies",
+      "category": "Terminal protocol",
+      "feature": "Terminal status query replies",
+      "tests": [
+        "terminal::feature_coverage::terminal_status_and_cursor_queries_receive_protocol_replies",
+        "terminal::feature_coverage::terminal_device_queries_reply_but_clipboard_osc_is_ignored"
+      ]
+    },
+    {
+      "id": "terminal-protocol-shell-startup-errors",
+      "category": "Terminal protocol",
+      "feature": "Shell startup errors",
+      "tests": [
+        "terminal::feature_coverage::missing_os_shell_reports_spawn_failure",
+        "feature_tests::switching_output_and_terminal_tabs_preserves_log_and_reports_shell_error"
+      ]
+    },
+    {
+      "id": "unix-terminal-integration-real-pty-handles-and-persistent-shell-state",
+      "category": "Unix terminal integration",
+      "feature": "Real PTY handles and persistent shell state",
+      "tests": [
+        "terminal::tests::real_pty_persists_directory_environment_and_interactive_input",
+        "terminal::feature_coverage::terminal_session_restart_has_fresh_environment_and_directory"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "unix-terminal-integration-terminal-resize",
+      "category": "Unix terminal integration",
+      "feature": "Terminal resize",
+      "tests": [
+        "terminal::tests::real_pty_persists_directory_environment_and_interactive_input",
+        "terminal::feature_coverage::terminal_resize_clamps_geometry_and_child_observes_minimum"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "unix-terminal-integration-shell-session-restart",
+      "category": "Unix terminal integration",
+      "feature": "Shell session restart",
+      "tests": [
+        "terminal::feature_coverage::terminal_session_restart_has_fresh_environment_and_directory",
+        "terminal::feature_coverage::terminal_stop_is_idempotent_and_reaps_child"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "unix-terminal-integration-end-session-and-natural-exit",
+      "category": "Unix terminal integration",
+      "feature": "End session and natural exit",
+      "tests": [
+        "terminal::feature_coverage::terminal_stop_is_idempotent_and_reaps_child",
+        "terminal::feature_coverage::natural_shell_exit_reports_status_and_closes_input"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    },
+    {
+      "id": "unix-terminal-integration-terminal-copy-and-ctrl-c-interrupt",
+      "category": "Unix terminal integration",
+      "feature": "Terminal copy and Ctrl C interrupt",
+      "tests": [
+        "terminal::feature_coverage::clipboard_copy_with_selection_copies_text_instead_of_interrupting",
+        "terminal::tests::real_pty_persists_directory_environment_and_interactive_input"
+      ],
+      "platforms": [
+        "linux",
+        "darwin"
+      ]
+    }
+  ]
+}

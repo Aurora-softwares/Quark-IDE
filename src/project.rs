@@ -197,4 +197,34 @@ mod extra_tests {
             .any(|w| w.contains("Cannot read")));
         fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn manifest_defaults_preserve_filename_and_unknown_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("default.hyproj");
+        fs::write(&p, "id='edited-id'\n").unwrap();
+        let p = load(&p);
+        assert_eq!(p.name, "default");
+        assert_eq!(p.kind, "unknown");
+        assert!(p.warnings.is_empty());
+    }
+    #[test]
+    fn self_reference_is_bounded_and_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("self.hyproj");
+        fs::write(&p, "project_references=['self.hyproj']").unwrap();
+        let p = load(&p);
+        assert_eq!(p.references.len(), 1);
+        assert!(p.references[0].references.is_empty());
+        assert!(p.references[0].warnings[0].contains("Already visited"));
+    }
+    #[test]
+    fn wrong_typed_sources_are_reported_without_panicking() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("bad.hyproj");
+        fs::write(&p, "sources=123").unwrap();
+        let p = load(&p);
+        assert!(p.sources.is_empty());
+        assert!(p.warnings.iter().any(|s| s.contains("Invalid .hyproj")));
+    }
 }

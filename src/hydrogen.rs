@@ -171,4 +171,35 @@ mod tests {
         assert_eq!(extension_for("os"), "");
         assert_eq!(extension_for("kernel"), "bin");
     }
+
+    #[test]
+    fn os_manifest_build_plan_uses_directory_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("os.hyproj");
+        std::fs::write(&p, "type='os'").unwrap();
+        let plan = build_plan("hy", Some(&p), None, BuildScope::Project).unwrap();
+        assert!(plan.output_is_directory);
+        assert!(plan.output.ends_with(".quark/build/os"));
+        assert_eq!(plan.args[3], plan.output.to_string_lossy());
+    }
+    #[test]
+    fn target_artifact_extensions_follow_manifest_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        for (kind, extension) in [
+            ("windows", "exe"),
+            ("efi", "efi"),
+            ("kernel", "bin"),
+            ("exec", "exec"),
+            ("native", "aun"),
+        ] {
+            let p = dir.path().join("project with spaces.hyproj");
+            std::fs::write(&p, format!("type='{kind}'")).unwrap();
+            let plan =
+                build_plan("compiler with spaces", Some(&p), None, BuildScope::Project).unwrap();
+            assert_eq!(plan.output.extension().unwrap(), extension);
+            assert!(!plan.output_is_directory);
+            assert_eq!(plan.program, "compiler with spaces");
+            assert_eq!(plan.args[1], p.canonicalize().unwrap().to_string_lossy());
+        }
+    }
 }

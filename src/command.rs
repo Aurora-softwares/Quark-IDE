@@ -297,4 +297,53 @@ mod tests {
             .collect();
         assert_eq!(s, "π✓");
     }
+
+    #[test]
+    fn bounded_output_keeps_latest_suffix_across_many_appends() {
+        let mut log = String::new();
+        for _ in 0..400 {
+            append_bounded(&mut log, &"π".repeat(1000));
+        }
+        append_bounded(&mut log, "LATEST ✓");
+        assert!(log.len() <= 256 * 1024);
+        assert!(log.ends_with("LATEST ✓"));
+        assert!(std::str::from_utf8(log.as_bytes()).is_ok());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn disabled_timeout_allows_delayed_success() {
+        let events = job("sleep 0.1; printf done", Duration::ZERO, None);
+        assert!(matches!(events.last(), Some(Event::Finished(Ok(0)))));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e,Event::Output(s) if s.contains("done"))));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn timeout_also_stops_background_descendants() {
+        let events = job("sleep 30 & wait", Duration::from_millis(80), None);
+        assert!(matches!(events.last(),Some(Event::Finished(Err(e))) if e=="Command timed out"));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn cancellation_before_first_output_still_finishes() {
+        let events = job("sleep 30", Duration::ZERO, Some(Duration::ZERO));
+        assert!(matches!(events.last(),Some(Event::Finished(Err(e))) if e=="Command stopped"));
+    }
+    #[test]
+    fn invalid_utf8_output_is_replaced_without_losing_following_bytes() {
+        let (tx, rx) = std::sync::mpsc::sync_channel(16);
+        stream(std::io::Cursor::new(vec![b'a', 255, b'b', 0xe2]), tx);
+        let text: String = rx
+            .into_iter()
+            .filter_map(|e| {
+                if let Event::Output(s) = e {
+                    Some(s)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(text, "a�b�");
+    }
 }

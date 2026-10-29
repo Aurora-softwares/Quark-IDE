@@ -95,4 +95,54 @@ mod tests {
         assert!(link.is_symlink());
         assert_eq!(fs::read_to_string(p).unwrap(), "new");
     }
+
+    #[test]
+    fn atomic_write_creates_parents_and_empty_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("nested/new.hy");
+        atomic_write(&p, b"").unwrap();
+        assert!(p.is_file());
+        assert_eq!(fs::metadata(p).unwrap().len(), 0);
+    }
+    #[test]
+    fn readonly_file_failure_preserves_original_and_cleans_temporary_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("readonly.hy");
+        fs::write(&p, "old").unwrap();
+        let mut permissions = fs::metadata(&p).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&p, permissions).unwrap();
+        assert!(atomic_write(&p, b"new").is_err());
+        assert_eq!(fs::read_to_string(&p).unwrap(), "old");
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+        #[cfg(windows)]
+        {
+            let mut permissions = fs::metadata(&p).unwrap().permissions();
+            permissions.set_readonly(false);
+            fs::set_permissions(p, permissions).unwrap();
+        }
+    }
+    #[test]
+    fn destination_directory_is_not_replaced_on_write_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("folder");
+        fs::create_dir(&p).unwrap();
+        fs::write(p.join("keep"), "original").unwrap();
+        assert!(atomic_write(&p, b"new").is_err());
+        assert_eq!(fs::read_to_string(p.join("keep")).unwrap(), "original");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn atomic_replace_retains_permissions_through_symlink() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("real.hy");
+        let link = dir.path().join("link.hy");
+        fs::write(&p, "old").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o640)).unwrap();
+        std::os::unix::fs::symlink(&p, &link).unwrap();
+        atomic_write(&link, b"new").unwrap();
+        assert!(link.is_symlink());
+        assert_eq!(fs::metadata(p).unwrap().permissions().mode() & 0o777, 0o640);
+    }
 }

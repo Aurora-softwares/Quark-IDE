@@ -1,14 +1,21 @@
+mod catalog;
+mod catalog_ui;
 mod command;
 mod diagnostics;
 mod editor;
+#[cfg(test)]
+mod feature_tests;
 mod hydrogen;
 mod navigation;
+mod panels;
 mod plugins;
 mod project;
 mod storage;
 mod symbols;
+mod terminal;
 mod theme;
 mod ui;
+mod window;
 mod workspace;
 
 use editor::{completion_candidates, insert_completion, prefix_at};
@@ -49,6 +56,12 @@ impl Document {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct RecentWorkspace {
+    path: PathBuf,
+    project: bool,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 struct Settings {
@@ -60,6 +73,7 @@ struct Settings {
     disabled_plugins: Vec<String>,
     #[serde(default = "default_visible")]
     sidebar_visible: bool,
+    integrated_title_bar: bool,
     #[serde(default = "default_visible")]
     terminal_visible: bool,
     automatic_completion: bool,
@@ -68,6 +82,13 @@ struct Settings {
     command_timeout_seconds: u64,
     command_folder: Option<PathBuf>,
     compiler_verbs: Vec<String>,
+    theme: theme::Settings,
+    catalog: catalog::Preferences,
+    sidebar_view: SidebarView,
+    bottom_tab: BottomTab,
+    recent_workspaces: Option<Vec<RecentWorkspace>>,
+    welcome_shortcuts_visible: bool,
+    welcome_build_visible: bool,
 }
 fn default_visible() -> bool {
     true
@@ -82,6 +103,7 @@ impl Default for Settings {
             selected_project: None,
             disabled_plugins: vec![],
             sidebar_visible: true,
+            integrated_title_bar: true,
             terminal_visible: false,
             automatic_completion: true,
             include_generated: false,
@@ -89,10 +111,32 @@ impl Default for Settings {
             command_timeout_seconds: 600,
             command_folder: None,
             compiler_verbs: vec!["build".into(), "check".into(), "run".into()],
+            theme: theme::Settings::default(),
+            catalog: catalog::Preferences::default(),
+            sidebar_view: SidebarView::Explorer,
+            bottom_tab: BottomTab::Terminal,
+            recent_workspaces: None,
+            welcome_shortcuts_visible: true,
+            welcome_build_visible: true,
         }
     }
 }
 
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+enum SidebarView {
+    #[default]
+    Explorer,
+    Search,
+    SourceControl,
+    Plugins,
+    Themes,
+}
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, serde::Serialize, serde::Deserialize)]
+enum BottomTab {
+    #[default]
+    Terminal,
+    Output,
+}
 #[derive(PartialEq, Clone, Copy)]
 enum ExplorerView {
     Files,
@@ -125,6 +169,8 @@ struct Quark {
     notices: Vec<String>,
     session_due: f64,
     session_last: String,
+    settings_path: Option<PathBuf>,
+    session_path: Option<PathBuf>,
     settings_blocked: bool,
     session_blocked: bool,
     exit_requested: bool,
@@ -147,13 +193,30 @@ struct Quark {
     pending_clone: Option<PathBuf>,
     probe_running: bool,
     probe_output: String,
-    show_source_control: bool,
+    applied_theme: Option<theme::Settings>,
+    applied_window_chrome: Option<bool>,
+    theme_persist_due: Option<f64>,
+    terminal: Option<terminal::Terminal>,
+    terminal_error: Option<String>,
+    theme_query: String,
+    extension_query: String,
+    editing_theme: Option<String>,
+    editing_extension: Option<String>,
+    catalog_add: Option<bool>,
+    pending_extension_remove: Option<String>,
+    workspace_search: bool,
+    search_rx: Option<Receiver<panels::SearchResults>>,
+    search_results: panels::SearchResults,
+    search_generation: u64,
+    pending_line: Option<(PathBuf, usize)>,
+    sidebar_rect: egui::Rect,
+    bottom_rect: egui::Rect,
+    top_rect: egui::Rect,
     explorer_view: ExplorerView,
     tree_revision: u64,
     tree_default_open: bool,
     plugins: Vec<plugins::Plugin>,
     plugin_warnings: Vec<String>,
-    show_plugins: bool,
     completion: Option<CompletionPopup>,
     dismissed_completion: Option<(u64, usize, String)>,
     manual_completion: bool,
@@ -162,7 +225,6 @@ struct Quark {
     docs: Vec<Document>,
     active: Option<usize>,
     output: String,
-    command: String,
     search: String,
     quick_query: String,
     show_search: bool,
@@ -188,20 +250,61 @@ struct Quark {
     files_scanned: usize,
 }
 impl Quark {
+    fn request_exit(&mut self, ctx: &egui::Context) {
+        if self.docs.iter().any(|d| d.text != d.saved)
+            || self.job_rx.is_some()
+            || self.terminal.as_ref().is_some_and(|t| t.exited.is_none())
+        {
+            self.exit_requested = true;
+        } else {
+            self.save_session();
+            self.allow_exit = true;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    }
+
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        theme::apply(&cc.egui_ctx);
         let (settings, settings_warning) = load_json::<Settings>(settings_file().as_deref());
         let (session, session_warning) = load_json::<Session>(session_file().as_deref());
         let mut app = Self::from_state(settings, session, settings_warning, session_warning);
         app.reload_plugins();
+        theme::apply(&cc.egui_ctx, &app.effective_theme());
+        app.applied_theme = Some(app.effective_theme());
         app
     }
     fn from_state(
-        settings: Settings,
+        mut settings: Settings,
         session: Session,
         settings_warning: Option<String>,
         session_warning: Option<String>,
     ) -> Self {
+        if let Some(custom) = settings.theme.custom.as_ref() {
+            if !settings
+                .catalog
+                .themes()
+                .iter()
+                .any(|item| &item.definition == custom)
+            {
+                settings.catalog.install_theme(custom.clone());
+            }
+        }
+        if settings.recent_workspaces.is_none() {
+            settings.recent_workspaces = Some(
+                settings
+                    .projects
+                    .iter()
+                    .map(|path| RecentWorkspace {
+                        path: path.clone(),
+                        project: true,
+                    })
+                    .chain(settings.folders.iter().map(|path| RecentWorkspace {
+                        path: path.clone(),
+                        project: false,
+                    }))
+                    .take(20)
+                    .collect(),
+            );
+        }
         let settings_blocked = settings_warning.is_some();
         let session_blocked = session_warning.is_some();
         let mut notices: Vec<String> = settings_warning
@@ -237,6 +340,8 @@ impl Quark {
             notices,
             session_due: 0.0,
             session_last: String::new(),
+            settings_path: settings_file(),
+            session_path: session_file(),
             settings_blocked,
             session_blocked,
             exit_requested: false,
@@ -259,13 +364,30 @@ impl Quark {
             pending_clone: None,
             probe_running: false,
             probe_output: String::new(),
-            show_source_control: false,
+            applied_theme: None,
+            applied_window_chrome: None,
+            theme_persist_due: None,
+            terminal: None,
+            terminal_error: None,
+            theme_query: String::new(),
+            extension_query: String::new(),
+            editing_theme: None,
+            editing_extension: None,
+            catalog_add: None,
+            pending_extension_remove: None,
+            workspace_search: false,
+            search_rx: None,
+            search_results: panels::SearchResults::default(),
+            search_generation: 0,
+            pending_line: None,
+            sidebar_rect: egui::Rect::NOTHING,
+            bottom_rect: egui::Rect::NOTHING,
+            top_rect: egui::Rect::NOTHING,
             explorer_view: ExplorerView::Files,
             tree_revision: 0,
             tree_default_open: false,
             plugins: Vec::new(),
             plugin_warnings: Vec::new(),
-            show_plugins: false,
             completion: None,
             dismissed_completion: None,
             manual_completion: false,
@@ -273,7 +395,6 @@ impl Quark {
             docs: session.docs,
             active: restored_active,
             output: "Quark IDE — native Rust edition\n".into(),
-            command: String::new(),
             search: String::new(),
             quick_query: String::new(),
             show_search: false,
@@ -368,7 +489,9 @@ impl Quark {
         if self.settings_blocked {
             return;
         }
-        let result = settings_file()
+        let result = self
+            .settings_path
+            .clone()
             .ok_or_else(|| "No configuration directory".to_owned())
             .and_then(|p| {
                 serde_json::to_vec_pretty(&self.settings)
@@ -395,7 +518,9 @@ impl Quark {
         };
         if let Ok(json) = serde_json::to_string(&session) {
             if json != self.session_last {
-                match session_file()
+                match self
+                    .session_path
+                    .clone()
                     .ok_or_else(|| "No recovery directory".into())
                     .and_then(|p| {
                         storage::atomic_write(&p, json.as_bytes()).map_err(|e| e.to_string())
@@ -441,27 +566,47 @@ impl Quark {
             });
         }
     }
+    fn tool_error(&mut self, message: String) {
+        self.status = message.clone();
+        self.settings.terminal_visible = true;
+        self.settings.bottom_tab = BottomTab::Output;
+        command::append_bounded(&mut self.output, &format!("\n[{}]\n", message));
+        self.persist();
+    }
     fn can_run(&mut self, verb: &str) -> bool {
         if self.settings.compiler.trim().is_empty() {
             self.show_settings = true;
-            self.status = "Set a Hydrogen compiler executable in Settings".into();
+            self.tool_error("Set a Hydrogen compiler executable in Settings".into());
             return false;
         }
         if self.settings.compiler_verbs.iter().any(|v| v == verb) {
             true
         } else {
             self.show_settings = true;
-            self.status = format!("Compiler profile does not support '{verb}'. Detect capabilities or choose a profile in Settings.");
+            self.tool_error(format!("Compiler profile does not support '{verb}'. Detect capabilities or choose a profile in Settings."));
             false
         }
     }
+    fn remember_workspace(&mut self, path: PathBuf, project: bool) {
+        let entries = self.settings.recent_workspaces.get_or_insert_with(Vec::new);
+        entries.retain(|entry| entry.path != path || entry.project != project);
+        entries.insert(0, RecentWorkspace { path, project });
+        entries.truncate(20);
+    }
+    fn remove_recent(&mut self, entry: &RecentWorkspace) {
+        if let Some(entries) = &mut self.settings.recent_workspaces {
+            entries.retain(|e| e != entry);
+        }
+        self.persist();
+    }
     fn add_folder(&mut self, path: PathBuf) {
         let path = path.canonicalize().unwrap_or(path);
+        self.remember_workspace(path.clone(), false);
         if !self.settings.folders.contains(&path) {
             self.settings.folders.push(path);
             self.workspace_requested = true;
-            self.persist();
         }
+        self.persist();
     }
     fn add_project(&mut self, path: PathBuf) {
         let path = path.canonicalize().unwrap_or(path);
@@ -472,6 +617,7 @@ impl Quark {
         if let Some(dir) = path.parent() {
             self.add_folder(dir.to_path_buf());
         }
+        self.remember_workspace(path.clone(), true);
         self.persist();
         self.workspace_requested = true;
         self.open(path);
@@ -479,14 +625,8 @@ impl Quark {
     }
     fn open(&mut self, path: PathBuf) {
         let path = path.canonicalize().unwrap_or(path);
-        if path.extension().and_then(|e| e.to_str()) == Some("hyproj")
-            && !self.settings.projects.contains(&path)
-        {
-            self.settings.projects.push(path.clone());
-            self.workspace_requested = true;
-            self.settings.selected_project = Some(path.clone());
-            self.persist();
-        }
+        // Editing a manifest is a file operation. Workspace roots are added only
+        // by an explicit Open Project or Select as build project action.
         if let Some(idx) = self
             .docs
             .iter()
@@ -537,6 +677,19 @@ impl Quark {
         } else {
             return false;
         };
+        self.save_document_to(idx, path, overwrite, existing)
+    }
+    // The file chooser only selects a destination; all save decisions share this path.
+    fn save_document_to(
+        &mut self,
+        idx: usize,
+        path: PathBuf,
+        overwrite: bool,
+        existing: bool,
+    ) -> bool {
+        if idx >= self.docs.len() {
+            return false;
+        }
         let path = path.canonicalize().unwrap_or(path);
         if self
             .docs
@@ -562,13 +715,6 @@ impl Quark {
                 self.workspace_requested = true;
                 self.status = "Saved".into();
                 self.request_diagnostic_scan();
-                if path.extension().and_then(|s| s.to_str()) == Some("hyproj")
-                    && !self.settings.projects.contains(&path)
-                {
-                    self.settings.projects.push(path.clone());
-                    self.settings.selected_project = Some(path);
-                    self.persist();
-                }
                 self.save_session();
                 true
             }
@@ -602,7 +748,7 @@ impl Quark {
     }
     fn build(&mut self, scope: BuildScope) {
         if self.job_rx.is_some() {
-            self.status = "Stop the current command before building".into();
+            self.tool_error("Stop the current tool job before building".into());
             return;
         }
         if !self.can_run(if scope == BuildScope::Project {
@@ -634,7 +780,7 @@ impl Quark {
                     plan.output.parent().unwrap_or(Path::new("."))
                 };
                 if let Err(e) = fs::create_dir_all(directory) {
-                    self.status = format!("Cannot create build folder: {e}");
+                    self.tool_error(format!("Cannot create build folder: {e}"));
                     return;
                 }
                 self.launch(plan.program, plan.args, plan.cwd);
@@ -642,11 +788,11 @@ impl Quark {
                     self.status = plan.description;
                 }
             }
-            Err(e) => self.status = e,
+            Err(e) => self.tool_error(e),
         }
     }
     fn reload_plugins(&mut self) {
-        if let Some(root) = plugins::directory(settings_file().as_deref()) {
+        if let Some(root) = plugins::directory(self.settings_path.as_deref()) {
             let (list, warnings) = plugins::load_all(&root);
             self.plugins = list;
             self.plugin_warnings = warnings;
@@ -654,15 +800,10 @@ impl Quark {
     }
     fn run_plugin(&mut self, id: &str, command_index: usize) {
         if self.job_rx.is_some() {
-            self.status = "Stop the current command first".into();
+            self.tool_error("Stop the current tool job first".into());
             return;
         }
-        if self
-            .settings
-            .disabled_plugins
-            .iter()
-            .any(|disabled| disabled == id)
-        {
+        if !self.extension_enabled(id) {
             self.status = "Enable the plugin in Plugins settings first".into();
             return;
         }
@@ -683,7 +824,7 @@ impl Quark {
             .and_then(|d| d.path.as_deref());
         match plugins::invoke(&plugin, command, project.as_deref(), file, &cwd) {
             Ok(invocation) => self.launch(invocation.program, invocation.args, invocation.cwd),
-            Err(err) => self.status = err,
+            Err(err) => self.tool_error(err),
         }
     }
     fn current_path(&self) -> Option<PathBuf> {
@@ -705,10 +846,11 @@ impl Quark {
     }
     fn launch(&mut self, program: String, args: Vec<String>, cwd: PathBuf) {
         if self.job_rx.is_some() {
-            self.status = "A command is already running".into();
+            self.tool_error("A tool job is already running".into());
             return;
         }
         self.settings.terminal_visible = true;
+        self.settings.bottom_tab = BottomTab::Output;
         self.persist();
         self.status = "Running command…".into();
         command::append_bounded(
@@ -733,19 +875,9 @@ impl Quark {
             command::run_streamed(&program, &args, &cwd, tx, cancel, timeout)
         }));
     }
-    fn shell(&mut self, command: String) {
-        if command.trim().is_empty() {
-            return;
-        }
-        #[cfg(windows)]
-        let (program, args) = ("cmd".to_owned(), vec!["/C".to_owned(), command]);
-        #[cfg(not(windows))]
-        let (program, args) = ("/bin/sh".to_owned(), vec!["-c".to_owned(), command]);
-        self.launch(program, args, self.cwd());
-    }
     fn hydrogen(&mut self, verb: &str) {
         if self.job_rx.is_some() {
-            self.status = "Stop the current command first".into();
+            self.tool_error("Stop the current tool job first".into());
             return;
         }
         if !self.can_run(verb) {
@@ -757,14 +889,14 @@ impl Quark {
             None
         })
         .or_else(|| self.current_path()) else {
-            self.status = "Open a .hy or .hyproj first".into();
+            self.tool_error("Open a .hy or .hyproj first".into());
             return;
         };
         if !matches!(
             path.extension().and_then(|s| s.to_str()),
             Some("hy" | "hyproj")
         ) {
-            self.status = "Open a Hydrogen file or project".into();
+            self.tool_error("Open a Hydrogen file or project".into());
             return;
         }
         if !self.save_all() {
@@ -952,7 +1084,7 @@ impl Quark {
         }
         if take_key(ctx, cmd | Modifiers::SHIFT, Key::E) {
             self.settings.sidebar_visible = true;
-            self.show_source_control = false;
+            self.settings.sidebar_view = SidebarView::Explorer;
             self.persist();
         }
         if take_key(ctx, cmd, Key::N) {
@@ -976,11 +1108,17 @@ impl Quark {
                 self.save(i);
             }
         }
+        if take_key(ctx, cmd | Modifiers::SHIFT, Key::F) {
+            self.show_sidebar(SidebarView::Search);
+            self.workspace_search = true;
+        }
         if take_key(ctx, cmd, Key::F) {
+            self.show_sidebar(SidebarView::Search);
             self.show_search = true;
             self.find_focus = true;
         }
         if take_key(ctx, cmd, Key::H) {
+            self.show_sidebar(SidebarView::Search);
             self.show_search = true;
             self.show_replace = true;
             self.find_focus = true;
@@ -1035,7 +1173,6 @@ impl Quark {
             && !self.show_quick_open
             && !self.show_settings
             && !self.show_clone
-            && !self.show_plugins
             && take_key(ctx, Modifiers::NONE, Key::Escape)
         {
             self.show_search = false;
@@ -1076,12 +1213,14 @@ impl Quark {
     }
     fn draw_symbol_node(&mut self, ui: &mut egui::Ui, node: &symbols::SymbolNode, salt: &str) {
         for (name, child) in &node.branches {
-            egui::CollapsingHeader::new(RichText::new(name).color(theme::MUTED))
-                .id_salt((salt, name, self.tree_revision))
-                .default_open(self.tree_default_open)
-                .show(ui, |ui| {
-                    self.draw_symbol_node(ui, child, &format!("{salt}/{name}"));
-                });
+            egui::CollapsingHeader::new(
+                RichText::new(name).color(theme::colors(ui.ctx()).muted.color()),
+            )
+            .id_salt((salt, name, self.tree_revision))
+            .default_open(self.tree_default_open)
+            .show(ui, |ui| {
+                self.draw_symbol_node(ui, child, &format!("{salt}/{name}"));
+            });
         }
         for symbol in &node.items {
             let label = if matches!(symbol.kind, "file" | "missing") {
@@ -1108,7 +1247,8 @@ impl Quark {
     }
     fn project_ui(&mut self, ui: &mut egui::Ui, project: &project::Project) {
         egui::CollapsingHeader::new(
-            RichText::new(format!("{} [{}]", project.name, project.kind)).color(theme::ACCENT),
+            RichText::new(format!("{} [{}]", project.name, project.kind))
+                .color(theme::colors(ui.ctx()).accent.color()),
         )
         .id_salt((&project.path, self.tree_revision))
         .default_open(self.tree_default_open)
@@ -1117,7 +1257,10 @@ impl Quark {
                 self.open(project.path.clone());
             }
             for warning in &project.warnings {
-                ui.colored_label(theme::WARM, format!("Warning: {warning}"));
+                ui.colored_label(
+                    theme::colors(ui.ctx()).warning.color(),
+                    format!("Warning: {warning}"),
+                );
             }
             let outline = self
                 .workspace
@@ -1217,7 +1360,7 @@ impl Quark {
                     ui.label(
                         RichText::new("HYDROGEN · SUGGESTIONS")
                             .small()
-                            .color(theme::MUTED),
+                            .color(theme::colors(ui.ctx()).muted.color()),
                     );
                     for (index, candidate) in popup.candidates.iter().enumerate() {
                         if ui
@@ -1230,7 +1373,7 @@ impl Quark {
                     ui.label(
                         RichText::new("Up / Down select · Enter / Tab insert · Esc dismiss")
                             .small()
-                            .color(theme::MUTED),
+                            .color(theme::colors(ui.ctx()).muted.color()),
                     );
                 });
             });
@@ -1251,7 +1394,7 @@ impl Quark {
                     "Folder unavailable or skipped; see index notices below"
                 })
                 .small()
-                .color(theme::MUTED),
+                .color(theme::colors(ui.ctx()).muted.color()),
             );
             return;
         };
@@ -1334,9 +1477,13 @@ fn settings_file() -> Option<PathBuf> {
 }
 impl eframe::App for Quark {
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.theme_persist_due.take().is_some() {
+            self.persist();
+        }
         if let Some(cancel) = &self.job_cancel {
             cancel.store(true, Ordering::Relaxed);
         }
+        self.terminal.take();
         self.job_rx = None;
         if let Some(worker) = self.job_worker.take() {
             let _ = worker.join();
@@ -1344,6 +1491,28 @@ impl eframe::App for Quark {
         self.save_session();
     }
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.applied_window_chrome != Some(self.settings.integrated_title_bar) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(
+                !self.settings.integrated_title_bar,
+            ));
+            self.applied_window_chrome = Some(self.settings.integrated_title_bar);
+        }
+        let effective_theme = self.effective_theme();
+        if self.applied_theme.as_ref() != Some(&effective_theme) {
+            theme::apply(ctx, &effective_theme);
+            self.applied_theme = Some(effective_theme);
+        }
+        if let Some(terminal) = &mut self.terminal {
+            terminal.poll();
+        }
+        if self
+            .theme_persist_due
+            .is_some_and(|due| ctx.input(|i| i.time) >= due)
+        {
+            self.theme_persist_due = None;
+            self.persist();
+        }
+        self.poll_search();
         let mut finished = None;
         if let Some(rx) = &self.job_rx {
             // Keep a noisy process from monopolising a frame.
@@ -1411,13 +1580,7 @@ impl eframe::App for Quark {
         }
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_exit {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            if self.docs.iter().any(|d| d.text != d.saved) || self.job_rx.is_some() {
-                self.exit_requested = true;
-            } else {
-                self.save_session();
-                self.allow_exit = true;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
+            self.request_exit(ctx);
         }
         let now = ctx.input(|i| i.time);
         if now >= self.session_due {
@@ -1430,14 +1593,38 @@ impl eframe::App for Quark {
             && self.pending_conflict.is_none()
             && !self.show_palette
         {
-            self.shortcuts(ctx);
-            self.completion_keys(ctx);
+            if self.terminal.as_ref().is_some_and(|t| t.focused(ctx))
+                && self.settings.terminal_visible
+                && self.settings.bottom_tab == BottomTab::Terminal
+            {
+                if take_key(ctx, Modifiers::COMMAND | Modifiers::SHIFT, Key::P) {
+                    self.show_palette = true;
+                    self.palette_focus = true;
+                }
+                if take_key(ctx, Modifiers::CTRL | Modifiers::SHIFT, Key::B) {
+                    self.build(BuildScope::Project);
+                }
+                if take_key(ctx, Modifiers::COMMAND | Modifiers::SHIFT, Key::E) {
+                    self.show_sidebar(SidebarView::Explorer);
+                }
+                if take_key(ctx, Modifiers::COMMAND | Modifiers::SHIFT, Key::F) {
+                    self.show_sidebar(SidebarView::Search);
+                    self.workspace_search = true;
+                }
+                if take_key(ctx, Modifiers::CTRL, Key::Backtick) {
+                    self.settings.terminal_visible = false;
+                    self.persist();
+                }
+            } else {
+                self.shortcuts(ctx);
+                self.completion_keys(ctx);
+            }
         }
         self.diagnostic_tick(ctx);
-        egui::TopBottomPanel::top("menu").show(ctx,|ui|{
+        let top=egui::TopBottomPanel::top("menu").show(ctx,|ui|{
             egui::menu::bar(ui,|ui|{
                 ui.spacing_mut().item_spacing.x = 4.0;
-                ui.label(RichText::new("QUARK").strong().color(theme::ACCENT));
+                window::caption(ui,self.settings.integrated_title_bar);
                 ui.separator();
                 ui.menu_button("File",|ui|{
                     if ui.button("New  Ctrl+N").clicked(){self.new_document();ui.close_menu();}
@@ -1451,9 +1638,9 @@ impl eframe::App for Quark {
                 });
                 ui.menu_button("Edit",|ui|{
                     if ui.button("Completion  Ctrl/Cmd+Space").clicked(){self.manual_completion=true;ui.close_menu();}
-                    if ui.button("Find  Ctrl+F").clicked(){self.show_search=true;self.find_focus=true;ui.close_menu();}
+                    if ui.button("Find  Ctrl+F").clicked(){self.show_sidebar(SidebarView::Search);self.show_search=true;self.find_focus=true;ui.close_menu();}
                     if ui.button("Quick open  Ctrl+P").clicked(){self.show_quick_open=true;self.quick_focus=true;self.quick_selected=0;ui.close_menu();}
-                    if ui.button("Find & replace · Ctrl+H").clicked(){self.show_search=true;self.show_replace=true;self.find_focus=true;ui.close_menu();}
+                    if ui.button("Find & replace · Ctrl+H").clicked(){self.show_sidebar(SidebarView::Search);self.show_search=true;self.show_replace=true;self.find_focus=true;ui.close_menu();}
                     if ui.button("Go to line · Ctrl+G").clicked(){self.show_go_to_line=true;self.go_focus=true;ui.close_menu();}
                     if ui.button("Duplicate line · Ctrl+Shift+D").clicked(){self.duplicate_active_line(ctx);ui.close_menu();}
                     if ui.button("Next tab · Ctrl+Tab").clicked(){self.next_tab(false);ui.close_menu();}
@@ -1467,12 +1654,12 @@ impl eframe::App for Quark {
                     if ui.button("Run (SDK)").clicked(){self.hydrogen("run");ui.close_menu();}
                     if ui.button("Settings…").clicked(){self.show_settings=true;ui.close_menu();}
                 });
-                ui.menu_button("Plugins",|ui|{
-                    if ui.button("Manage plugins…").clicked(){self.show_plugins=true;ui.close_menu();}
+                ui.menu_button("Extensions",|ui|{
+                    if ui.button("Manage extensions…").clicked(){self.show_sidebar(SidebarView::Plugins);ui.close_menu();}
                     if ui.button("Reload manifests").clicked(){self.reload_plugins();ui.close_menu();}
                     ui.separator();
-                    let available:Vec<_>=self.plugins.iter().filter(|p|!self.settings.disabled_plugins.contains(&p.id)).cloned().collect();
-                    if available.is_empty(){ui.label("No enabled plugins installed");}
+                    let available:Vec<_>=self.plugins.iter().filter(|p|self.extension_enabled(&p.id)).cloned().collect();
+                    if available.is_empty(){ui.label("No enabled extensions installed");}
                     for plugin in available {
                         ui.menu_button(plugin.name.clone(), |ui| {
                             for (index, command) in plugin.commands.iter().enumerate() {
@@ -1489,9 +1676,10 @@ impl eframe::App for Quark {
                 });
                 ui.menu_button("View",|ui|{
                     let mut changed=false;
-                    changed |= ui.checkbox(&mut self.settings.sidebar_visible,"Explorer  Ctrl+B").changed();
-                    changed |= ui.checkbox(&mut self.settings.terminal_visible,"Output  Ctrl+`").changed();
+                    changed |= ui.checkbox(&mut self.settings.sidebar_visible,"Sidebar  Ctrl+B").changed();
+                    changed |= ui.checkbox(&mut self.settings.terminal_visible,"Bottom panel  Ctrl+`").changed();
                     changed |= ui.checkbox(&mut self.settings.word_wrap,"Word wrap  Alt+Z").changed();
+                    if ui.button("Themes…").clicked(){self.show_sidebar(SidebarView::Themes);ui.close_menu();}
                     if changed{self.persist();}
                 });
                 ui.menu_button("Help",|ui|{
@@ -1501,41 +1689,32 @@ impl eframe::App for Quark {
                     if ui.button("Settings").clicked(){self.show_settings=true;ui.close_menu();}
                 });
                 ui.separator();
-                let build_button=ui.small_button(RichText::new("Build").color(theme::ACCENT))
+                let build_button=ui.small_button(RichText::new("Build").color(theme::colors(ui.ctx()).accent.color()))
                     .on_hover_text("Build selected .hyproj; hold Shift when clicking to compile the active .hy file");
                 if build_button.clicked() {
                     let scope=if ui.input(|i|i.modifiers.shift){BuildScope::CurrentFile}else{BuildScope::Project};
                     self.build(scope);
                 }
                 if ui.small_button("Check").on_hover_text("Check Hydrogen project").clicked(){self.hydrogen("check");}
-                if ui.small_button("Find").on_hover_text("Find in file · Ctrl+F").clicked(){self.show_search=true;self.find_focus=true;}
-                if let Some(project)=self.selected_project() {
-                    ui.separator();
-                    ui.label(RichText::new(project.file_stem().unwrap_or_default().to_string_lossy()).small().color(theme::MUTED))
-                        .on_hover_text(project.display().to_string());
-                }
-
+                if ui.small_button("Find").on_hover_text("Find in file · Ctrl+F").clicked(){self.show_sidebar(SidebarView::Search);self.show_search=true;self.find_focus=true;}
+                let reserved=if self.settings.integrated_title_bar {175.0} else {76.0};
+                let command_width=(ui.available_width()-reserved).max(40.0);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
+                    if self.settings.integrated_title_bar {
+                        if window::button(ui,window::Action::Close).clicked(){self.request_exit(ctx);}
+                        if window::button(ui,window::Action::Maximise).clicked(){window::toggle_maximise(ctx);}
+                        if window::button(ui,window::Action::Minimise).clicked(){ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));}
+                    }
+                    if ui::layout_button(ui,false,self.settings.terminal_visible).clicked(){self.settings.terminal_visible= !self.settings.terminal_visible;self.persist();}
+                    if ui::layout_button(ui,true,self.settings.sidebar_visible).clicked(){self.settings.sidebar_visible= !self.settings.sidebar_visible;self.persist();}
+                    if ui.add_sized([command_width,24.0],egui::Button::new(if command_width>230.0 {"Search files / commands…  F1"} else {"Search… F1"}).truncate().frame(true).fill(theme::colors(ui.ctx()).surface.color()).stroke(egui::Stroke::new(1.0_f32,theme::colors(ui.ctx()).border.color()))).on_hover_text("Command Palette · F1 / Ctrl+Shift+P; Go to File · Ctrl+P").clicked(){self.show_palette=true;self.palette_focus=true;}
+                });
             });
         });
-        egui::TopBottomPanel::top("command-center").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                let width = ui.available_width().min(600.0);
-                ui.add_space(((ui.available_width() - width) * 0.5).max(0.0));
-                if ui
-                    .add_sized(
-                        [width, 27.0],
-                        egui::Button::new("Search files  Ctrl+P     ·     Run a command  F1"),
-                    )
-                    .clicked()
-                {
-                    self.show_palette = true;
-                    self.palette_focus = true;
-                }
-            });
-        });
-        egui::TopBottomPanel::bottom("status").frame(egui::Frame::new().fill(theme::BLUE).inner_margin(egui::Margin::symmetric(10,3))).show(ctx,|ui|{ui.horizontal(|ui|{
+        self.top_rect = top.response.rect;
+        egui::TopBottomPanel::bottom("status").frame(egui::Frame::new().fill(theme::colors(ctx).status.color()).inner_margin(egui::Margin::symmetric(10,3))).show(ctx,|ui|{ui.horizontal(|ui|{
 
-            ui.label(RichText::new(&self.status).small().color(egui::Color32::WHITE));
+            ui.label(RichText::new(&self.status).small().color(theme::colors(ui.ctx()).status_text.color()));
             let (errors, hints) = self.diagnostics.values().flatten().fold((0_usize,0_usize), |(e,h),d| {
                 match d.severity {
                     diagnostics::Severity::Error => (e+1,h),
@@ -1545,248 +1724,39 @@ impl eframe::App for Quark {
             });
             {
                 ui.separator();
-                ui.label(RichText::new(format!("Quick checks: {errors} problems · {hints} hints{}",if self.diagnostic_rx.is_some(){" · scanning"}else if !self.analysis_complete{" · partial"}else{""})).small().color(egui::Color32::WHITE))
+                ui.label(RichText::new(format!("Quick checks: {errors} problems · {hints} hints{}",if self.diagnostic_rx.is_some(){" · scanning"}else if !self.analysis_complete{" · partial"}else{""})).small().color(theme::colors(ui.ctx()).status_text.color()))
                     .on_hover_text(format!("Quick lexical checks and possible-unused hints only; compiler diagnostics are in Output. {} scanned files{}",
                         self.files_scanned, if self.analysis_complete {""} else {" (project analysis incomplete or no project selected)"}));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
                 if let Some((line,col))=self.caret_position {
-                    ui.label(RichText::new(format!("Ln {line}, Col {col}")).small().color(theme::MUTED));
+                    ui.label(RichText::new(format!("Ln {line}, Col {col}")).small().color(theme::colors(ui.ctx()).status_text.color()));
                 }
-                ui.label(RichText::new("UTF-8").small().color(theme::MUTED));
+                ui.label(RichText::new("UTF-8").small().color(theme::colors(ui.ctx()).status_text.color()));
             });
         });});
-        if self.settings.terminal_visible {
-            egui::TopBottomPanel::bottom("terminal")
-                .resizable(true)
-                .min_height(140.0)
-                .default_height(220.0)
-                .show(ctx, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new("OUTPUT")
-                                .strong()
-                                .small()
-                                .color(theme::ACCENT),
-                        );
-                        if self.job_rx.is_some() {
-                            ui.spinner();
-                            if ui.button("Stop").clicked(){if let Some(cancel)=&self.job_cancel{cancel.store(true,Ordering::Relaxed);}self.status="Stopping command…".into();}
-                        }
-                        ui.label(
-                            RichText::new(self.job_cwd.clone().unwrap_or_else(||self.cwd()).display().to_string())
-                                .small()
-                                .color(theme::MUTED),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .small_button("×")
-                                .on_hover_text("Hide Output · Ctrl+`")
-                                .clicked()
-                            {
-                                self.settings.terminal_visible = false;
-                                self.persist();
-                            }
-                            if ui.small_button("Clear").clicked() {
-                                self.output.clear();
-                            }
-                        });
-                    });
-                    ui.label(RichText::new("One command at a time · directory is fixed above · interactive programs need an external terminal · scrollback: 256 KiB").small().color(theme::MUTED));
-                    let height = (ui.available_height() - 32.0).max(35.0);
-                    let lines:Vec<_>=self.output.lines().collect();
-                    egui::ScrollArea::both().stick_to_bottom(true).max_height(height)
-                        .show_rows(ui,17.0,lines.len(),|ui,rows|{for row in rows {ui.add(egui::Label::new(RichText::new(lines[row]).monospace()).selectable(true).extend());}});
-                    ui.horizontal(|ui| {
-                        let response = ui.add(
-                            TextEdit::singleline(&mut self.command)
-                                .desired_width(f32::INFINITY)
-                                .hint_text("Run a command here · no interactive input; each command starts a fresh shell"),
-                        );
-                        if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) && self.job_rx.is_none() {
-                            let c = std::mem::take(&mut self.command);
-                            self.shell(c);
-                            response.request_focus();
-                        }
-                    });
-                });
-        }
-        egui::SidePanel::left("activity-bar")
-            .exact_width(48.0)
-            .resizable(false)
-            .show(ctx, |ui| {
-                ui.add_space(8.0);
-                for (icon, tip, action) in [
-                    (ui::Icon::Files, "Explorer · Ctrl+Shift+E", 0),
-                    (ui::Icon::Search, "Find in file · Ctrl+F", 1),
-                    (ui::Icon::Git, "Source Control", 2),
-                    (ui::Icon::Extensions, "Plugins", 3),
-                ] {
-                    let selected =
-                        (action == 0 && self.settings.sidebar_visible && !self.show_source_control)
-                            || (action == 2
-                                && self.settings.sidebar_visible
-                                && self.show_source_control);
-                    if ui::activity_button(ui, icon, tip, selected).clicked() {
-                        match action {
-                            0 => {
-                                self.settings.sidebar_visible = true;
-                                self.show_source_control = false;
-                                self.persist();
-                            }
-                            1 => {
-                                self.show_search = true;
-                                self.find_focus = true;
-                            }
-                            2 => {
-                                self.settings.sidebar_visible = true;
-                                self.show_source_control = true;
-                                self.persist();
-                            }
-                            _ => self.show_plugins = true,
-                        }
-                    }
-                }
-                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-                    if ui::activity_button(ui, ui::Icon::Settings, "Settings", false).clicked() {
-                        self.show_settings = true;
-                    }
-                });
-            });
+        self.sidebar_rect = egui::Rect::NOTHING;
         if self.settings.sidebar_visible {
-            egui::SidePanel::left("explorer")
+            let sidebar = egui::SidePanel::left("left-sidebar")
                 .resizable(true)
-                .default_width(245.0)
-                .min_width(165.0)
-                .show(ctx, |ui| {
-                    ui.add_space(2.0);
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new(if self.show_source_control {"SOURCE CONTROL"}else{"EXPLORER"})
-                                .small()
-                                .strong()
-                                .color(theme::MUTED),
-                        );
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .small_button("×")
-                                .on_hover_text("Hide Explorer · Ctrl+B")
-                                .clicked()
-                            {
-                                self.settings.sidebar_visible = false;
-                                self.persist();
-                            }
-                            if ui
-                                .small_button("↻")
-                                .on_hover_text("Refresh files, symbols and diagnostics")
-                                .clicked()
-                            {
-                                self.workspace_requested = true;
-                                self.request_diagnostic_scan();
-                            }
-                            if ui.small_button("+").on_hover_text("Expand all").clicked() {
-                                self.tree_default_open = true;
-                                self.tree_revision += 1;
-                            }
-                            if ui.small_button("-").on_hover_text("Collapse all").clicked() {
-                                self.tree_default_open = false;
-                                self.tree_revision += 1;
-                            }
-                        });
-                    });
-                    if self.show_source_control {
-                        ui.label(RichText::new("Repository directory").small().color(theme::MUTED));
-                        ui.label(self.cwd().display().to_string());
-                        ui.separator();
-                        ui.label("Git uses your system credentials. Results appear in Output.");
-                        for (title,args) in [("Refresh status",vec!["status","--short","--branch"]),("View diff",vec!["diff"]),("Fetch",vec!["fetch","--all"]),("Pull",vec!["pull","--no-edit"]),("Push",vec!["push"])] {
-                            if ui.add_enabled(self.job_rx.is_none(),egui::Button::new(title)).clicked(){self.git(&args);}
-                        }
-                        if ui.button("Choose command / Git folder…").clicked(){if let Some(p)=rfd::FileDialog::new().pick_folder(){self.settings.command_folder=Some(p);self.persist();}}
-                        ui.label(RichText::new("Staging and commits currently use the Git CLI. Interactive authentication needs an external terminal.").small().color(theme::MUTED));
-                    } else {
-                    ui.horizontal(|ui| {
-                        ui.selectable_value(&mut self.explorer_view, ExplorerView::Files, "Files");
-                        ui.selectable_value(
-                            &mut self.explorer_view,
-                            ExplorerView::Outline,
-                            "Symbols",
-                        );
-                    });
-
-                    if !self.settings.projects.is_empty() {
-                        let selected = self.selected_project();
-                        egui::ComboBox::from_id_salt("active-project")
-                            .selected_text(
-                                selected
-                                    .as_deref()
-                                    .map(|p|format!("{} · {}",p.file_stem().unwrap_or_default().to_string_lossy(),p.parent().and_then(|p|p.file_name()).unwrap_or_default().to_string_lossy())).unwrap_or_default(),
-                            )
-                            .width(ui.available_width().max(120.0))
-                            .show_ui(ui, |ui| {
-                                for path in self.settings.projects.clone() {
-                                    let label = path.display().to_string();
-                                    if ui
-                                        .selectable_label(selected.as_ref() == Some(&path), label)
-                                        .clicked()
-                                    {
-                                        self.settings.selected_project = Some(path);
-                                        self.persist();
-                                        self.request_diagnostic_scan();
-                                    }
-                                }
-                            });
-                    }
-                    ui.separator();
-                    egui::ScrollArea::vertical()
-                        .id_salt("explorer-scroll")
-                        .show(ui, |ui| match self.explorer_view {
-                            ExplorerView::Files => {
-                                if self.settings.folders.is_empty() {
-                                    ui.label(
-                                        RichText::new(
-                                            "Use File > Open Folder to browse your workspace",
-                                        )
-                                        .color(theme::MUTED),
-                                    );
-                                }
-                                for folder in self.settings.folders.clone() {
-                                    egui::CollapsingHeader::new(format!(
-                                        "{}",
-                                        folder.file_name().unwrap_or_default().to_string_lossy()
-                                    ))
-                                    .id_salt((&folder, self.tree_revision))
-                                    .default_open(self.tree_default_open || self.tree_revision == 0)
-                                    .show(ui, |ui| self.tree_ui(ui, &folder, 0))
-                                    .header_response.on_hover_text(folder.display().to_string()).context_menu(|ui|{
-                                        if ui.button("Remove folder from workspace").clicked(){self.settings.folders.retain(|p|p!=&folder);if self.settings.command_folder.as_ref()==Some(&folder){self.settings.command_folder=None;}self.workspace_requested=true;self.persist();ui.close_menu();}
-                                        if ui.button("Use for commands and Git").clicked(){self.settings.command_folder=Some(folder.clone());self.persist();ui.close_menu();}
-                                    });
-                                }
-                            }
-                            ExplorerView::Outline => {
-                                if self.settings.projects.is_empty() {
-                                    ui.label(
-                                        RichText::new(
-                                            "Open a .hyproj to see namespaces and classes",
-                                        )
-                                        .color(theme::MUTED),
-                                    );
-                                }
-                                for project in self.workspace.projects.clone() { self.project_ui(ui,&project); }
-                            }
-                        });
-                    if self.workspace_rx.is_some(){ui.horizontal(|ui|{ui.spinner();ui.label("Indexing workspace…");});}
-                    ui.label(RichText::new(format!("{} indexed files · generated folders {}",self.workspace.files.len(),if self.settings.include_generated {"included"}else{"hidden"})).small().color(theme::MUTED));
-                    if !self.workspace.notices.is_empty(){egui::CollapsingHeader::new(format!("Index notices ({})",self.workspace.notices.len())).show(ui,|ui|{for notice in &self.workspace.notices{ui.colored_label(theme::WARM,notice);}if ui.button("Increase index limit and rescan").clicked(){self.settings.index_limit=self.settings.index_limit.saturating_mul(2).min(1_000_000);self.workspace_requested=true;self.persist();}});}
-                    if ui.small_button("Manage workspace…").clicked(){self.show_settings=true;}
-                    }
-                });
+                .default_width(290.0)
+                .min_width(240.0)
+                .show(ctx, |ui| self.sidebar_ui(ui));
+            self.sidebar_rect = sidebar.response.rect;
+        }
+        self.bottom_rect = egui::Rect::NOTHING;
+        if self.settings.terminal_visible {
+            let bottom = egui::TopBottomPanel::bottom("bottom-panel")
+                .resizable(true)
+                .min_height(150.0)
+                .default_height(240.0)
+                .show(ctx, |ui| self.bottom_ui(ui));
+            self.bottom_rect = bottom.response.rect;
         }
         if !self.notices.is_empty() {
             egui::TopBottomPanel::top("notifications").show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    ui.colored_label(theme::WARM, &self.notices[0]);
+                    ui.colored_label(theme::colors(ui.ctx()).warning.color(), &self.notices[0]);
                     if ui.small_button("Settings").clicked() {
                         self.show_settings = true;
                     }
@@ -1797,7 +1767,11 @@ impl eframe::App for Quark {
             });
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(theme::EDITOR).inner_margin(8))
+            .frame(
+                egui::Frame::new()
+                    .fill(theme::colors(ctx).editor.color())
+                    .inner_margin(8),
+            )
             .show(ctx, |ui| {
                 self.caret_position = None;
                 egui::ScrollArea::horizontal()
@@ -1849,6 +1823,7 @@ impl eframe::App for Quark {
                                 .on_hover_text("Find · Ctrl+F")
                                 .clicked()
                             {
+                                self.show_sidebar(SidebarView::Search);
                                 self.show_search = true;
                                 self.find_focus = true;
                             }
@@ -1863,78 +1838,10 @@ impl eframe::App for Quark {
                                 .unwrap_or_else(|| format!("Untitled {} · Hydrogen", doc.id)),
                         )
                         .small()
-                        .color(theme::MUTED),
+                        .color(theme::colors(ui.ctx()).muted.color()),
                     );
                 }
-                if self.show_search {
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("Find").small().color(theme::MUTED));
-                        let response = ui.add(
-                            TextEdit::singleline(&mut self.search)
-                                .desired_width(200.0)
-                                .hint_text("Find text..."),
-                        );
-                        if self.find_focus {
-                            response.request_focus();
-                            self.find_focus = false;
-                        }
-                        if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                            self.next_match(ctx, false);
-                        }
-                        if ui
-                            .small_button("Prev")
-                            .on_hover_text("Previous · Shift+F3")
-                            .clicked()
-                        {
-                            self.next_match(ctx, true);
-                        }
-                        if ui.small_button("Next").on_hover_text("Next · F3").clicked() {
-                            self.next_match(ctx, false);
-                        }
-                        let count = if self.search.is_empty() {
-                            0
-                        } else {
-                            self.active
-                                .and_then(|i| self.docs.get(i))
-                                .map_or(0, |d| d.text.matches(&self.search).count())
-                        };
-                        ui.label(
-                            RichText::new(format!("{count} found"))
-                                .small()
-                                .color(theme::MUTED),
-                        );
-                        if ui.small_button("Replace").clicked() {
-                            self.show_replace = !self.show_replace;
-                        }
-                        if ui.small_button("×").on_hover_text("Close find").clicked() {
-                            self.show_search = false;
-                        }
-                    });
-                    if self.show_replace {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("With").small().color(theme::MUTED));
-                            ui.add(
-                                TextEdit::singleline(&mut self.replace_with)
-                                    .desired_width(200.0)
-                                    .hint_text("Replacement text..."),
-                            );
-                            if ui
-                                .small_button("One")
-                                .on_hover_text("Replace next match")
-                                .clicked()
-                            {
-                                self.replace_next(ctx);
-                            }
-                            if ui
-                                .small_button("All")
-                                .on_hover_text("Replace all matches")
-                                .clicked()
-                            {
-                                self.replace_all(ctx);
-                            }
-                        });
-                    }
-                }
+
                 ui.separator();
                 if let Some(i) = self.active {
                     let active_diags = self
@@ -1994,8 +1901,12 @@ impl eframe::App for Quark {
                                                 diagnostics::Severity::Error => {
                                                     ui.visuals().error_fg_color
                                                 }
-                                                diagnostics::Severity::Warning => theme::WARM,
-                                                diagnostics::Severity::Hint => theme::MUTED,
+                                                diagnostics::Severity::Warning => {
+                                                    theme::colors(ui.ctx()).warning.color()
+                                                }
+                                                diagnostics::Severity::Hint => {
+                                                    theme::colors(ui.ctx()).muted.color()
+                                                }
                                             };
                                             section.format.underline =
                                                 egui::Stroke::new(1.0_f32, colour);
@@ -2046,7 +1957,11 @@ impl eframe::App for Quark {
                                     })
                                     .inner;
                                 let painter = ui.painter_at(gutter_rect);
-                                painter.rect_filled(gutter_rect, 0.0, theme::SURFACE);
+                                painter.rect_filled(
+                                    gutter_rect,
+                                    0.0,
+                                    theme::colors(ui.ctx()).sidebar.color(),
+                                );
                                 painter.line_segment(
                                     [
                                         egui::pos2(gutter_rect.right() - 1.0, gutter_rect.top()),
@@ -2076,7 +1991,7 @@ impl eframe::App for Quark {
                                             egui::Align2::RIGHT_TOP,
                                             logical_line.to_string(),
                                             egui::FontId::monospace(12.0),
-                                            theme::MUTED,
+                                            theme::colors(ui.ctx()).muted.color(),
                                         );
                                         if let Some(on_line) = markers.get(&logical_line) {
                                             let severity = if on_line
@@ -2096,9 +2011,11 @@ impl eframe::App for Quark {
                                                     ("!", ui.visuals().error_fg_color)
                                                 }
                                                 diagnostics::Severity::Warning => {
-                                                    ("!", theme::WARM)
+                                                    ("!", theme::colors(ui.ctx()).warning.color())
                                                 }
-                                                diagnostics::Severity::Hint => ("o", theme::MUTED),
+                                                diagnostics::Severity::Hint => {
+                                                    ("o", theme::colors(ui.ctx()).muted.color())
+                                                }
                                             };
                                             let marker = egui::Rect::from_min_size(
                                                 egui::pos2(gutter_rect.left() + 3.0, y),
@@ -2155,7 +2072,13 @@ impl eframe::App for Quark {
                                 if range.primary.ccursor.index == range.secondary.ccursor.index {
                                     let cursor_char = range.primary.ccursor.index;
                                     let prefix = prefix_at(&doc.text, cursor_char);
+                                    let keep_open = self.completion.as_ref().is_some_and(|popup| {
+                                        popup.doc_id == doc_id
+                                            && popup.cursor_char == cursor_char
+                                            && popup.prefix == prefix
+                                    });
                                     if (was_manual
+                                        || keep_open
                                         || self.settings.automatic_completion
                                             && prefix.chars().count() >= 2)
                                         && editor::completion_context(&doc.text, cursor_char)
@@ -2226,43 +2149,35 @@ impl eframe::App for Quark {
                     self.completion = None;
                 }
             });
-        self.draw_completion(ctx);
-        if self.show_plugins {
-            let mut open = true;
-            egui::Window::new("Quark plugins").open(&mut open).default_width(500.0).show(ctx,|ui|{
-                ui.label("Plugins are user-installed external tools. Only enable plugins you trust.");
-                if let Some(root)=plugins::directory(settings_file().as_deref()) {
-                    ui.label(RichText::new(root.display().to_string()).monospace().small());
-                    ui.horizontal(|ui|{
-                        if ui.button("Create plugins directory").clicked(){
-                            match fs::create_dir_all(&root){Ok(())=>self.status="Plugins directory ready".into(),Err(e)=>self.status=format!("Cannot create directory: {e}")}
-                        }
-                        if ui.button("Copy directory path").clicked(){ui.ctx().copy_text(root.to_string_lossy().into_owned());}
-                        if ui.button("Reload").clicked(){self.reload_plugins();}
-                    });
+        if let Some((path, line)) = self.pending_line.clone() {
+            if self
+                .active
+                .and_then(|i| self.docs.get(i))
+                .is_some_and(|d| d.path.as_ref() == Some(&path))
+                && self
+                    .editor_id()
+                    .and_then(|id| TextEdit::load_state(ctx, id))
+                    .is_some()
+            {
+                if let Some(index) = self
+                    .active
+                    .and_then(|i| navigation::line_start(&self.docs[i].text, line))
+                {
+                    self.set_selection(ctx, index, index);
                 }
-                ui.separator();
-                if self.plugins.is_empty(){ui.label("No plugins installed. Place a plugin.json under a plugin subdirectory.");}
-                for plugin in self.plugins.clone(){
-                    let mut enabled=!self.settings.disabled_plugins.contains(&plugin.id);
-                    if ui.checkbox(&mut enabled,format!("{} ({})",plugin.name,plugin.id)).changed(){
-                        self.settings.disabled_plugins.retain(|x|x!=&plugin.id);
-                        if !enabled {self.settings.disabled_plugins.push(plugin.id.clone());}
-                        self.persist();
-                    }
-                    if !plugin.description.is_empty(){ui.label(RichText::new(&plugin.description).small().color(theme::MUTED));}
-                    ui.label(RichText::new(format!("{} command(s)",plugin.commands.len())).small().color(theme::MUTED));
-                }
-                for warning in &self.plugin_warnings {ui.colored_label(theme::WARM,warning);}
-            });
-            if !open {
-                self.show_plugins = false;
+                self.pending_line = None;
             }
         }
+        self.draw_completion(ctx);
+
         self.palette_ui(ctx);
         if self.show_settings {
             let mut open = true;
             egui::Window::new("Settings").open(&mut open).default_width(620.0).vscroll(true).show(ctx,|ui|{
+                if ui.checkbox(&mut self.settings.integrated_title_bar,"Integrated window controls").on_hover_text("Minimise, maximise/restore and close in Quark’s top bar. Disable to use your system title bar.").changed(){self.persist();}
+                ui.label("Drag QUARK to move the window; double-click it to maximise or restore.");
+                if ui.button("Colours, icons and syntax themes…").clicked(){self.show_sidebar(SidebarView::Themes);self.show_settings=false;}
+                ui.separator();
                 ui.heading("Hydrogen toolchain");
                 ui.label("Executable name or absolute path (arguments are configured by Quark)");
                 if ui.add_enabled(!self.probe_running,TextEdit::singleline(&mut self.settings.compiler)).changed(){self.settings.compiler_verbs.clear();}
@@ -2273,8 +2188,12 @@ impl eframe::App for Quark {
                         self.probe_output.clear();self.launch(self.settings.compiler.clone(),vec!["--help".into()],self.cwd());self.probe_running=self.job_rx.is_some();
                     }
                 });
-                ui.label(RichText::new("Enabled commands · review detected capabilities for custom wrappers").small().color(theme::MUTED));
+                ui.label(RichText::new("Enabled commands · review detected capabilities for custom wrappers").small().color(theme::colors(ui.ctx()).muted.color()));
                 ui.horizontal(|ui|{for verb in ["build","compile","check","run"]{let mut enabled=self.settings.compiler_verbs.iter().any(|v|v==verb);if ui.checkbox(&mut enabled,verb).changed(){self.settings.compiler_verbs.retain(|v|v!=verb);if enabled{self.settings.compiler_verbs.push(verb.into());}}}});
+                ui.separator();ui.heading("Welcome page");
+                let welcome_changed = ui.checkbox(&mut self.settings.welcome_shortcuts_visible,"Show VS Code shortcut guide").changed()
+                    | ui.checkbox(&mut self.settings.welcome_build_visible,"Show first-build guide").changed();
+                if welcome_changed {self.persist();}
                 ui.separator(); ui.heading("Editor & commands");
                 ui.checkbox(&mut self.settings.automatic_completion,"Show suggestions automatically (Ctrl/Cmd+Space always available)");
                 ui.checkbox(&mut self.settings.word_wrap,"Word wrap");
@@ -2290,10 +2209,10 @@ impl eframe::App for Quark {
                 for folder in self.settings.folders.clone(){ui.horizontal(|ui|{if ui.small_button("Remove").clicked(){self.settings.folders.retain(|p|p!=&folder);if self.settings.command_folder.as_ref()==Some(&folder){self.settings.command_folder=None;}self.workspace_requested=true;}ui.label(folder.display().to_string());});}
                 for project in self.settings.projects.clone(){ui.horizontal(|ui|{if ui.small_button("Remove project").clicked(){self.settings.projects.retain(|p|p!=&project);if self.settings.selected_project.as_ref()==Some(&project){self.settings.selected_project=None;}self.workspace_requested=true;self.request_diagnostic_scan();}ui.label(project.display().to_string());});}
                 if self.settings_blocked || self.session_blocked {
-                    ui.separator(); ui.colored_label(theme::WARM,"Persistence paused to preserve an unreadable file.");
+                    ui.separator(); ui.colored_label(theme::colors(ui.ctx()).warning.color(),"Persistence paused to preserve an unreadable file.");
                     if ui.button("Back up unreadable files and resume persistence").clicked(){self.reset_persistence();}
                 }
-                ui.separator(); ui.label(RichText::new("Changes apply immediately. Save settings to retain them after restart.").small().color(theme::MUTED));
+                ui.separator(); ui.label(RichText::new("Changes apply immediately. Save settings to retain them after restart.").small().color(theme::colors(ui.ctx()).muted.color()));
                 if ui.button("Save settings").clicked(){self.persist();self.workspace_requested=true;if !self.settings_blocked{self.show_settings=false;}}
             });
             if !open {
@@ -2382,7 +2301,7 @@ impl eframe::App for Quark {
                             matches.len()
                         ))
                         .small()
-                        .color(theme::MUTED),
+                        .color(theme::colors(ui.ctx()).muted.color()),
                     );
                     let mut scroll = egui::ScrollArea::vertical().max_height(340.0);
                     if move_selection {
@@ -2420,7 +2339,7 @@ impl eframe::App for Quark {
                         }
                     });
                     for notice in self.workspace.notices.iter().take(3) {
-                        ui.colored_label(theme::WARM, notice);
+                        ui.colored_label(theme::colors(ui.ctx()).warning.color(), notice);
                     }
                 });
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
@@ -2458,9 +2377,17 @@ impl eframe::App for Quark {
                 self.show_clone = false;
             }
         }
+        self.catalog_windows(ctx);
         self.safety_dialogs(ctx);
+        if self.settings.integrated_title_bar && !self.exit_requested {
+            window::resize(ctx);
+        }
         ctx.request_repaint_after(Duration::from_millis(
-            if self.job_rx.is_some() || self.workspace_rx.is_some() {
+            if self.job_rx.is_some()
+                || self.workspace_rx.is_some()
+                || self.search_rx.is_some()
+                || self.terminal.is_some()
+            {
                 50
             } else {
                 250
@@ -2472,7 +2399,8 @@ fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Quark IDE")
-            .with_inner_size([1280., 800.]),
+            .with_inner_size([1280., 800.])
+            .with_min_inner_size([800., 500.]),
         ..Default::default()
     };
     eframe::run_native(
@@ -2652,6 +2580,222 @@ mod reliability_tests {
         assert_eq!(q.docs[0].text, "keep");
     }
     #[test]
+    fn editing_manifest_ids_never_adds_workspace_roots_or_changes_build_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("app.hyproj");
+        let dependency = dir.path().join("library.hyproj");
+        fs::write(
+            &root,
+            "name='App'\nid='original-app'\nproject_references=['library.hyproj']\n",
+        )
+        .unwrap();
+        fs::write(
+            &dependency,
+            "name='Library'\nid='original-library'\ntype='lib'\n",
+        )
+        .unwrap();
+        let root = root.canonicalize().unwrap();
+        let dependency = dependency.canonicalize().unwrap();
+        let mut q = app();
+        q.add_project(root.clone());
+        let folders = q.settings.folders.clone();
+        q.open(dependency.clone());
+        assert_eq!(q.settings.projects, vec![root.clone()]);
+        assert_eq!(q.selected_project(), Some(root.clone()));
+        for path in [&dependency, &root] {
+            q.open(path.clone());
+            let index = q.active.unwrap();
+            q.docs[index].text = q.docs[index].text.replace("original-", "updated-");
+            assert!(q.save(index));
+            assert!(q.save(index));
+            assert!(fs::read_to_string(path).unwrap().contains("updated-"));
+            assert_eq!(q.settings.projects, vec![root.clone()]);
+            assert_eq!(q.selected_project(), Some(root.clone()));
+            assert_eq!(q.settings.folders, folders);
+        }
+        assert_eq!(project::load(&root).references.len(), 1);
+        let other = dir.path().join("standalone.hyproj");
+        fs::write(&other, "id='standalone'\n").unwrap();
+        let mut folder_only = app();
+        folder_only.add_folder(dir.path().to_path_buf());
+        folder_only.open(other.clone());
+        folder_only.docs[0].text = "id='edited'\n".into();
+        assert!(folder_only.save(0));
+        assert!(folder_only.settings.projects.is_empty());
+        assert!(folder_only.settings.selected_project.is_none());
+        // Explicitly opening a project still registers it, once.
+        folder_only.add_project(other.clone());
+        folder_only.add_project(other.clone());
+        assert_eq!(
+            folder_only.settings.projects,
+            vec![other.canonicalize().unwrap()]
+        );
+    }
+    #[test]
+    fn integrated_window_controls_emit_native_commands_and_guard_dirty_close() {
+        fn click(q: &mut Quark, ctx: &egui::Context, x: f32) -> egui::FullOutput {
+            let pos = egui::pos2(x, 14.0);
+            let mut result = None;
+            for pressed in [true, false] {
+                let mut i = input();
+                i.events = vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Modifiers::NONE,
+                    },
+                ];
+                result = Some(frame(q, ctx, i));
+            }
+            result.unwrap()
+        }
+        fn has(output: &egui::FullOutput, command: egui::ViewportCommand) -> bool {
+            output.viewport_output[&egui::ViewportId::ROOT]
+                .commands
+                .contains(&command)
+        }
+        let ctx = egui::Context::default();
+        let mut q = app();
+        let first = frame(&mut q, &ctx, input());
+        assert!(has(&first, egui::ViewportCommand::Decorations(false)));
+        frame(&mut q, &ctx, input());
+        assert!(has(
+            &click(&mut q, &ctx, 1192.0),
+            egui::ViewportCommand::Minimized(true)
+        ));
+        assert!(has(
+            &click(&mut q, &ctx, 1225.0),
+            egui::ViewportCommand::Maximized(true)
+        ));
+        let mut maximised = input();
+        maximised
+            .viewports
+            .get_mut(&egui::ViewportId::ROOT)
+            .unwrap()
+            .maximized = Some(true);
+        let output = ctx.run(maximised, window::toggle_maximise);
+        assert!(has(&output, egui::ViewportCommand::Maximized(false)));
+        q.new_document();
+        q.docs[0].text = "unsaved".into();
+        frame(&mut q, &ctx, input());
+        let close = click(&mut q, &ctx, 1258.0);
+        assert!(q.exit_requested && !q.allow_exit);
+        assert!(!has(&close, egui::ViewportCommand::Close));
+        assert_eq!(q.docs[0].text, "unsaved");
+        q.exit_requested = false;
+        q.docs[0].saved = q.docs[0].text.clone();
+        frame(&mut q, &ctx, input());
+        assert!(has(
+            &click(&mut q, &ctx, 1258.0),
+            egui::ViewportCommand::Close
+        ));
+        q.settings.integrated_title_bar = false;
+        assert!(has(
+            &frame(&mut q, &ctx, input()),
+            egui::ViewportCommand::Decorations(true)
+        ));
+    }
+    #[test]
+    fn sidebar_owns_lower_left_and_header_is_a_single_row() {
+        let ctx = egui::Context::default();
+        let mut q = app();
+        q.settings.terminal_visible = true;
+        q.settings.bottom_tab = BottomTab::Output;
+        for _ in 0..3 {
+            frame(&mut q, &ctx, input());
+        }
+        assert!(q.sidebar_rect.right() <= q.bottom_rect.left() + 1.0);
+        assert!((q.sidebar_rect.bottom() - q.bottom_rect.bottom()).abs() < 2.0);
+        assert!(q.top_rect.height() < 45.0, "{:?}", q.top_rect);
+        assert!(q.sidebar_rect.width() >= 240.0);
+        assert!(q.terminal.is_none());
+    }
+    #[test]
+    fn search_plugins_and_themes_are_distinct_sidebar_views() {
+        let ctx = egui::Context::default();
+        let mut q = app();
+        for view in [
+            SidebarView::Search,
+            SidebarView::Plugins,
+            SidebarView::Themes,
+        ] {
+            q.show_sidebar(view);
+            frame(&mut q, &ctx, input());
+            assert_eq!(q.settings.sidebar_view, view);
+            assert!(q.sidebar_rect.is_positive());
+        }
+    }
+    #[test]
+    fn tool_jobs_select_read_only_output_without_starting_a_shell() {
+        let ctx = egui::Context::default();
+        let mut q = app();
+        q.launch(
+            "quark-missing-program-test".into(),
+            vec![],
+            PathBuf::from("."),
+        );
+        assert_eq!(q.settings.bottom_tab, BottomTab::Output);
+        assert!(q.settings.terminal_visible);
+        assert!(q.terminal.is_none());
+        let mut i = input();
+        i.events.push(egui::Event::Text("do not run this".into()));
+        frame(&mut q, &ctx, i);
+        assert!(!q.output.contains("do not run this"));
+        q.on_exit(None);
+    }
+    #[test]
+    fn theme_choices_and_custom_colours_roundtrip_in_preferences() {
+        let ctx = egui::Context::default();
+        let mut q = app();
+        for preset in theme::Preset::ALL {
+            q.settings.theme = theme::Settings {
+                preset,
+                custom: None,
+            };
+            frame(&mut q, &ctx, input());
+            assert_eq!(theme::colors(&ctx), preset.definition().colors);
+        }
+        let mut d = q.settings.theme.definition().clone();
+        d.colors.icon = theme::Rgb([12, 34, 56]);
+        q.settings.theme.custom = Some(d.clone());
+        let settings: Settings =
+            serde_json::from_str(&serde_json::to_string(&q.settings).unwrap()).unwrap();
+        assert_eq!(settings.theme.definition(), &d);
+    }
+    #[test]
+    fn invalid_tool_actions_report_to_the_output_tab() {
+        let mut q = app();
+        q.build(BuildScope::Project);
+        assert_eq!(q.settings.bottom_tab, BottomTab::Output);
+        assert!(q.output.contains(".hyproj"));
+        assert!(q.job_rx.is_none());
+    }
+    #[test]
+    fn enter_in_search_selects_a_match_without_editing_the_document() {
+        let ctx = egui::Context::default();
+        let mut q = app();
+        q.new_document();
+        q.docs[0].text = "needle needle".into();
+        frame(&mut q, &ctx, input());
+        q.show_sidebar(SidebarView::Search);
+        q.search = "needle".into();
+        q.find_focus = true;
+        frame(&mut q, &ctx, input());
+        let mut i = input();
+        i.events.push(egui::Event::Key {
+            key: Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        });
+        frame(&mut q, &ctx, i);
+        assert_eq!(q.docs[0].text, "needle needle");
+        assert_eq!(q.status, "Match selected");
+    }
+    #[test]
     fn command_directory_does_not_change_when_tabs_change() {
         let mut q = app();
         q.settings.folders.push(PathBuf::from("/workspace"));
@@ -2739,7 +2883,7 @@ mod reliability_tests {
     #[test]
     fn welcome_palette_and_editor_render_with_keyboard_navigation() {
         let ctx = egui::Context::default();
-        theme::apply(&ctx);
+        theme::apply(&ctx, &theme::Settings::default());
         let mut q = app();
         assert!(!frame(&mut q, &ctx, input()).shapes.is_empty());
         let mut i = input();

@@ -209,7 +209,11 @@ pub fn tokenize(source: &str) -> Vec<(TokenKind, &str)> {
     spans
 }
 
-pub fn highlight_hydrogen(text: &str, plain: Color32) -> egui::text::LayoutJob {
+fn highlight_with_palette(
+    text: &str,
+    plain: Color32,
+    palette: &crate::theme::SyntaxPalette,
+) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     let tokens = tokenize(text);
     let mut after_declaration = false;
@@ -227,21 +231,21 @@ pub fn highlight_hydrogen(text: &str, plain: Color32) -> egui::text::LayoutJob {
             && significant_next == Some("(")
             && !matches!(content, "if" | "while" | "for" | "switch" | "catch");
         let color = if declared_name {
-            Color32::from_rgb(125, 210, 207)
+            palette.declaration.color()
         } else if function_name {
-            Color32::from_rgb(225, 195, 137)
+            palette.function.color()
         } else {
             match kind {
                 TokenKind::Plain => plain,
-                TokenKind::Keyword => Color32::from_rgb(176, 157, 235),
-                TokenKind::Modifier => Color32::from_rgb(140, 178, 235),
-                TokenKind::Type => Color32::from_rgb(106, 207, 193),
-                TokenKind::Literal => Color32::from_rgb(223, 151, 168),
-                TokenKind::Comment => Color32::from_rgb(116, 148, 127),
-                TokenKind::String => Color32::from_rgb(212, 172, 121),
-                TokenKind::Number => Color32::from_rgb(200, 162, 207),
-                TokenKind::Operator => Color32::from_rgb(166, 194, 218),
-                TokenKind::Punctuation => Color32::from_rgb(150, 159, 178),
+                TokenKind::Keyword => palette.keyword.color(),
+                TokenKind::Modifier => palette.modifier.color(),
+                TokenKind::Type => palette.type_name.color(),
+                TokenKind::Literal => palette.literal.color(),
+                TokenKind::Comment => palette.comment.color(),
+                TokenKind::String => palette.string.color(),
+                TokenKind::Number => palette.number.color(),
+                TokenKind::Operator => palette.operator.color(),
+                TokenKind::Punctuation => palette.punctuation.color(),
             }
         };
         job.append(
@@ -345,23 +349,50 @@ pub fn completion_context(source: &str, cursor_char: usize) -> bool {
 
 #[derive(Default)]
 struct Highlighter;
-impl<'a> egui::util::cache::ComputerMut<(&'a str, Color32), egui::text::LayoutJob> for Highlighter {
-    fn compute(&mut self, (text, color): (&'a str, Color32)) -> egui::text::LayoutJob {
-        highlight_hydrogen(text, color)
+impl<'a>
+    egui::util::cache::ComputerMut<
+        (&'a str, Color32, crate::theme::SyntaxPalette),
+        egui::text::LayoutJob,
+    > for Highlighter
+{
+    fn compute(
+        &mut self,
+        (text, color, syntax): (&'a str, Color32, crate::theme::SyntaxPalette),
+    ) -> egui::text::LayoutJob {
+        highlight_with_palette(text, color, &syntax)
     }
 }
 /// Reuse tokenisation when repainting unchanged documents.
 pub fn cached_highlight(ctx: &egui::Context, text: &str, color: Color32) -> egui::text::LayoutJob {
+    let syntax = crate::theme::current(ctx).syntax;
     ctx.memory_mut(|m| {
         m.caches
             .cache::<egui::util::cache::FrameCache<egui::text::LayoutJob, Highlighter>>()
-            .get((text, color))
+            .get((text, color, syntax))
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cached_syntax_updates_immediately_when_the_theme_changes() {
+        let ctx = egui::Context::default();
+        let settings = crate::theme::Settings::default();
+        crate::theme::apply(&ctx, &settings);
+        let old = cached_highlight(&ctx, "class", Color32::WHITE);
+        let settings = crate::theme::Settings {
+            preset: crate::theme::Preset::Dawn,
+            custom: None,
+        };
+        crate::theme::apply(&ctx, &settings);
+        let new = cached_highlight(&ctx, "class", Color32::BLACK);
+        assert_ne!(old.sections[0].format.color, new.sections[0].format.color);
+        assert_eq!(
+            new.sections[0].format.color,
+            settings.definition().syntax.keyword.color()
+        );
+    }
     #[test]
     fn completions_stay_out_of_comments_and_strings() {
         assert!(!completion_context("// str", 6));
