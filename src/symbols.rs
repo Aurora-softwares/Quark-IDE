@@ -4,7 +4,6 @@
 use crate::editor::{tokenize, TokenKind};
 use std::{
     collections::BTreeMap,
-    fs,
     path::{Path, PathBuf},
 };
 
@@ -179,31 +178,6 @@ pub fn add_source(outline: &mut SymbolNode, path: &Path, source: &str) {
             },
         );
     }
-}
-
-pub fn build_outline(sources: &[PathBuf]) -> SymbolNode {
-    let mut result = SymbolNode::default();
-    for path in sources {
-        if path.extension().and_then(|s| s.to_str()) != Some("hy") {
-            continue;
-        }
-        if let Ok(source) = fs::read_to_string(path) {
-            add_source(&mut result, path, &source);
-        } else {
-            result.add(
-                &[],
-                SymbolItem {
-                    name: format!(
-                        "⚠ {}",
-                        path.file_name().unwrap_or_default().to_string_lossy()
-                    ),
-                    path: path.clone(),
-                    kind: "missing",
-                },
-            );
-        }
-    }
-    result
 }
 
 #[cfg(test)]

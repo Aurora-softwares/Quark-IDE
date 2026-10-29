@@ -326,9 +326,49 @@ pub fn completion_candidates(source: &str, prefix: &str) -> Vec<String> {
         .collect()
 }
 
+/// Do not offer code completions inside a comment or string token.
+pub fn completion_context(source: &str, cursor_char: usize) -> bool {
+    let byte = source
+        .char_indices()
+        .nth(cursor_char)
+        .map_or(source.len(), |(b, _)| b);
+    let mut end = 0;
+    for (kind, fragment) in tokenize(source) {
+        let start = end;
+        end += fragment.len();
+        if byte > start && byte <= end {
+            return !matches!(kind, TokenKind::Comment | TokenKind::String);
+        }
+    }
+    true
+}
+
+#[derive(Default)]
+struct Highlighter;
+impl<'a> egui::util::cache::ComputerMut<(&'a str, Color32), egui::text::LayoutJob> for Highlighter {
+    fn compute(&mut self, (text, color): (&'a str, Color32)) -> egui::text::LayoutJob {
+        highlight_hydrogen(text, color)
+    }
+}
+/// Reuse tokenisation when repainting unchanged documents.
+pub fn cached_highlight(ctx: &egui::Context, text: &str, color: Color32) -> egui::text::LayoutJob {
+    ctx.memory_mut(|m| {
+        m.caches
+            .cache::<egui::util::cache::FrameCache<egui::text::LayoutJob, Highlighter>>()
+            .get((text, color))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn completions_stay_out_of_comments_and_strings() {
+        assert!(!completion_context("// str", 6));
+        assert!(!completion_context("/* str", 6));
+        assert!(!completion_context("\"str", 4));
+        assert!(completion_context("π str", 5));
+    }
     #[test]
     fn highlights_keywords_and_names() {
         let tokens = tokenize("public class Hello { }");

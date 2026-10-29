@@ -1,7 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 cd "$(dirname "$0")/.."
-cargo fmt --all
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all-targets

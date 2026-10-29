@@ -258,7 +258,10 @@ fn is_boundary_context(tokens: &[Token], index: usize) -> bool {
 
 fn visit_warnings(p: &project::Project) -> bool {
     let invalid = p.warnings.iter().any(|w| {
-        w.contains("Cannot read") || w.contains("Invalid .hyproj") || w.contains("Missing source")
+        w.contains("Cannot read")
+            || w.contains("Invalid .hyproj")
+            || w.contains("Missing source")
+            || w.contains("Incomplete project graph")
     });
     invalid || p.references.iter().any(visit_warnings)
 }
@@ -275,11 +278,10 @@ pub fn scan(revision: u64, selected: Option<&Path>, open_docs: &[(PathBuf, Strin
         complete = !visit_warnings(&project);
         project::collect_sources(&project, &mut paths);
     }
-    if selected.is_none() {
-        // Standalone buffers still receive lexical error diagnostics, not
-        // project-wide unused hints.
-        paths.extend(open_docs.iter().map(|(path, _)| path.clone()));
-    }
+    // Every open buffer gets lexical diagnostics. Only actual project members
+    // participate in unused-reference counts and candidate analysis.
+    let project_paths: std::collections::HashSet<_> = paths.iter().cloned().collect();
+    paths.extend(open_docs.iter().map(|(path, _)| path.clone()));
     paths.sort();
     paths.dedup();
     let mut counts: HashMap<String, usize> = HashMap::new();
@@ -300,11 +302,11 @@ pub fn scan(revision: u64, selected: Option<&Path>, open_docs: &[(PathBuf, Strin
         let mut diagnostics = Vec::new();
         let tokens = significant_tokens(&source, &mut diagnostics);
         for token in &tokens {
-            if is_identifier(token) {
+            if project_paths.contains(&path) && is_identifier(token) {
                 *counts.entry(token.word.clone()).or_default() += 1;
             }
         }
-        if selected.is_some() {
+        if project_paths.contains(&path) {
             candidates_by_file.push((path.clone(), candidates(&tokens)));
         }
         by_file.insert(path, diagnostics);
@@ -460,5 +462,28 @@ mod tests {
             .iter()
             .any(|d| d.message.contains("'Hidden'")));
         fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod open_buffer_tests {
+    use super::*;
+    #[test]
+    fn unrelated_and_untitled_buffers_get_errors_with_a_project_selected() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("root.hyproj");
+        fs::write(&p, "name='empty'\nsources=[]").unwrap();
+        let outside = dir.path().join("outside.hy");
+        let untitled = PathBuf::from("quark-untitled-99.hy");
+        let result = scan(
+            1,
+            Some(&p),
+            &[
+                (outside.clone(), "/*".into()),
+                (untitled.clone(), "\"unterminated".into()),
+            ],
+        );
+        assert_eq!(result.by_file[&outside][0].severity, Severity::Error);
+        assert_eq!(result.by_file[&untitled][0].severity, Severity::Error);
     }
 }

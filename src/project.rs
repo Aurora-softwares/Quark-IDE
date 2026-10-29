@@ -27,10 +27,10 @@ pub struct Project {
 }
 
 pub fn load(path: &Path) -> Project {
-    load_inner(path, &mut HashSet::new())
+    load_inner(path, &mut HashSet::new(), 0)
 }
 
-fn load_inner(path: &Path, seen: &mut HashSet<PathBuf>) -> Project {
+fn load_inner(path: &Path, seen: &mut HashSet<PathBuf>, depth: usize) -> Project {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let mut result = Project {
         name: canonical
@@ -44,6 +44,12 @@ fn load_inner(path: &Path, seen: &mut HashSet<PathBuf>) -> Project {
         references: vec![],
         warnings: vec![],
     };
+    if depth > 64 || seen.len() >= 4096 {
+        result
+            .warnings
+            .push("Incomplete project graph: reference depth/count limit reached".into());
+        return result;
+    }
     if !seen.insert(canonical.clone()) {
         result
             .warnings
@@ -79,7 +85,7 @@ fn load_inner(path: &Path, seen: &mut HashSet<PathBuf>) -> Project {
     for reference in manifest.project_references {
         result
             .references
-            .push(load_inner(&base.join(reference), seen));
+            .push(load_inner(&base.join(reference), seen, depth + 1));
     }
     result
 }

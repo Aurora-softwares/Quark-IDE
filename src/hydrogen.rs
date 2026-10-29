@@ -100,9 +100,29 @@ pub fn build_plan(
     })
 }
 
+/// Help output is advisory; capabilities remain editable for custom wrappers.
+pub fn detect_verbs(help: &str) -> Vec<String> {
+    ["build", "compile", "check", "run"]
+        .into_iter()
+        .filter(|verb| {
+            help.split(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+                .any(|word| word == *verb)
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn help_detection_matches_whole_command_names() {
+        assert_eq!(
+            detect_verbs("Commands: build | compile | check | run"),
+            vec!["build", "compile", "check", "run"]
+        );
+        assert!(detect_verbs("building and runtime").is_empty());
+    }
     #[test]
     fn project_build_passes_required_output() {
         let plan = build_plan(
