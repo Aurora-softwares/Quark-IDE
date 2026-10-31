@@ -162,7 +162,7 @@ impl Quark {
             }
             if ui::view_tab(
                 ui,
-                "Class View",
+                "Symbols",
                 self.explorer_view == ExplorerView::Outline,
             )
             .clicked()
