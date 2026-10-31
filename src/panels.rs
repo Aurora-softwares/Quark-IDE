@@ -160,13 +160,7 @@ impl Quark {
             if ui::view_tab(ui, "Files", self.explorer_view == ExplorerView::Files).clicked() {
                 self.explorer_view = ExplorerView::Files;
             }
-            if ui::view_tab(
-                ui,
-                "Symbols",
-                self.explorer_view == ExplorerView::Outline,
-            )
-            .clicked()
-            {
+            if ui::view_tab(ui, "Symbols", self.explorer_view == ExplorerView::Outline).clicked() {
                 self.explorer_view = ExplorerView::Outline;
             }
             if ui
