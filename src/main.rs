@@ -9,6 +9,7 @@ mod hydrogen;
 mod navigation;
 mod panels;
 mod plugins;
+mod problems;
 mod project;
 mod storage;
 mod symbols;
@@ -136,6 +137,7 @@ enum BottomTab {
     #[default]
     Terminal,
     Output,
+    Problems,
 }
 #[derive(PartialEq, Clone, Copy)]
 enum ExplorerView {
@@ -225,6 +227,9 @@ struct Quark {
     docs: Vec<Document>,
     active: Option<usize>,
     output: String,
+    problems: Vec<problems::Problem>,
+    problem_output: String,
+    problem_cwd: Option<PathBuf>,
     search: String,
     quick_query: String,
     show_search: bool,
@@ -395,6 +400,9 @@ impl Quark {
             docs: session.docs,
             active: restored_active,
             output: "Quark IDE — native Rust edition\n".into(),
+            problems: Vec::new(),
+            problem_output: String::new(),
+            problem_cwd: None,
             search: String::new(),
             quick_query: String::new(),
             show_search: false,
@@ -851,6 +859,9 @@ impl Quark {
         }
         self.settings.terminal_visible = true;
         self.settings.bottom_tab = BottomTab::Output;
+        self.problem_cwd = Some(cwd.clone());
+        self.problem_output.clear();
+        self.problems.clear();
         self.persist();
         self.status = "Running command…".into();
         command::append_bounded(
@@ -1523,6 +1534,10 @@ impl eframe::App for Quark {
                             command::append_bounded(&mut self.probe_output, &text);
                         }
                         command::append_bounded(&mut self.output, &text);
+                        command::append_bounded(&mut self.problem_output, &text);
+                        if let Some(cwd) = self.problem_cwd.as_deref() {
+                            self.problems = problems::parse(&self.problem_output, cwd);
+                        }
                     }
                     Ok(command::Event::Finished(result)) => {
                         finished = Some(result);
