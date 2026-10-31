@@ -455,7 +455,11 @@ if ui.small_button("End session").clicked(){if let Some(t)=&mut self.terminal{t.
         });
         match self.settings.bottom_tab {
             BottomTab::Problems => {
-                let errors = self.problems.iter().filter(|p| p.severity == problems::Severity::Error).count();
+                let errors = self
+                    .problems
+                    .iter()
+                    .filter(|p| p.severity == problems::Severity::Error)
+                    .count();
                 let warnings = self.problems.len() - errors;
                 ui.label(format!("{errors} errors · {warnings} warnings"));
                 let mut selected = None;
