@@ -2,7 +2,10 @@
 //! Templates intentionally contain plain Hydrogen and a separate, design-time
 //! UI document. Runtime UI generation requires a Hydrogen.UI backend.
 
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Template {
@@ -15,7 +18,11 @@ pub enum Template {
 
 impl Template {
     pub const ALL: [Self; 5] = [
-        Self::Linux, Self::Windows, Self::MacOS, Self::Australis, Self::Library,
+        Self::Linux,
+        Self::Windows,
+        Self::MacOS,
+        Self::Australis,
+        Self::Library,
     ];
 
     pub fn label(self) -> &'static str {
@@ -43,7 +50,9 @@ pub fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
         && name.as_bytes()[0].is_ascii_alphabetic()
-        && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
 pub fn create_project(parent: &Path, name: &str, template: Template) -> Result<PathBuf, String> {
@@ -51,7 +60,10 @@ pub fn create_project(parent: &Path, name: &str, template: Template) -> Result<P
         return Err("Project name must start with a letter and contain only letters, numbers, underscores or hyphens (maximum 64 characters).".into());
     }
     if !parent.is_dir() {
-        return Err(format!("Choose an existing parent directory: {}", parent.display()));
+        return Err(format!(
+            "Choose an existing parent directory: {}",
+            parent.display()
+        ));
     }
     let folder = parent.join(name);
     // Never overwrite or reuse existing files or directories.
