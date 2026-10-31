@@ -109,7 +109,7 @@ impl Quark {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    ui.menu_button("⋯", |ui| self.theme_menu(ui, &item))
+                                    ui.menu_button("...", |ui| self.theme_menu(ui, &item))
                                         .response
                                         .on_hover_text(format!(
                                             "Options for {}",
@@ -286,7 +286,7 @@ impl Quark {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    ui.menu_button("⋯", |ui| self.extension_menu(ui, &plugin))
+                                    ui.menu_button("...", |ui| self.extension_menu(ui, &plugin))
                                         .response
                                         .on_hover_text(format!("Options for {}", plugin.name));
                                 },

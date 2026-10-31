@@ -109,9 +109,16 @@ pub(crate) fn matches(query: &str, name: &str, description: &str) -> bool {
 }
 impl Quark {
     pub(crate) fn workspace_root(&self) -> Option<PathBuf> {
-        self.selected_project()
-            .and_then(|p| p.parent().map(Path::to_path_buf))
-            .or_else(|| self.settings.folders.first().cloned())
+        self.settings
+            .folders
+            .first()
+            .cloned()
+            .or_else(|| {
+                self.settings
+                    .projects
+                    .first()
+                    .and_then(|p| p.parent().map(Path::to_path_buf))
+            })
             .map(|p| p.canonicalize().unwrap_or(p))
     }
     pub(crate) fn effective_theme(&self) -> theme::Settings {
@@ -356,6 +363,10 @@ impl ThemeItem {
 
 /// Store a distributable local ZIP, without following links or including external files.
 pub(crate) fn export_zip(root: &Path, destination: &Path) -> Result<(), String> {
+    let root_metadata = fs::symlink_metadata(root).map_err(|e| e.to_string())?;
+    if root_metadata.file_type().is_symlink() || !root_metadata.is_dir() {
+        return Err("ZIP source must be a directory, not a symbolic link.".into());
+    }
     let parent = destination
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -367,6 +378,7 @@ pub(crate) fn export_zip(root: &Path, destination: &Path) -> Result<(), String> 
     let mut pending = vec![root.to_path_buf()];
     let mut count = 0;
     let mut bytes = 0u64;
+    let mut actual_bytes = 0u64;
     while let Some(dir) = pending.pop() {
         count += 1;
         if count > 10000 {
@@ -410,10 +422,11 @@ pub(crate) fn export_zip(root: &Path, destination: &Path) -> Result<(), String> 
             let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
             let mut data = Vec::new();
             Read::by_ref(&mut file)
-                .take(100 * 1024 * 1024 + 1)
+                .take(100 * 1024 * 1024 - actual_bytes + 1)
                 .read_to_end(&mut data)
                 .map_err(|e| e.to_string())?;
-            if data.len() > 100 * 1024 * 1024 {
+            actual_bytes += data.len() as u64;
+            if actual_bytes > 100 * 1024 * 1024 {
                 return Err("File grew beyond ZIP export limit.".into());
             }
             zip.write_all(&data).map_err(|e| e.to_string())?;
@@ -424,26 +437,32 @@ pub(crate) fn export_zip(root: &Path, destination: &Path) -> Result<(), String> 
     temp.persist(destination).map_err(|e| e.to_string())?;
     Ok(())
 }
-pub(crate) fn open_folder(path: &Path) -> Result<(), String> {
+pub(crate) fn folder_command(path: &Path) -> Result<std::process::Command, String> {
+    if !path.is_dir() {
+        return Err("Folder is missing or is not a directory.".into());
+    }
     #[cfg(windows)]
-    let mut command = {
+    let command = {
         let mut c = std::process::Command::new("explorer.exe");
         c.arg(path);
         c
     };
     #[cfg(target_os = "macos")]
-    let mut command = {
+    let command = {
         let mut c = std::process::Command::new("open");
         c.arg(path);
         c
     };
     #[cfg(all(not(windows), not(target_os = "macos")))]
-    let mut command = {
+    let command = {
         let mut c = std::process::Command::new("xdg-open");
         c.arg(path);
         c
     };
-    command
+    Ok(command)
+}
+pub(crate) fn open_folder(path: &Path) -> Result<(), String> {
+    folder_command(path)?
         .spawn()
         .map(|mut child| {
             std::thread::spawn(move || {
@@ -451,4 +470,61 @@ pub(crate) fn open_folder(path: &Path) -> Result<(), String> {
             });
         })
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn folder_command_passes_spaced_paths_as_one_literal_argument() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("my folder $(literal)");
+        fs::create_dir(&path).unwrap();
+        let command = folder_command(&path).unwrap();
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            vec![path.as_os_str()]
+        );
+        assert!(!command.get_program().is_empty());
+    }
+    #[test]
+    fn missing_folder_is_rejected_before_starting_desktop_process() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(folder_command(&dir.path().join("missing")).is_err());
+        let file = dir.path().join("file");
+        fs::write(&file, "keep").unwrap();
+        assert!(open_folder(&file).is_err());
+        assert_eq!(fs::read_to_string(file).unwrap(), "keep");
+    }
+    #[test]
+    fn oversized_zip_source_is_rejected_without_replacing_existing_zip() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("package");
+        fs::create_dir(&root).unwrap();
+        fs::File::create(root.join("large"))
+            .unwrap()
+            .set_len(101 * 1024 * 1024)
+            .unwrap();
+        let destination = dir.path().join("old.zip");
+        fs::write(&destination, "original").unwrap();
+        assert!(export_zip(&root, &destination)
+            .unwrap_err()
+            .contains("100 MiB"));
+        assert_eq!(fs::read_to_string(destination).unwrap(), "original");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn zip_export_refuses_symlinks_to_files_outside_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("package");
+        fs::create_dir(&root).unwrap();
+        let outside = dir.path().join("secret");
+        fs::write(&outside, "private").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        let destination = dir.path().join("export.zip");
+        assert!(export_zip(&root, &destination)
+            .unwrap_err()
+            .contains("symbolic links"));
+        assert!(!destination.exists());
+    }
 }

@@ -461,4 +461,16 @@ mod tests {
         assert!(results.contains(&"string".to_string()));
         assert!(results.contains(&"struct".to_string()));
     }
+
+    #[test]
+    fn syntax_cache_keeps_text_and_foreground_entries_independent() {
+        let ctx = egui::Context::default();
+        let one = cached_highlight(&ctx, "plain_name", Color32::from_rgb(1, 2, 3));
+        let two = cached_highlight(&ctx, "plain_name", Color32::from_rgb(4, 5, 6));
+        assert_eq!(one.text, two.text);
+        assert_ne!(one.sections[0].format.color, two.sections[0].format.color);
+        let other = cached_highlight(&ctx, "another_name", Color32::from_rgb(1, 2, 3));
+        assert_eq!(other.text, "another_name");
+        assert_eq!(one.text, "plain_name");
+    }
 }

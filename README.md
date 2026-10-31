@@ -1,10 +1,10 @@
 # Quark IDE
 
-A native desktop workspace for Hydrogen, written in Rust with egui/eframe. The 0.5.0 development update adds a compact unified top bar, dedicated sidebar views, a real OS terminal, separate tool-output logs and four complete themes. Safe saves and document recovery from 0.4.0 remain in place.
+A native desktop workspace for Hydrogen, written in Rust with egui/eframe. The 0.6.0 development update adds searchable theme and extension catalogues with item options, workspace-specific enable/disable choices, removable recent items and dismissible welcome guides. The compact header, real OS terminal, separate tool-output log and four complete themes remain available. Safe saves and document recovery from 0.4.0 remain in place.
 
 Current development status, next target and release gates are tracked in [Hydrogen — Development](https://github.com/orgs/Aurora-softwares/projects/4). A package version identifies this source; it does not imply a qualified binary release.
 
-![Quark IDE workspace, terminal and themes](assets/quark-workspace.png)
+![Quark IDE themes and welcome controls](assets/quark-catalogues.png)
 
 ## Start working
 
@@ -45,6 +45,12 @@ The top bar combines menus and command discovery in one row. Its two right-align
 
 F1 opens the Command Palette while editing. In the focused OS terminal, ordinary control/function keys belong to the shell/application; Ctrl/Cmd+Shift+P still opens the palette, Ctrl+Shift+B builds, Ctrl/Cmd+Shift+E shows Explorer and Ctrl/Cmd+Shift+F opens workspace search. Ctrl+` toggles the bottom panel. Go to File supports Up/Down and Enter and an Open File fallback. Help > Welcome preserves open documents.
 
+## Welcome page preferences
+
+Each recent workspace has an **×** button. Removing it only removes the history entry; the open workspace, build target, documents and files stay intact. Opening that workspace again restores it at the front of the list. The history keeps the 20 latest entries and displays the first ten.
+
+The **Coming from VS Code?** and **Your first build** cards each have an **×** dismiss button. Dismissal persists across restarts. Use **Restore hidden sections** on Welcome or the two Welcome-page checkboxes in Settings to bring them back.
+
 ## Protecting your work
 
 - Modified tabs and application exit offer **Save / Discard / Cancel**. Running commands are stopped when Quark exits normally.
@@ -74,7 +80,7 @@ New terminals, Git and plugins start in the selected project directory, then the
 
 ## Themes
 
-Choose the palette icon in the sidebar, **View > Themes**, **Preferences: Themes** in the Command Palette, or the theme link in Settings.
+Choose the palette icon in the sidebar, **View > Themes**, or **Preferences: Themes** in the Command Palette. Search filters installed theme names and descriptions. The installed list is read-only; each item has an **...** options button.
 
 | Included theme | Appearance | Icons |
 | --- | --- | --- |
@@ -83,15 +89,19 @@ Choose the palette icon in the sidebar, **View > Themes**, **Preferences: Themes
 | Dawn | Warm light surfaces with blue accents | Rounded |
 | High Contrast | Black/white surfaces with yellow accents | Solid |
 
-Themes cover editor/sidebar/surface backgrounds, text, muted text, accent, borders, selection, status bar, errors, warnings, native vector icon colour/style/size, eleven syntax colour groups, terminal background/foreground and the 16 ANSI palette entries. Selection applies immediately, including to open terminals and cached syntax highlighting, and persists in settings.
+Every theme and extension offers **Enable**, **Enable (Workspace)**, **Disable**, **Disable (Workspace)**, **Auto update**, **Settings**, **Open Containing Folder**, **Download ZIP** and **Remove**. Workspace options require an open workspace. Theme Enable selects that palette; disabling the active theme falls back to an available palette. Workspace overrides take precedence over global availability and use the first workspace folder as their stable identity, falling back to the first project directory. Switching the selected build target or terminal directory does not change that identity.
 
-Expand **Interface colours**, **Syntax colours** or **Terminal colours** to customise a preset. **Import** and **Export** use version-1 JSON theme files; colours are RGB byte triplets and icon styles are Outline, Rounded or Solid. Invalid versions, incomplete files, empty names and out-of-range icon scales are rejected during import. The four bundled files in [assets/themes](assets/themes) are complete examples. These are native vector icon styles, not an SVG/VS Code icon-pack loader.
+Theme editing is available through **... > Settings**. Customise UI surfaces, text, status, selection, errors, icon colour/style/scale, eleven syntax colour groups and the terminal's 16 ANSI colours. Changes apply live and persist after a short debounce; **Reset customisations** restores the original definition. Bundled assets are kept intact. Syntax caches and open terminal screens recolour when the effective theme changes.
 
-## Git and plugins
+**+ Add** opens local installation and future catalogue setup. **Import local theme** accepts version-1 Quark theme JSON; invalid versions, incomplete data, blank names and icon scales outside 75–150% are rejected. The four files in [assets/themes](assets/themes) are complete examples. Theme Settings can export JSON. An imported theme is installed locally and can be removed; bundled themes can be disabled and their Remove option is unavailable.
+
+**Open Containing Folder** materialises an inspectable theme JSON snapshot under the configuration's `themes/<id>` folder and opens that folder through the OS. **Download ZIP** exports the installed theme or extension locally. ZIP export is bounded to 10,000 entries / 100 MiB and refuses symlinks. The online repositories are not configured yet: Add/discovery is an explicit placeholder and **Auto update** currently stores a preference without fetching or installing updates.
+
+## Git and extensions
 
 Git uses the installed CLI and system credentials. Buttons run Status, Diff, Fetch, Pull, Push and Clone into Output. Interactive credential entry for these tool jobs is disabled; configure credentials externally or run interactive Git commands in the Terminal tab. Clone adds the chosen empty destination only after success. Staging and committing use Git commands in Terminal or another Git client.
 
-The Plugins sidebar lists installed tools, enable/disable controls, reload and per-plugin action buttons. Plugin actions write into Output and do not type into the OS shell.
+The Extensions sidebar shows installed tools in a searchable list with the same options menu as themes. **Settings** exposes action buttons and **Edit extension manifest**, which opens `plugin.json` in the editor. Save and **Reload extensions** to apply manifest changes. Actions write into Output and do not type into the OS shell. Global and workspace enable/disable choices are respected by the sidebar, top menu and action runner. **Remove** asks for confirmation and moves the extension into `extension-backups` beside the configuration; it keeps workspace files and a recoverable copy of the extension.
 
 ## Workspace, completion and diagnostics
 
@@ -107,11 +117,11 @@ Hydrogen has lexical highlighting and local keyword/identifier suggestions at th
 
 Quick checks catch unterminated comments/literals in every open Hydrogen buffer, including untitled files and files outside the selected project. Possible-unused hints use the selected project's complete source/reference graph. The status bar identifies scanning or partial analysis; hover markers/counts for details. Compiler diagnostics remain in Output. These checks are not a complete parser or type checker.
 
-Plugins are explicitly invoked external processes. Install a plugin folder containing a v1 `plugin.json` under the directory shown in the Plugins sidebar, then Reload. Enable/disable plugins there. Only install tools you trust; they run with your normal user permissions. See [the example](examples/plugins/workspace-tools/plugin.json).
+Quark extensions are explicitly invoked external processes using the native v1 `plugin.json` protocol. **Extensions > + Add** shows the installation folder and reload controls. Place one extension subfolder there, then reload. This protocol is separate from VS Code VSIX packages. Only install tools you trust; they run with your normal user permissions. See [the example](examples/plugins/workspace-tools/plugin.json).
 
 ## Build and verify
 
-Install Rust and a platform-native compiler toolchain, then run:
+Install Rust, Python 3 (for the feature-coverage gate), and a platform-native compiler toolchain, then run:
 
 ```sh
 cargo run
@@ -127,5 +137,7 @@ sudo apt install build-essential pkg-config libxkbcommon-dev libwayland-dev libx
 ```
 
 On macOS install Xcode Command Line Tools. On Windows install the MSVC Rust toolchain and Visual Studio C++ Build Tools. In PowerShell run the individual formatting, clippy, test and release-build commands from the release-check script.
+
+The [feature test register](tests/feature-coverage.json) lists 185 current features with at least two distinct tests per feature. The release check and CI validate registered names and reject missing, duplicate-only or ignored-only coverage. See [testing policy](TESTING.md) and [the 0.6.0 update](QUARK-TESTING-CATALOG-UPDATE.md).
 
 See [the workspace/terminal/theme report](QUARK-WORKSPACE-UPDATE.md), [the earlier file-safety report](QUARK-RELIABILITY-UPDATE.md) and [manual acceptance checklist](scripts/manual-acceptance.md). All three OS CI jobs and the remaining native/platform/compiler acceptance gates must pass before a binary release. Large files still use egui's full-buffer text layout; highlighting is cached, but very large files can remain expensive. Quark does not yet provide an LSP, debugger, regex search, graphical Git staging/commit workflows or exhaustive xterm compatibility. ConPTY and native macOS terminal acceptance remain required before release.

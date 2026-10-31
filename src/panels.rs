@@ -157,8 +157,12 @@ impl Quark {
     }
     fn explorer_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.explorer_view, ExplorerView::Files, "Files");
-            ui.selectable_value(&mut self.explorer_view, ExplorerView::Outline, "Symbols");
+            if ui::view_tab(ui, "Files", self.explorer_view == ExplorerView::Files).clicked() {
+                self.explorer_view = ExplorerView::Files;
+            }
+            if ui::view_tab(ui, "Symbols", self.explorer_view == ExplorerView::Outline).clicked() {
+                self.explorer_view = ExplorerView::Outline;
+            }
             if ui.small_button("Refresh").clicked() {
                 self.workspace_requested = true;
                 self.request_diagnostic_scan();
@@ -289,6 +293,14 @@ impl Quark {
         }
     }
     fn search_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(
+            RichText::new(if self.workspace_search {
+                "Find in files"
+            } else {
+                "Find in active editor"
+            })
+            .strong(),
+        );
         let response = ui.add(
             TextEdit::singleline(&mut self.search)
                 .desired_width(f32::INFINITY)
@@ -390,29 +402,68 @@ impl Quark {
         }
     }
     fn git_ui(&mut self, ui: &mut egui::Ui) {
-        ui.label(self.cwd().display().to_string());
-        ui.label("Git uses your OS credentials. Results appear in Output.");
-        for (title, args) in [
-            ("Status", vec!["status", "--short", "--branch"]),
-            ("Diff", vec!["diff"]),
-            ("Fetch", vec!["fetch", "--all"]),
-            ("Pull", vec!["pull", "--no-edit"]),
-            ("Push", vec!["push"]),
-        ] {
-            if ui
-                .add_enabled(self.job_rx.is_none(), egui::Button::new(title))
-                .clicked()
-            {
-                self.git(&args);
+        let cwd = self.cwd();
+        ui.label(RichText::new(cwd.file_name().unwrap_or_default().to_string_lossy()).strong());
+        ui.label(
+            RichText::new(cwd.display().to_string())
+                .small()
+                .color(theme::colors(ui.ctx()).muted.color()),
+        );
+        ui.add_space(5.0);
+        ui.horizontal(|ui| {
+            for (title, args) in [
+                ("Status", vec!["status", "--short", "--branch"]),
+                ("Diff", vec!["diff"]),
+            ] {
+                let width = (ui.available_width() / if title == "Status" { 2.0 } else { 1.0 }
+                    - 3.0)
+                    .max(40.0);
+                if ui
+                    .add_enabled(
+                        self.job_rx.is_none(),
+                        egui::Button::new(title).min_size(egui::vec2(width, 26.0)),
+                    )
+                    .clicked()
+                {
+                    self.git(&args);
+                }
             }
-        }
+        });
+        ui.separator();
+        ui.label(
+            RichText::new("REMOTE")
+                .small()
+                .color(theme::colors(ui.ctx()).muted.color()),
+        );
+        ui.horizontal(|ui| {
+            for (title, args) in [
+                ("Fetch", vec!["fetch", "--all"]),
+                ("Pull", vec!["pull", "--no-edit"]),
+                ("Push", vec!["push"]),
+            ] {
+                if ui
+                    .add_enabled(self.job_rx.is_none(), egui::Button::new(title))
+                    .clicked()
+                {
+                    self.git(&args);
+                }
+            }
+        });
+        ui.add_space(6.0);
+        ui.label("Git uses your OS credentials. Results appear in Output.");
         if ui.button("Choose Git / new terminal folder…").clicked() {
             if let Some(p) = rfd::FileDialog::new().pick_folder() {
                 self.settings.command_folder = Some(p);
                 self.persist();
             }
         }
-        ui.label("Use the Terminal tab for interactive Git commands, staging and commits.");
+        ui.label(
+            RichText::new(
+                "Use the Terminal tab for interactive Git commands, staging and commits.",
+            )
+            .small()
+            .color(theme::colors(ui.ctx()).muted.color()),
+        );
     }
     pub(crate) fn import_theme(&mut self, path: &Path, ctx: &egui::Context) {
         match fs::read_to_string(path)

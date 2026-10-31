@@ -712,7 +712,17 @@ mod tests {
                 egui::Pos2::ZERO,
                 egui::vec2(800.0, 300.0),
             )),
-            events: vec![Event::Copy],
+            events: if cfg!(target_os = "macos") {
+                vec![Event::Key {
+                    key: Key::C,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Modifiers::CTRL,
+                }]
+            } else {
+                vec![Event::Copy]
+            },
             ..Default::default()
         };
         let _ = ctx.run(input, |ctx| {
