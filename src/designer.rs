@@ -5,11 +5,7 @@
 use crate::storage;
 use eframe::egui::{self, Align2, Color32, FontId, RichText, Sense, Stroke};
 use serde::{Deserialize, Serialize};
-use std::{
-    fs,
-    io::Write,
-    path::PathBuf,
-};
+use std::{fs, io::Write, path::PathBuf};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
