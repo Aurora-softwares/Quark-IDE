@@ -12,8 +12,8 @@ mod panels;
 mod plugins;
 mod problems;
 mod project;
-mod storage;
 mod startup;
+mod storage;
 mod symbols;
 mod terminal;
 mod theme;
@@ -266,7 +266,6 @@ struct Quark {
     new_layout_name: String,
 }
 impl Quark {
-
     fn show_welcome(&mut self) {
         self.active = None;
         self.designer_active = false;
@@ -300,7 +299,11 @@ impl Quark {
     }
 
     fn open_designer(&mut self, path: PathBuf) {
-        if self.designer.as_ref().is_some_and(|d| d.dirty && d.path != path) {
+        if self
+            .designer
+            .as_ref()
+            .is_some_and(|d| d.dirty && d.path != path)
+        {
             self.status = "Save the current UI layout before opening another layout".into();
             return;
         }
@@ -384,7 +387,9 @@ impl Quark {
                             self.active = None;
                             self.workspace_requested = true;
                         }
-                        Err(error) => self.notice(format!("Project created, but could not create the starting UI layout: {error}")),
+                        Err(error) => self.notice(format!(
+                            "Project created, but could not create the starting UI layout: {error}"
+                        )),
                     }
                 }
                 Err(error) => self.status = error,
@@ -401,7 +406,8 @@ impl Quark {
         }
         let mut open = true;
         let mut create = false;
-        let parent = self.selected_project()
+        let parent = self
+            .selected_project()
             .and_then(|path| path.parent().map(Path::to_path_buf))
             .or_else(|| self.settings.folders.first().cloned());
         egui::Window::new("New UI layout")
@@ -416,7 +422,9 @@ impl Quark {
                 } else {
                     ui.label("Open a project or folder to create a layout.");
                 }
-                create = ui.add_enabled(parent.is_some(), egui::Button::new("Create layout")).clicked();
+                create = ui
+                    .add_enabled(parent.is_some(), egui::Button::new("Create layout"))
+                    .clicked();
             });
         if create {
             if !startup::valid_name(&self.new_layout_name) {
@@ -2021,18 +2029,43 @@ impl eframe::App for Quark {
                             ui.spacing_mut().item_spacing.x = 3.0;
                             let mut close = None;
                             if ui
-                                .selectable_label(self.active.is_none() && !self.designer_active, "Start Window")
+                                .selectable_label(
+                                    self.active.is_none() && !self.designer_active,
+                                    "Start Window",
+                                )
                                 .clicked()
                             {
                                 self.show_welcome();
                             }
                             if let Some(design) = &self.designer {
-                                let caption = if design.dirty { format!("● {} [Design]", design.path.file_stem().unwrap_or_default().to_string_lossy()) } else { format!("{} [Design]", design.path.file_stem().unwrap_or_default().to_string_lossy()) };
+                                let caption = if design.dirty {
+                                    format!(
+                                        "● {} [Design]",
+                                        design
+                                            .path
+                                            .file_stem()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                    )
+                                } else {
+                                    format!(
+                                        "{} [Design]",
+                                        design
+                                            .path
+                                            .file_stem()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                    )
+                                };
                                 if ui.selectable_label(self.designer_active, caption).clicked() {
                                     self.designer_active = true;
                                     self.active = None;
                                 }
-                                if ui.small_button("×").on_hover_text("Close visual designer").clicked() {
+                                if ui
+                                    .small_button("×")
+                                    .on_hover_text("Close visual designer")
+                                    .clicked()
+                                {
                                     self.close_designer();
                                 }
                             }
