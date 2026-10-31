@@ -644,18 +644,14 @@ pub(crate) fn activity_button(
             line((6.0, -1.0), (6.0, -2.4));
         }
         Icon::Extensions => {
-            for (x, y) in [(-9.0, -2.0), (1.0, -2.0), (-9.0, 8.0)] {
+            for (x, y) in [(-9.0, -7.0), (-9.0, 2.0), (0.0, 2.0), (2.0, -9.0)] {
                 p.rect_stroke(
-                    egui::Rect::from_min_size(pt(x, y - 7.0), egui::vec2(7.0, 7.0)),
+                    egui::Rect::from_min_max(pt(x, y), pt(x + 7.0, y + 7.0)),
                     rounding,
                     stroke,
                     egui::StrokeKind::Inside,
                 );
             }
-            p.add(egui::Shape::closed_line(
-                vec![pt(6.0, -12.0), pt(11.0, -7.0), pt(6.0, -2.0), pt(1.0, -7.0)],
-                stroke,
-            ));
         }
         Icon::Themes => {
             p.circle_stroke(center, 8.0, stroke);
@@ -726,4 +722,24 @@ pub(crate) fn layout_button(ui: &mut egui::Ui, left: bool, selected: bool) -> eg
     } else {
         "Toggle bottom panel · Ctrl+`"
     })
+}
+
+/// Compact underline tabs keep the Explorer toolbar familiar without a second activity rail.
+pub(crate) fn view_tab(ui: &mut egui::Ui, label: &str, selected: bool) -> egui::Response {
+    let response = ui.add(
+        egui::Button::new(RichText::new(label).small().color(if selected {
+            theme::colors(ui.ctx()).text.color()
+        } else {
+            theme::colors(ui.ctx()).muted.color()
+        }))
+        .frame(false),
+    );
+    if selected {
+        let r = response.rect;
+        ui.painter().line_segment(
+            [r.left_bottom(), r.right_bottom()],
+            egui::Stroke::new(2.0_f32, theme::colors(ui.ctx()).accent.color()),
+        );
+    }
+    response
 }

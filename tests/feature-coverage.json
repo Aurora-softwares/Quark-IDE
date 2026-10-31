@@ -238,7 +238,7 @@
       "feature": "Save all and exit",
       "tests": [
         "feature_tests::exit_save_all_writes_dirty_files_then_requests_close",
-        "feature_tests::build_conflict_aborts_before_launching_compiler"
+        "feature_tests::exit_save_conflict_keeps_window_open_and_preserves_both_versions"
       ]
     },
     {
@@ -1211,7 +1211,8 @@
       "feature": "Enable for workspace",
       "tests": [
         "feature_tests::workspace_theme_enable_does_not_change_global_theme_or_other_workspace",
-        "feature_tests::workspace_theme_enable_can_override_global_disable"
+        "feature_tests::workspace_theme_enable_can_override_global_disable",
+        "feature_tests::workspace_theme_scope_stays_stable_when_build_target_changes"
       ]
     },
     {
@@ -1292,7 +1293,7 @@
       "feature": "Syntax cache recolouring",
       "tests": [
         "editor::tests::cached_syntax_updates_immediately_when_the_theme_changes",
-        "feature_tests::theme_settings_edits_are_local_overrides_not_bundled_file_writes"
+        "editor::tests::syntax_cache_keeps_text_and_foreground_entries_independent"
       ]
     },
     {
@@ -1336,8 +1337,9 @@
       "category": "Themes",
       "feature": "Open containing folder resolution",
       "tests": [
-        "feature_tests::theme_folder_materialises_valid_local_json_without_touching_bundled_source",
-        "feature_tests::theme_folder_rejects_unknown_and_path_traversal_identifiers"
+        "catalog::tests::folder_command_passes_spaced_paths_as_one_literal_argument",
+        "catalog::tests::missing_folder_is_rejected_before_starting_desktop_process",
+        "feature_tests::theme_folder_materialises_valid_local_json_without_touching_bundled_source"
       ]
     },
     {
@@ -1346,7 +1348,8 @@
       "feature": "Download local ZIP",
       "tests": [
         "feature_tests::local_zip_export_preserves_nested_theme_and_extension_contents",
-        "feature_tests::failed_zip_export_preserves_existing_destination_and_leaves_no_temporary_file"
+        "feature_tests::failed_zip_export_preserves_existing_destination_and_leaves_no_temporary_file",
+        "catalog::tests::oversized_zip_source_is_rejected_without_replacing_existing_zip"
       ]
     },
     {
@@ -1427,7 +1430,8 @@
       "feature": "Disable for workspace",
       "tests": [
         "feature_tests::workspace_extension_disable_does_not_disable_other_workspaces",
-        "feature_tests::globally_enabling_extension_does_not_clear_workspace_disable"
+        "feature_tests::globally_enabling_extension_does_not_clear_workspace_disable",
+        "feature_tests::workspace_extension_scope_does_not_follow_terminal_directory_override"
       ]
     },
     {
@@ -1453,8 +1457,8 @@
       "category": "Extensions",
       "feature": "Open containing folder resolution",
       "tests": [
-        "plugins::tests::relative_program_resolves_to_plugin_folder",
-        "plugins::loading_tests::plugin_template_expands_every_context_without_shell_interpretation"
+        "catalog::tests::folder_command_passes_spaced_paths_as_one_literal_argument",
+        "catalog::tests::missing_folder_is_rejected_before_starting_desktop_process"
       ]
     },
     {
@@ -1463,7 +1467,8 @@
       "feature": "Download local ZIP",
       "tests": [
         "feature_tests::local_zip_export_preserves_nested_theme_and_extension_contents",
-        "feature_tests::failed_zip_export_preserves_existing_destination_and_leaves_no_temporary_file"
+        "feature_tests::failed_zip_export_preserves_existing_destination_and_leaves_no_temporary_file",
+        "catalog::tests::oversized_zip_source_is_rejected_without_replacing_existing_zip"
       ]
     },
     {

@@ -707,23 +707,27 @@ mod tests {
         t.send(b"sleep 30\r".to_vec());
         thread::sleep(std::time::Duration::from_millis(80));
         let ctx = egui::Context::default();
-        // macOS reserves the copy event for Cmd+C: Ctrl+C must be
-        // delivered as a terminal control key, rather than Event::Copy.
-        if cfg!(target_os = "macos") {
-            t.send(vec![3]);
-        } else {
-            let input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(
-                    egui::Pos2::ZERO,
-                    egui::vec2(800.0, 300.0),
-                )),
-                events: vec![Event::Copy],
-                ..Default::default()
-            };
-            let _ = ctx.run(input, |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| t.ui(ui));
-            });
-        }
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 300.0),
+            )),
+            events: if cfg!(target_os = "macos") {
+                vec![Event::Key {
+                    key: Key::C,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: Modifiers::CTRL,
+                }]
+            } else {
+                vec![Event::Copy]
+            },
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| t.ui(ui));
+        });
         t.send(b"printf '\\nAFTER_INTERRUPT\\n'\r".to_vec());
         let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
         while std::time::Instant::now() < until {

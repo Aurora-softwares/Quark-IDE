@@ -1491,8 +1491,19 @@ fn theme_options_expose_management_commands_without_editing_the_item() {
     let mut h = Harness::new();
     h.q.show_sidebar(SidebarView::Themes);
     h.q.theme_query = "Aurora".into();
-    h.click("⋯");
+    h.click("...");
     let out = h.draw(vec![]);
+    for shape in &out.shapes {
+        if let egui::epaint::Shape::Text(t) = &shape.shape {
+            if t.galley.text() == "Enable" {
+                assert!(shape.clip_rect.contains(t.pos));
+                assert!(
+                    egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280., 1400.))
+                        .contains(t.pos)
+                );
+            }
+        }
+    }
     for label in [
         "Enable",
         "Enable (Workspace)",
@@ -1513,11 +1524,11 @@ fn theme_settings_opens_only_from_options_and_enable_applies_palette() {
     let mut h = Harness::new();
     h.q.show_sidebar(SidebarView::Themes);
     h.q.theme_query = "Aurora".into();
-    h.click("⋯");
+    h.click("...");
     h.click("Enable");
     h.draw(vec![]);
     assert_eq!(h.q.effective_theme().preset, theme::Preset::Aurora);
-    h.click("⋯");
+    h.click("...");
     h.click("Settings");
     assert_eq!(h.q.editing_theme.as_deref(), Some("aurora"));
     assert!(has_text(&h.draw(vec![]), "Theme name"));
@@ -1590,7 +1601,7 @@ fn theme_auto_update_option_persists_preference_without_starting_network_job() {
     let mut h = Harness::new();
     h.q.show_sidebar(SidebarView::Themes);
     h.q.theme_query = "Aurora".into();
-    h.click("⋯");
+    h.click("...");
     h.click("Auto update");
     assert!(h
         .stored_settings()
@@ -1605,7 +1616,7 @@ fn theme_auto_update_can_be_switched_off() {
     h.q.settings.catalog.theme_auto_update = vec!["aurora".into()];
     h.q.show_sidebar(SidebarView::Themes);
     h.q.theme_query = "Aurora".into();
-    h.click("⋯");
+    h.click("...");
     h.click("Auto update");
     assert!(!h
         .stored_settings()
@@ -1732,7 +1743,7 @@ fn extension_options_have_the_same_management_menu_as_themes() {
     let mut h = Harness::new();
     extension_fixture(&mut h);
     h.q.show_sidebar(SidebarView::Plugins);
-    h.click("⋯");
+    h.click("...");
     let out = h.draw(vec![]);
     for label in [
         "Enable",
@@ -1754,7 +1765,7 @@ fn extension_settings_opens_actions_and_manifest_editor_only_on_request() {
     let mut h = Harness::new();
     let id = extension_fixture(&mut h);
     h.q.show_sidebar(SidebarView::Plugins);
-    h.click("⋯");
+    h.click("...");
     h.click("Settings");
     assert_eq!(h.q.editing_extension, Some(id));
     let out = h.draw(vec![]);
@@ -1817,7 +1828,7 @@ fn extension_auto_update_option_persists_without_launching_a_job() {
     let mut h = Harness::new();
     let id = extension_fixture(&mut h);
     h.q.show_sidebar(SidebarView::Plugins);
-    h.click("⋯");
+    h.click("...");
     h.click("Auto update");
     assert!(h
         .stored_settings()
@@ -1832,7 +1843,7 @@ fn extension_auto_update_can_be_switched_off() {
     let id = extension_fixture(&mut h);
     h.q.settings.catalog.extension_auto_update = vec![id];
     h.q.show_sidebar(SidebarView::Plugins);
-    h.click("⋯");
+    h.click("...");
     h.click("Auto update");
     assert!(h.stored_settings().catalog.extension_auto_update.is_empty());
 }
@@ -2579,4 +2590,49 @@ fn explorer_page_boundary_and_missing_folder_do_not_panic() {
     assert!(!has_text(&out, "Show more"));
     let out = tree_frame(&mut h.q, &h.ctx, &root.join("missing"), vec![]);
     assert!(has_text(&out, "Folder unavailable"));
+}
+#[test]
+fn exit_save_conflict_keeps_window_open_and_preserves_both_versions() {
+    let mut h = Harness::new();
+    let p = h.file("a.hy", "old");
+    h.q.open(p.clone());
+    h.q.docs[0].text = "mine".into();
+    fs::write(&p, "external").unwrap();
+    h.q.request_exit(&h.ctx);
+    let out = h.click("Save all & close");
+    assert!(!has_command(&out, egui::ViewportCommand::Close));
+    assert!(!h.q.allow_exit);
+    assert_eq!(h.q.pending_conflict, Some(0));
+    assert_eq!(h.q.docs[0].text, "mine");
+    assert_eq!(fs::read_to_string(p).unwrap(), "external");
+}
+#[test]
+fn workspace_theme_scope_stays_stable_when_build_target_changes() {
+    let mut h = Harness::new();
+    let first = h.dir.path().join("one");
+    let second = h.dir.path().join("two");
+    fs::create_dir(&first).unwrap();
+    fs::create_dir(&second).unwrap();
+    let a = first.join("a.hyproj");
+    let b = second.join("b.hyproj");
+    fs::write(&a, "id='a'").unwrap();
+    fs::write(&b, "id='b'").unwrap();
+    h.q.add_project(a);
+    h.q.enable_theme("dawn", true);
+    h.q.add_project(b);
+    assert_eq!(h.q.effective_theme().preset, theme::Preset::Dawn);
+    h.q.settings.command_folder = Some(h.dir.path().join("terminal-only"));
+    assert_eq!(h.q.effective_theme().preset, theme::Preset::Dawn);
+    assert_eq!(h.q.workspace_root(), Some(first.canonicalize().unwrap()));
+}
+#[test]
+fn workspace_extension_scope_does_not_follow_terminal_directory_override() {
+    let mut h = Harness::new();
+    let id = extension_fixture(&mut h);
+    let root = h.dir.path().to_path_buf();
+    h.q.settings.folders = vec![root.clone()];
+    h.q.set_extension_enabled(&id, false, true);
+    h.q.settings.command_folder = Some(root.join("elsewhere"));
+    assert!(!h.q.extension_enabled(&id));
+    assert_eq!(h.q.workspace_root(), Some(root.canonicalize().unwrap()));
 }

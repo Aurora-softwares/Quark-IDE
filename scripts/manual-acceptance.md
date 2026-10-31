@@ -1,4 +1,4 @@
-# Quark IDE 0.5.0 acceptance checklist
+# Quark IDE 0.6.0 acceptance checklist
 
 Run on each target platform before publishing binaries. Unit tests and a successful build do not replace GUI, compiler and authenticated Git checks. Use temporary files and disposable repositories. Record OS, toolchain, source revision and outcomes.
 
@@ -8,12 +8,26 @@ Run on each target platform before publishing binaries. Unit tests and a success
 - [ ] At narrow/wide sizes, the sidebar owns the lower-left corner and the bottom panel begins to its right. Hiding/restoring the sidebar resizes both editor and terminal grid. Check DPI scaling.
 - [ ] Integrated minimise, maximise/restore and close work through the OS; close prompts for dirty buffers and active terminal/tool sessions. Drag QUARK, double-click it, and resize all eight edges/corners. Repeat with system title bar enabled in Settings, on X11/Wayland/macOS/Windows.
 - [ ] At 800×500, all top-bar controls remain visible and the command button truncates instead of wrapping.
-- [ ] Slim sidebar icon row renders without missing glyphs; Explorer, Search, Source Control, Plugins, Themes and Settings each open their intended controls.
+- [ ] Slim sidebar icon row renders without missing glyphs; Explorer, Search, Source Control, Extensions, Themes and Settings each open their intended controls.
 - [ ] F1 and Ctrl/Cmd+Shift+P open the Command Palette; typing filters, Up/Down moves, Enter runs and Escape closes. Mouse scrolling works independently.
 - [ ] Ctrl/Cmd+P focuses Go to File; Up/Down/Enter work across more results than fit on screen; Open File fallback works with unknown extensions.
 - [ ] Ctrl/Cmd+B toggles Explorer, Ctrl/Cmd+Shift+E shows it, Ctrl+` toggles the bottom panel; persisted visibility survives restart. F1 opens the palette outside the focused terminal.
 - [ ] Tabs scroll horizontally, paths are available on hover and under tabs, identically named files can be distinguished, untitled tabs have distinct names. New/opened tabs accept typing immediately.
 - [ ] Help > Welcome preserves open tabs and allows returning to them.
+
+## Welcome personalisation and catalogues
+
+- [ ] Remove a recent project and a recent folder. Both remain open in the workspace, their files remain intact, and the entries stay removed after restart. Reopening each puts it back in recent history once.
+- [ ] Hide each Get comfortable card independently, restart, and restore through Welcome and Settings. Both-hidden state retains a restore control.
+- [ ] Theme and extension searches match names case-insensitively, show empty results, and preserve active theme/enabled state. Long names and descriptions do not push the options button outside the sidebar.
+- [ ] Theme and extension lists have no inline editing or actions; the item options menu contains the requested nine controls. Theme Settings and extension Settings open from that menu.
+- [ ] Enable/disable globally and per workspace. Switch workspaces, selected build targets and terminal-directory overrides. Scope follows the workspace; no-workspace options explain why they are disabled.
+- [ ] Add shows that the repository is not configured. Import a valid local theme and reject invalid JSON without changing the current theme. Auto update preferences survive restart and cause no network request.
+- [ ] Theme Settings edits colours, icons, syntax and terminal palette live; reset restores originals and leaves bundled assets intact. Export/import JSON round-trips overrides.
+- [ ] Download ZIP for a theme and extension; inspect contents. Cancel a save and try a failing destination. Existing files are retained on export failure; symlink/size limits report failures.
+- [ ] Open Containing Folder launches the platform file manager for a theme snapshot and installed extension; test paths with spaces and a missing folder.
+- [ ] Remove a local theme, try Remove on a bundled theme, remove/cancel an extension removal, and verify recoverable extension backups. Running tool jobs prevent extension removal.
+- [ ] Extension Settings exposes actions and manifest editing; saved edits apply after Reload. A disabled extension cannot run from either its settings or the top menu.
 
 ## File safety and recovery
 
@@ -55,7 +69,7 @@ Run on each target platform before publishing binaries. Unit tests and a success
 
 - [ ] Graphite, Aurora, Dawn and High Contrast each apply to the entire UI, icons, status bar, editor syntax and the live terminal. No remaining hardcoded dark foreground/background makes the light theme unreadable.
 - [ ] Changing syntax colours updates an already-open unchanged document immediately; switching themes does not retain cached colours.
-- [ ] Outline/Rounded/Solid icons, icon colour and scale controls change the sidebar and remain legible. Interface, syntax and terminal palette controls apply live.
+- [ ] In theme Settings: Outline/Rounded/Solid icons, icon colour and scale controls change the sidebar and remain legible. Interface, syntax and terminal palette controls apply live.
 - [ ] Custom changes, selected preset, sidebar view and bottom tab persist across restart. Opening old 0.4.0 settings defaults the new theme fields correctly.
 - [ ] Export a custom theme and re-import it: colours and icon settings round-trip. Invalid/incomplete/unsupported-version imports leave the current theme intact and report the failure.
 
