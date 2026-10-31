@@ -168,7 +168,7 @@ impl Quark {
                 .corner_radius(5)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("IDE shortcuts").strong().size(16.0));
+                        ui.label(RichText::new("Coming from VS Code?").strong().size(16.0));
                         if ui
                             .small_button("×")
                             .on_hover_text("Hide shortcut guide")
