@@ -2637,7 +2637,6 @@ fn workspace_extension_scope_does_not_follow_terminal_directory_override() {
     assert_eq!(h.q.workspace_root(), Some(root.canonicalize().unwrap()));
 }
 
-
 #[test]
 fn visual_designer_renders_toolbox_and_properties_and_saves() {
     let mut h = Harness::new();
@@ -2649,7 +2648,11 @@ fn visual_designer_renders_toolbox_and_properties_and_saves() {
     assert!(has_text(&screen, "UI Designer"));
     assert!(has_text(&screen, "Toolbox"));
     assert!(has_text(&screen, "Properties"));
-    h.q.designer.as_mut().unwrap().add(designer::Kind::Button, 30.0, 44.0).unwrap();
+    h.q.designer
+        .as_mut()
+        .unwrap()
+        .add(designer::Kind::Button, 30.0, 44.0)
+        .unwrap();
     assert!(h.q.designer.as_ref().unwrap().dirty);
     assert!(h.q.save_all());
     assert!(!h.q.designer.as_ref().unwrap().dirty);
@@ -2665,7 +2668,11 @@ fn dirty_visual_layout_requires_confirmation_before_close() {
     let path = h.dir.path().join("Form.quarkui");
     h.q.designer = Some(designer::Designer::create(path).unwrap());
     h.q.designer_active = true;
-    h.q.designer.as_mut().unwrap().add(designer::Kind::Label, 10.0, 10.0).unwrap();
+    h.q.designer
+        .as_mut()
+        .unwrap()
+        .add(designer::Kind::Label, 10.0, 10.0)
+        .unwrap();
     h.q.close_designer();
     assert!(h.q.pending_designer_close);
     assert!(h.q.designer.is_some());
