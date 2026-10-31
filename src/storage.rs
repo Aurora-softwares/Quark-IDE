@@ -118,6 +118,9 @@ mod tests {
         #[cfg(windows)]
         {
             let mut permissions = fs::metadata(&p).unwrap().permissions();
+            // Windows uses this flag for its read-only file attribute. This is
+            // only test cleanup, never a Unix permission change.
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             fs::set_permissions(p, permissions).unwrap();
         }
