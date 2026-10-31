@@ -157,7 +157,7 @@ impl Quark {
     }
     fn explorer_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui::view_tab(ui, "Solution", self.explorer_view == ExplorerView::Files).clicked() {
+            if ui::view_tab(ui, "Files", self.explorer_view == ExplorerView::Files).clicked() {
                 self.explorer_view = ExplorerView::Files;
             }
             if ui::view_tab(
