@@ -342,7 +342,10 @@ mod tests {
     use super::*;
     fn temporary(name: &str) -> PathBuf {
         let tmp = std::env::temp_dir();
-        let root = tmp.canonicalize().unwrap_or(tmp).join(format!("quark-diag-{name}-{}", std::process::id()));
+        let root = tmp
+            .canonicalize()
+            .unwrap_or(tmp)
+            .join(format!("quark-diag-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
         root
