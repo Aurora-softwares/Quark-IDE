@@ -115,7 +115,11 @@ impl Quark {
                     .unwrap_or_default()
                     .to_string_lossy();
                     if ui
-                        .link(format!("{}  {}", if entry.project { "▣" } else { "▤" }, title))
+                        .link(format!(
+                            "{}  {}",
+                            if entry.project { "▣" } else { "▤" },
+                            title
+                        ))
                         .on_hover_text(path.display().to_string())
                         .clicked()
                     {
@@ -130,8 +134,10 @@ impl Quark {
                             self.tree_revision += 1;
                         }
                     }
-                    if ui.small_button("×")
-                        .on_hover_text("Remove from recent projects").clicked()
+                    if ui
+                        .small_button("×")
+                        .on_hover_text("Remove from recent projects")
+                        .clicked()
                     {
                         self.remove_recent(&entry);
                     }
@@ -240,7 +246,9 @@ impl Quark {
                     self.add_project(p);
                 }
             }
-            4 => { self.save_active(); }
+            4 => {
+                self.save_active();
+            }
             5 => {
                 if let Some(i) = self.active {
                     self.save_document(i, false, true);
@@ -430,26 +438,31 @@ impl Quark {
     }
     pub(crate) fn safety_dialogs(&mut self, ctx: &egui::Context) {
         if self.pending_designer_close {
-            let title = self.designer.as_ref().map(|d| d.path.display().to_string()).unwrap_or_default();
-            let result = egui::Modal::new(egui::Id::new("confirm-designer-close")).show(ctx, |ui| {
-                ui.heading("Save the visual layout before closing?");
-                ui.label(title);
-                ui.horizontal(|ui| {
-                    if ui.button("Save and close").clicked() && self.save_designer() {
-                        self.designer = None;
-                        self.designer_active = false;
-                        self.pending_designer_close = false;
-                    }
-                    if ui.button("Discard changes").clicked() {
-                        self.designer = None;
-                        self.designer_active = false;
-                        self.pending_designer_close = false;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        self.pending_designer_close = false;
-                    }
+            let title = self
+                .designer
+                .as_ref()
+                .map(|d| d.path.display().to_string())
+                .unwrap_or_default();
+            let result =
+                egui::Modal::new(egui::Id::new("confirm-designer-close")).show(ctx, |ui| {
+                    ui.heading("Save the visual layout before closing?");
+                    ui.label(title);
+                    ui.horizontal(|ui| {
+                        if ui.button("Save and close").clicked() && self.save_designer() {
+                            self.designer = None;
+                            self.designer_active = false;
+                            self.pending_designer_close = false;
+                        }
+                        if ui.button("Discard changes").clicked() {
+                            self.designer = None;
+                            self.designer_active = false;
+                            self.pending_designer_close = false;
+                        }
+                        if ui.button("Cancel").clicked() {
+                            self.pending_designer_close = false;
+                        }
+                    });
                 });
-            });
             if result.should_close() {
                 self.pending_designer_close = false;
             }
