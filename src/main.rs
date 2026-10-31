@@ -1,6 +1,7 @@
 mod catalog;
 mod catalog_ui;
 mod command;
+mod designer;
 mod diagnostics;
 mod editor;
 #[cfg(test)]
@@ -11,6 +12,7 @@ mod panels;
 mod plugins;
 mod problems;
 mod project;
+mod startup;
 mod storage;
 mod symbols;
 mod terminal;
@@ -253,10 +255,204 @@ struct Quark {
     diagnostic_rx: Option<Receiver<diagnostics::ScanResult>>,
     analysis_complete: bool,
     files_scanned: usize,
+    designer: Option<designer::Designer>,
+    designer_active: bool,
+    pending_designer_close: bool,
+    show_new_project: bool,
+    new_project_name: String,
+    new_project_parent: String,
+    new_project_template: startup::Template,
+    show_new_layout: bool,
+    new_layout_name: String,
 }
 impl Quark {
+    fn show_welcome(&mut self) {
+        self.active = None;
+        self.designer_active = false;
+    }
+
+    fn save_designer(&mut self) -> bool {
+        let result = self.designer.as_mut().map(|d| d.save());
+        match result {
+            Some(Ok(())) => {
+                self.status = "UI layout saved".into();
+                self.workspace_requested = true;
+                true
+            }
+            Some(Err(e)) => {
+                self.status = e.clone();
+                self.notice(e);
+                false
+            }
+            None => true,
+        }
+    }
+
+    fn save_active(&mut self) -> bool {
+        if self.designer_active {
+            self.save_designer()
+        } else if let Some(index) = self.active {
+            self.save(index)
+        } else {
+            true
+        }
+    }
+
+    fn open_designer(&mut self, path: PathBuf) {
+        if self
+            .designer
+            .as_ref()
+            .is_some_and(|d| d.dirty && d.path != path)
+        {
+            self.status = "Save the current UI layout before opening another layout".into();
+            return;
+        }
+        let path = path.canonicalize().unwrap_or(path);
+        if self.designer.as_ref().is_some_and(|d| d.path == path) {
+            self.designer_active = true;
+            self.active = None;
+            return;
+        }
+        match designer::Designer::open(path) {
+            Ok(document) => {
+                self.designer = Some(document);
+                self.designer_active = true;
+                self.active = None;
+            }
+            Err(error) => self.status = format!("Cannot open layout: {error}"),
+        }
+    }
+
+    fn close_designer(&mut self) {
+        if self.designer.as_ref().is_some_and(|d| d.dirty) {
+            self.pending_designer_close = true;
+        } else {
+            self.designer = None;
+            self.designer_active = false;
+        }
+    }
+
+    fn start_project_dialog(&mut self) {
+        self.show_new_project = true;
+    }
+
+    fn new_project_dialog(&mut self, ctx: &egui::Context) {
+        if !self.show_new_project {
+            return;
+        }
+        let mut open = true;
+        let mut create = false;
+        egui::Window::new("Create a Hydrogen project")
+            .open(&mut open)
+            .default_width(480.0)
+            .resizable(false)
+            .show(ctx, |ui| {
+                ui.heading("New project");
+                ui.label("Project name");
+                ui.text_edit_singleline(&mut self.new_project_name);
+                ui.label("Parent folder");
+                ui.horizontal(|ui| {
+                    ui.text_edit_singleline(&mut self.new_project_parent);
+                    if ui.button("Browse…").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                            self.new_project_parent = path.display().to_string();
+                        }
+                    }
+                });
+                ui.label("Template");
+                egui::ComboBox::from_id_salt("quark-project-template")
+                    .selected_text(self.new_project_template.label())
+                    .show_ui(ui, |ui| {
+                        for template in startup::Template::ALL {
+                            ui.selectable_value(&mut self.new_project_template, template, template.label());
+                        }
+                    });
+                ui.label("Quark creates a Hydrogen .hyproj and Program.hy.");
+                ui.label("The visual designer saves .quarkui layouts separately from executable source code.");
+                create = ui.button("Create project").clicked();
+            });
+        if create {
+            let parent = PathBuf::from(self.new_project_parent.trim());
+            let name = self.new_project_name.trim();
+            match startup::create_project(&parent, name, self.new_project_template) {
+                Ok(path) => {
+                    self.show_new_project = false;
+                    self.add_project(path.clone());
+                    self.status = format!("Created project {}", path.display());
+                    let layout_path = path.parent().unwrap_or(Path::new(".")).join("Main.quarkui");
+                    match designer::Designer::create(layout_path) {
+                        Ok(document) => {
+                            self.designer = Some(document);
+                            self.designer_active = true;
+                            self.active = None;
+                            self.workspace_requested = true;
+                        }
+                        Err(error) => self.notice(format!(
+                            "Project created, but could not create the starting UI layout: {error}"
+                        )),
+                    }
+                }
+                Err(error) => self.status = error,
+            }
+        }
+        if !open {
+            self.show_new_project = false;
+        }
+    }
+
+    fn new_layout_dialog(&mut self, ctx: &egui::Context) {
+        if !self.show_new_layout {
+            return;
+        }
+        let mut open = true;
+        let mut create = false;
+        let parent = self
+            .selected_project()
+            .and_then(|path| path.parent().map(Path::to_path_buf))
+            .or_else(|| self.settings.folders.first().cloned());
+        egui::Window::new("New UI layout")
+            .open(&mut open)
+            .default_width(430.0)
+            .show(ctx, |ui| {
+                ui.heading("New visual layout");
+                ui.label("Layout name");
+                ui.text_edit_singleline(&mut self.new_layout_name);
+                if let Some(parent) = &parent {
+                    ui.label(format!("Project folder: {}", parent.display()));
+                } else {
+                    ui.label("Open a project or folder to create a layout.");
+                }
+                create = ui
+                    .add_enabled(parent.is_some(), egui::Button::new("Create layout"))
+                    .clicked();
+            });
+        if create {
+            if !startup::valid_name(&self.new_layout_name) {
+                self.status = "Use a layout name starting with a letter, containing only letters, numbers, hyphens or underscores.".into();
+            } else if self.designer.as_ref().is_some_and(|d| d.dirty) {
+                self.status = "Save the current UI layout before creating another".into();
+            } else if let Some(parent) = parent {
+                let path = parent.join(format!("{}.quarkui", self.new_layout_name));
+                match designer::Designer::create(path) {
+                    Ok(document) => {
+                        self.designer = Some(document);
+                        self.designer_active = true;
+                        self.active = None;
+                        self.workspace_requested = true;
+                        self.show_new_layout = false;
+                    }
+                    Err(error) => self.status = error,
+                }
+            }
+        }
+        if !open {
+            self.show_new_layout = false;
+        }
+    }
+
     fn request_exit(&mut self, ctx: &egui::Context) {
         if self.docs.iter().any(|d| d.text != d.saved)
+            || self.designer.as_ref().is_some_and(|d| d.dirty)
             || self.job_rx.is_some()
             || self.terminal.as_ref().is_some_and(|t| t.exited.is_none())
         {
@@ -426,6 +622,18 @@ impl Quark {
             diagnostic_rx: None,
             analysis_complete: false,
             files_scanned: 0,
+            designer: None,
+            designer_active: false,
+            pending_designer_close: false,
+            show_new_project: false,
+            new_project_name: "MyHydrogenApp".into(),
+            new_project_parent: std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .to_string_lossy()
+                .into_owned(),
+            new_project_template: startup::Template::Linux,
+            show_new_layout: false,
+            new_layout_name: "Main".into(),
         };
         if q.settings.compiler.is_empty() {
             q.settings.compiler = "hy".into();
@@ -632,6 +840,11 @@ impl Quark {
         self.request_diagnostic_scan();
     }
     fn open(&mut self, path: PathBuf) {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
+            self.open_designer(path);
+            return;
+        }
+        self.designer_active = false;
         let path = path.canonicalize().unwrap_or(path);
         // Editing a manifest is a file operation. Workspace roots are added only
         // by an explicit Open Project or Select as build project action.
@@ -738,6 +951,9 @@ impl Quark {
         }
     }
     fn save_all(&mut self) -> bool {
+        if self.designer.as_ref().is_some_and(|d| d.dirty) && !self.save_designer() {
+            return false;
+        }
         for i in 0..self.docs.len() {
             if (self.docs[i].text != self.docs[i].saved || self.docs[i].path.is_none())
                 && !self.save(i)
@@ -1115,9 +1331,7 @@ impl Quark {
             self.save_all();
         }
         if take_key(ctx, cmd, Key::S) {
-            if let Some(i) = self.active {
-                self.save(i);
-            }
+            self.save_active();
         }
         if take_key(ctx, cmd | Modifiers::SHIFT, Key::F) {
             self.show_sidebar(SidebarView::Search);
@@ -1210,6 +1424,7 @@ impl Quark {
         };
     }
     fn new_document(&mut self) {
+        self.designer_active = false;
         self.docs.push(Document {
             id: self.next_doc_id,
             path: None,
@@ -1642,14 +1857,16 @@ impl eframe::App for Quark {
                 window::caption(ui,self.settings.integrated_title_bar);
                 ui.separator();
                 ui.menu_button("File",|ui|{
-                    if ui.button("New  Ctrl+N").clicked(){self.new_document();ui.close_menu();}
+                    if ui.button("New Hydrogen project…").clicked(){self.start_project_dialog();ui.close_menu();}
+                    if ui.button("New UI layout…").clicked(){self.show_new_layout=true;ui.close_menu();}
+                    if ui.button("New file  Ctrl+N").clicked(){self.new_document();ui.close_menu();}
                     if ui.button("Open file  Ctrl+O").clicked(){if let Some(p)=rfd::FileDialog::new().pick_file(){self.open(p);}ui.close_menu();}
                     if ui.button("Open Folder…").clicked(){if let Some(p)=rfd::FileDialog::new().pick_folder(){self.add_folder(p);}ui.close_menu();}
                     if ui.button("Open .hyproj").clicked(){if let Some(p)=rfd::FileDialog::new().add_filter("Hydrogen project", &["hyproj"]).pick_file(){self.add_project(p);}ui.close_menu();}
-                    if ui.button("Save  Ctrl+S").clicked(){if let Some(idx)=self.active {self.save(idx);}ui.close_menu();}
+                    if ui.button("Save  Ctrl+S").clicked(){self.save_active();ui.close_menu();}
                     if ui.button("Save As…  Ctrl+Shift+S").clicked(){if let Some(i)=self.active{self.save_document(i,false,true);}ui.close_menu();}
                     if ui.button("Save all  Ctrl+Alt+S").clicked(){self.save_all();ui.close_menu();}
-                    if ui.button("Close editor  Ctrl+W").clicked(){if let Some(i)=self.active{self.close(i);}ui.close_menu();}
+                    if ui.button("Close editor  Ctrl+W").clicked(){if self.designer_active{self.close_designer();}else if let Some(i)=self.active{self.close(i);}ui.close_menu();}
                 });
                 ui.menu_button("Edit",|ui|{
                     if ui.button("Completion  Ctrl/Cmd+Space").clicked(){self.manual_completion=true;ui.close_menu();}
@@ -1660,6 +1877,21 @@ impl eframe::App for Quark {
                     if ui.button("Duplicate line · Ctrl+Shift+D").clicked(){self.duplicate_active_line(ctx);ui.close_menu();}
                     if ui.button("Next tab · Ctrl+Tab").clicked(){self.next_tab(false);ui.close_menu();}
                     if ui.button("Command Palette…  F1").clicked(){self.show_palette=true;self.palette_focus=true;ui.close_menu();}
+                });
+                ui.menu_button("Project",|ui|{
+                    if ui.button("Create new project…").clicked(){self.start_project_dialog();ui.close_menu();}
+                    if ui.button("New UI layout…").clicked(){self.show_new_layout=true;ui.close_menu();}
+                    if ui.button("Open Hydrogen project…").clicked(){if let Some(p)=rfd::FileDialog::new().add_filter("Hydrogen project",&["hyproj"]).pick_file(){self.add_project(p);}ui.close_menu();}
+                    if ui.button("Solution Explorer").clicked(){self.show_sidebar(SidebarView::Explorer);ui.close_menu();}
+                });
+                ui.menu_button("Build",|ui|{
+                    if ui.button("Build selected project  Ctrl+Shift+B").clicked(){self.build(BuildScope::Project);ui.close_menu();}
+                    if ui.button("Compile current file").clicked(){self.build(BuildScope::CurrentFile);ui.close_menu();}
+                    if ui.button("Check project").clicked(){self.hydrogen("check");ui.close_menu();}
+                });
+                ui.menu_button("Debug",|ui|{
+                    if ui.button("Start without debugging  Ctrl+F5").clicked(){self.hydrogen("run");ui.close_menu();}
+                    ui.add_enabled(false,egui::Button::new("Start debugging (requires Hydrogen debug symbols)"));
                 });
                 ui.menu_button("Hydrogen",|ui|{
                     if ui.button("Build active project  Ctrl+Shift+B").clicked(){self.build(BuildScope::Project);ui.close_menu();}
@@ -1699,7 +1931,7 @@ impl eframe::App for Quark {
                 });
                 ui.menu_button("Help",|ui|{
                     ui.label(format!("Quark IDE {}",env!("CARGO_PKG_VERSION")));
-                    if ui.button("Welcome").clicked(){self.active=None;ui.close_menu();}
+                    if ui.button("Start Window").clicked(){self.show_welcome();ui.close_menu();}
                     if ui.button("Command Palette…  F1").clicked(){self.show_palette=true;self.palette_focus=true;ui.close_menu();}
                     if ui.button("Settings").clicked(){self.show_settings=true;ui.close_menu();}
                 });
@@ -1710,6 +1942,7 @@ impl eframe::App for Quark {
                     let scope=if ui.input(|i|i.modifiers.shift){BuildScope::CurrentFile}else{BuildScope::Project};
                     self.build(scope);
                 }
+                if ui.small_button("▶ Run").on_hover_text("Start selected Hydrogen project without debugger").clicked(){self.hydrogen("run");}
                 if ui.small_button("Check").on_hover_text("Check Hydrogen project").clicked(){self.hydrogen("check");}
                 if ui.small_button("Find").on_hover_text("Find in file · Ctrl+F").clicked(){self.show_sidebar(SidebarView::Search);self.show_search=true;self.find_focus=true;}
                 let reserved=if self.settings.integrated_title_bar {175.0} else {76.0};
@@ -1795,12 +2028,46 @@ impl eframe::App for Quark {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 3.0;
                             let mut close = None;
-                            if (self.active.is_none() || self.docs.is_empty())
-                                && ui
-                                    .selectable_label(self.active.is_none(), "Welcome")
-                                    .clicked()
+                            if ui
+                                .selectable_label(
+                                    self.active.is_none() && !self.designer_active,
+                                    "Start Window",
+                                )
+                                .clicked()
                             {
-                                self.active = None;
+                                self.show_welcome();
+                            }
+                            if let Some(design) = &self.designer {
+                                let caption = if design.dirty {
+                                    format!(
+                                        "● {} [Design]",
+                                        design
+                                            .path
+                                            .file_stem()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                    )
+                                } else {
+                                    format!(
+                                        "{} [Design]",
+                                        design
+                                            .path
+                                            .file_stem()
+                                            .unwrap_or_default()
+                                            .to_string_lossy()
+                                    )
+                                };
+                                if ui.selectable_label(self.designer_active, caption).clicked() {
+                                    self.designer_active = true;
+                                    self.active = None;
+                                }
+                                if ui
+                                    .small_button("×")
+                                    .on_hover_text("Close visual designer")
+                                    .clicked()
+                                {
+                                    self.close_designer();
+                                }
                             }
                             for (i, doc) in self.docs.iter().enumerate() {
                                 if ui
@@ -1818,6 +2085,7 @@ impl eframe::App for Quark {
                                     .clicked()
                                 {
                                     self.active = Some(i);
+                                    self.designer_active = false;
                                 }
                                 if ui.small_button("×").clicked() {
                                     close = Some(i);
@@ -1858,7 +2126,11 @@ impl eframe::App for Quark {
                 }
 
                 ui.separator();
-                if let Some(i) = self.active {
+                if self.designer_active {
+                    if let Some(document) = self.designer.as_mut() {
+                        document.show(ui);
+                    }
+                } else if let Some(i) = self.active {
                     let active_diags = self
                         .docs
                         .get(i)
@@ -2392,6 +2664,8 @@ impl eframe::App for Quark {
                 self.show_clone = false;
             }
         }
+        self.new_project_dialog(ctx);
+        self.new_layout_dialog(ctx);
         self.catalog_windows(ctx);
         self.safety_dialogs(ctx);
         if self.settings.integrated_title_bar && !self.exit_requested {

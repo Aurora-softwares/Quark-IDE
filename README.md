@@ -6,6 +6,16 @@ Current development status, next target and release gates are tracked in [Hydrog
 
 ![Quark IDE themes and welcome controls](assets/quark-catalogues.png)
 
+## Start Window and visual application designer
+
+When there is no active editor tab, Quark opens its **Start Window**. Choose **Create a new project…** to select a parent folder, a project name, and a Hydrogen target template (Linux, Windows, macOS, Australis executable or library). Quark creates a directory with `Program.hy` and a format-2 `.hyproj`, opens it in Solution Explorer, and creates a `Main.quarkui` layout. Existing folders and Hydrogen projects can be reopened using the recent-projects list.
+
+Choose **File > New UI layout…** or **Solution Explorer > New UI** to add a `.quarkui` file to the selected project. The designer contains a **Toolbox**, **Design surface**, and **Properties** inspector. Drag a Label, Button, Text box or Check box from the toolbox onto the canvas; drag placed controls to move them, select one to edit its name, caption, position and size, and save using Ctrl/Cmd+S. The canvas can scroll when the IDE window is narrow.
+
+**Important:** `.quarkui` is Quark's version-1 JSON design format, *not* compiled Hydrogen source. The designer provides visual layout editing and safe save/open round-trips, but automatic Hydrogen.UI code generation and native runtime previews are planned future work. Quark warns about unsaved layouts on close/exit and refuses to silently overwrite externally modified layout files. The document-recovery mechanism currently applies to source buffers rather than unsaved designer layouts.
+
+The Debug menu distinguishes **Run without debugging** from a real debugger; source-level debugging still requires Hydrogen debug information and a supported native debugger adapter.
+
 ## Start working
 
 1. Choose **Open Hydrogen Project** on Welcome, or **File > Open .hyproj**. For standalone work, choose Open Folder or Open File.
