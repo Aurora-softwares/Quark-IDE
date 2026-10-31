@@ -1,8 +1,12 @@
 name: Quark CI
 on:
   push:
+    branches: [Development]
   pull_request:
   workflow_dispatch:
+concurrency:
+  group: quark-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     strategy:
