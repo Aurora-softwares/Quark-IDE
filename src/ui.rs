@@ -33,77 +33,74 @@ const ACTIONS: &[&str] = &[
 impl Quark {
     pub(crate) fn welcome(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.add_space(36.0);
-            ui.horizontal(|ui| {
-                ui.add_space(28.0);
-                ui.vertical(|ui| {
-                    ui.label(
-                        RichText::new("Quark")
-                            .size(48.0)
-                            .color(theme::colors(ui.ctx()).text.color()),
-                    );
-                    ui.label(
-                        RichText::new("Your workspace for Hydrogen")
-                            .size(21.0)
-                            .color(theme::colors(ui.ctx()).muted.color()),
-                    );
-                    ui.add_space(10.0);
-                    ui.label("Open a project, settle in, and start building.");
-                    ui.add_space(24.0);
-                    if ui.available_width() > 650.0 {
-                        ui.columns(2, |cols| {
-                            self.welcome_start(&mut cols[0]);
-                            self.welcome_guide(&mut cols[1]);
-                        });
-                    } else {
-                        self.welcome_start(ui);
-                        ui.add_space(20.0);
-                        self.welcome_guide(ui);
-                    }
-                    ui.add_space(24.0);
-                    ui.label(
-                        RichText::new(
-                            "Native Rust editor  ·  Local files and tools  ·  Made for Hydrogen",
-                        )
-                        .small()
+            ui.add_space(28.0);
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    RichText::new("QUARK")
+                        .size(42.0)
+                        .strong()
+                        .color(theme::colors(ui.ctx()).accent.color()),
+                );
+                ui.label(RichText::new("Start Window").size(24.0).strong());
+                ui.label(
+                    RichText::new("Create, open, build and design Hydrogen applications")
                         .color(theme::colors(ui.ctx()).muted.color()),
-                    );
-                });
+                );
+            });
+            ui.add_space(24.0);
+            ui.horizontal(|ui| {
+                ui.add_space(20.0);
+                if ui.available_width() > 650.0 {
+                    ui.columns(2, |columns| {
+                        self.welcome_start(&mut columns[0]);
+                        self.welcome_guide(&mut columns[1]);
+                    });
+                } else {
+                    ui.vertical(|ui| {
+                        self.welcome_start(ui);
+                        ui.add_space(18.0);
+                        self.welcome_guide(ui);
+                    });
+                }
             });
         });
     }
+
     fn welcome_start(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Start");
-        ui.add_space(8.0);
-        for (title, action) in [
-            ("New File…", 0),
-            ("Open File…", 1),
-            ("Open Folder…", 2),
-            ("Open Hydrogen Project…", 3),
-        ] {
-            if ui
-                .add(
-                    egui::Button::new(
-                        RichText::new(title).color(theme::colors(ui.ctx()).accent.color()),
-                    )
-                    .frame(false),
-                )
-                .clicked()
-            {
-                self.action(action, ui.ctx());
-            }
-        }
-        ui.add_space(18.0);
-        ui.heading("Recent workspaces");
+        egui::Frame::new()
+            .fill(theme::colors(ui.ctx()).surface.color())
+            .corner_radius(8)
+            .inner_margin(16)
+            .show(ui, |ui| {
+                ui.heading("Get started");
+                ui.add_space(8.0);
+                if ui.button("Create a new project…").clicked() {
+                    self.start_project_dialog();
+                }
+                if ui.button("Open an existing project…").clicked() {
+                    self.action(3, ui.ctx());
+                }
+                if ui.button("Open a folder…").clicked() {
+                    self.action(2, ui.ctx());
+                }
+                if ui.button("New UI layout…").clicked() {
+                    self.show_new_layout = true;
+                }
+                if ui.button("New File…").clicked() {
+                    self.action(0, ui.ctx());
+                }
+            });
+        ui.add_space(14.0);
+        ui.heading("Recent projects and folders");
         ui.add_space(6.0);
         let recent = self.settings.recent_workspaces.clone().unwrap_or_default();
         if recent.is_empty() {
             ui.label(
-                RichText::new("Your projects and folders will appear here.")
+                RichText::new("Your recently opened projects appear here.")
                     .color(theme::colors(ui.ctx()).muted.color()),
             );
         }
-        for entry in recent.into_iter().take(10) {
+        for entry in recent.into_iter().take(12) {
             let path = &entry.path;
             ui.push_id((&entry.path, entry.project), |ui| {
                 ui.horizontal(|ui| {
@@ -115,11 +112,13 @@ impl Quark {
                     .unwrap_or_default()
                     .to_string_lossy();
                     if ui
-                        .link(title)
+                        .link(format!("{}  {}", if entry.project { "▣" } else { "▤" }, title))
                         .on_hover_text(path.display().to_string())
                         .clicked()
                     {
-                        if entry.project {
+                        if !path.exists() {
+                            self.status = format!("Recent workspace not found: {}", path.display());
+                        } else if entry.project {
                             self.add_project(path.clone());
                         } else {
                             self.add_folder(path.clone());
@@ -128,10 +127,8 @@ impl Quark {
                             self.tree_revision += 1;
                         }
                     }
-                    if ui
-                        .small_button("×")
-                        .on_hover_text("Remove from recent workspaces")
-                        .clicked()
+                    if ui.small_button("×")
+                        .on_hover_text("Remove from recent projects").clicked()
                     {
                         self.remove_recent(&entry);
                     }
@@ -146,7 +143,7 @@ impl Quark {
     }
 
     fn welcome_guide(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Get comfortable");
+        ui.heading("Development tools");
         ui.add_space(8.0);
         if (!self.settings.welcome_shortcuts_visible || !self.settings.welcome_build_visible)
             && ui.small_button("Restore hidden sections").clicked()
@@ -162,7 +159,7 @@ impl Quark {
                 .corner_radius(5)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Coming from VS Code?").strong().size(16.0));
+                        ui.label(RichText::new("IDE shortcuts").strong().size(16.0));
                         if ui
                             .small_button("×")
                             .on_hover_text("Hide shortcut guide")
