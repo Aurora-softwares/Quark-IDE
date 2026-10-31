@@ -52,11 +52,16 @@ fn location(text: &str) -> Option<(&str, usize, Option<usize>)> {
 fn parse_line(raw: &str, cwd: &Path) -> Option<Problem> {
     let line = raw.trim();
     let lower = line.to_ascii_lowercase();
-    let (position, marker, severity) = [(": error:", Severity::Error), (": warning:", Severity::Warning)]
-        .into_iter()
-        .find_map(|(marker, severity)| {
-            lower.find(marker).map(|position| (position, marker, severity))
-        })?;
+    let (position, marker, severity) = [
+        (": error:", Severity::Error),
+        (": warning:", Severity::Warning),
+    ]
+    .into_iter()
+    .find_map(|(marker, severity)| {
+        lower
+            .find(marker)
+            .map(|position| (position, marker, severity))
+    })?;
     let (file, line_number, column) = location(&line[..position])?;
     // Keep unrelated program logs and terminal output out of the Error List.
     let file_lower = file.to_ascii_lowercase();
@@ -125,7 +130,10 @@ mod tests {
 
     #[test]
     fn accepts_windows_drive_colons_without_confusing_line_numbers() {
-        let errors = parse(r"C:\Projects\My App\Main.hy:29:4: error: Bad value", Path::new("."));
+        let errors = parse(
+            r"C:\Projects\My App\Main.hy:29:4: error: Bad value",
+            Path::new("."),
+        );
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].line, 29);
         assert_eq!(errors[0].column, Some(4));
