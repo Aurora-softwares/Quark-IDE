@@ -160,10 +160,20 @@ impl Quark {
             if ui::view_tab(ui, "Solution", self.explorer_view == ExplorerView::Files).clicked() {
                 self.explorer_view = ExplorerView::Files;
             }
-            if ui::view_tab(ui, "Class View", self.explorer_view == ExplorerView::Outline).clicked() {
+            if ui::view_tab(
+                ui,
+                "Class View",
+                self.explorer_view == ExplorerView::Outline,
+            )
+            .clicked()
+            {
                 self.explorer_view = ExplorerView::Outline;
             }
-            if ui.small_button("New UI").on_hover_text("Add a visual UI layout to the selected project").clicked() {
+            if ui
+                .small_button("New UI")
+                .on_hover_text("Add a visual UI layout to the selected project")
+                .clicked()
+            {
                 self.show_new_layout = true;
             }
             if ui.small_button("Refresh").clicked() {
