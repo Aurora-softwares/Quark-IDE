@@ -132,7 +132,7 @@ impl Quark {
         });
         ui.separator();
         let title = match self.settings.sidebar_view {
-            SidebarView::Explorer => "EXPLORER",
+            SidebarView::Explorer => "SOLUTION EXPLORER",
             SidebarView::Search => "SEARCH",
             SidebarView::SourceControl => "SOURCE CONTROL",
             SidebarView::Plugins => "EXTENSIONS",
@@ -162,6 +162,13 @@ impl Quark {
             }
             if ui::view_tab(ui, "Symbols", self.explorer_view == ExplorerView::Outline).clicked() {
                 self.explorer_view = ExplorerView::Outline;
+            }
+            if ui
+                .small_button("New UI")
+                .on_hover_text("Add a visual UI layout to the selected project")
+                .clicked()
+            {
+                self.show_new_layout = true;
             }
             if ui.small_button("Refresh").clicked() {
                 self.workspace_requested = true;
