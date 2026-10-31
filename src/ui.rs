@@ -115,11 +115,7 @@ impl Quark {
                     .unwrap_or_default()
                     .to_string_lossy();
                     if ui
-                        .link(format!(
-                            "{}  {}",
-                            if entry.project { "▣" } else { "▤" },
-                            title
-                        ))
+                        .link(title)
                         .on_hover_text(path.display().to_string())
                         .clicked()
                     {
