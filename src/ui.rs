@@ -29,6 +29,9 @@ const ACTIONS: &[&str] = &[
     "Preferences: Themes",
     "View: Show Terminal",
     "View: Show Output",
+    "File: Create New Project",
+    "File: New UI Layout",
+    "View: Start Window",
 ];
 impl Quark {
     pub(crate) fn welcome(&mut self, ui: &mut egui::Ui) {
@@ -237,11 +240,7 @@ impl Quark {
                     self.add_project(p);
                 }
             }
-            4 => {
-                if let Some(i) = self.active {
-                    self.save(i);
-                }
-            }
+            4 => { self.save_active(); }
             5 => {
                 if let Some(i) = self.active {
                     self.save_document(i, false, true);
@@ -272,7 +271,7 @@ impl Quark {
                 self.settings.terminal_visible = !self.settings.terminal_visible;
                 self.persist();
             }
-            15 => self.active = None,
+            15 => self.show_welcome(),
             16 => self.show_settings = true,
             17 => self.show_sidebar(SidebarView::Plugins),
             18 => {
@@ -312,6 +311,9 @@ impl Quark {
                 self.settings.bottom_tab = BottomTab::Output;
                 self.persist();
             }
+            28 => self.start_project_dialog(),
+            29 => self.show_new_layout = true,
+            30 => self.show_welcome(),
             _ => {}
         }
         ctx.request_repaint();
@@ -427,6 +429,33 @@ impl Quark {
         self.save_session();
     }
     pub(crate) fn safety_dialogs(&mut self, ctx: &egui::Context) {
+        if self.pending_designer_close {
+            let title = self.designer.as_ref().map(|d| d.path.display().to_string()).unwrap_or_default();
+            let result = egui::Modal::new(egui::Id::new("confirm-designer-close")).show(ctx, |ui| {
+                ui.heading("Save the visual layout before closing?");
+                ui.label(title);
+                ui.horizontal(|ui| {
+                    if ui.button("Save and close").clicked() && self.save_designer() {
+                        self.designer = None;
+                        self.designer_active = false;
+                        self.pending_designer_close = false;
+                    }
+                    if ui.button("Discard changes").clicked() {
+                        self.designer = None;
+                        self.designer_active = false;
+                        self.pending_designer_close = false;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.pending_designer_close = false;
+                    }
+                });
+            });
+            if result.should_close() {
+                self.pending_designer_close = false;
+            }
+            return;
+        }
+
         if let Some(index) = self.pending_conflict {
             if index >= self.docs.len() {
                 self.pending_conflict = None;
@@ -462,6 +491,11 @@ impl Quark {
             let response = egui::Modal::new(egui::Id::new("confirm-exit")).show(ctx, |ui| {
                 ui.set_max_width(480.0);
                 ui.heading("Save your work before closing?");
+                if let Some(designer) = &self.designer {
+                    if designer.dirty {
+                        ui.label(format!("UI layout: {}", designer.path.display()));
+                    }
+                }
                 for doc in &self.docs {
                     if doc.text != doc.saved {
                         ui.label(
