@@ -226,6 +226,7 @@ impl Designer {
             }
         });
         ui.separator();
+        let canvas_view_width = (ui.available_width() - 380.0).max(180.0);
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(145.0);
@@ -249,12 +250,14 @@ impl Designer {
             });
             ui.separator();
             ui.vertical(|ui| {
+                ui.set_width(canvas_view_width);
                 ui.heading("Design surface");
                 ui.label(
                     RichText::new("Visual layout preview · not yet generated Hydrogen code")
                         .small(),
                 );
                 egui::ScrollArea::both()
+                    .max_width(canvas_view_width)
                     .id_salt("quark-designer-canvas-scroll")
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
