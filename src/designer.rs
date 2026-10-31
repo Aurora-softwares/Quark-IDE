@@ -5,7 +5,11 @@
 use crate::storage;
 use eframe::egui::{self, Align2, Color32, FontId, RichText, Sense, Stroke};
 use serde::{Deserialize, Serialize};
-use std::{fs, io::Write, path::{Path, PathBuf}};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -74,9 +78,7 @@ impl Layout {
         if self.version != 1 {
             return Err("Unsupported layout version (expected version 1)".into());
         }
-        if !(320.0..=4096.0).contains(&self.width)
-            || !(240.0..=4096.0).contains(&self.height)
-        {
+        if !(320.0..=4096.0).contains(&self.width) || !(240.0..=4096.0).contains(&self.height) {
             return Err("Canvas must be between 320x240 and 4096x4096".into());
         }
         if self.controls.len() > 500 {
@@ -108,7 +110,12 @@ impl Layout {
         if self.controls.len() >= 500 {
             return Err("The layout already contains 500 controls".into());
         }
-        let id = self.controls.iter().map(|item| item.id).max().unwrap_or(0)
+        let id = self
+            .controls
+            .iter()
+            .map(|item| item.id)
+            .max()
+            .unwrap_or(0)
             .checked_add(1)
             .ok_or("Control IDs exhausted")?;
         let [width, height] = kind.size();
@@ -161,7 +168,14 @@ impl Designer {
         }
         let layout: Layout = serde_json::from_str(&saved).map_err(|e| e.to_string())?;
         layout.validate()?;
-        Ok(Self { path, layout, dirty: false, selected: None, dragging: None, saved })
+        Ok(Self {
+            path,
+            layout,
+            dirty: false,
+            selected: None,
+            dragging: None,
+            saved,
+        })
     }
 
     pub fn create(path: PathBuf) -> Result<Self, String> {
@@ -172,15 +186,17 @@ impl Designer {
             .create_new(true)
             .open(&path)
             .map_err(|e| format!("Cannot create layout: {e}"))?;
-        file.write_all(saved.as_bytes()).map_err(|e| e.to_string())?;
+        file.write_all(saved.as_bytes())
+            .map_err(|e| e.to_string())?;
         Self::open(path)
     }
 
     pub fn save(&mut self) -> Result<(), String> {
         self.layout.validate()?;
         let content = serde_json::to_string_pretty(&self.layout).map_err(|e| e.to_string())?;
-        storage::save_checked(&self.path, &content, &self.saved)
-            .map_err(|error| format!("Layout save failed: {error:?}. File may have changed on disk."))?;
+        storage::save_checked(&self.path, &content, &self.saved).map_err(|error| {
+            format!("Layout save failed: {error:?}. File may have changed on disk.")
+        })?;
         self.saved = content;
         self.dirty = false;
         Ok(())
@@ -238,7 +254,10 @@ impl Designer {
             ui.separator();
             ui.vertical(|ui| {
                 ui.heading("Design surface");
-                ui.label(RichText::new("Visual layout preview · not yet generated Hydrogen code").small());
+                ui.label(
+                    RichText::new("Visual layout preview · not yet generated Hydrogen code")
+                        .small(),
+                );
                 egui::ScrollArea::both()
                     .id_salt("quark-designer-canvas-scroll")
                     .auto_shrink([false, false])
@@ -247,7 +266,8 @@ impl Designer {
                             egui::vec2(self.layout.width, self.layout.height),
                             Sense::click(),
                         );
-                        ui.painter().rect_filled(canvas, 4.0, Color32::from_rgb(244, 247, 251));
+                        ui.painter()
+                            .rect_filled(canvas, 4.0, Color32::from_rgb(244, 247, 251));
                         if response.clicked() {
                             self.selected = None;
                         }
@@ -259,7 +279,8 @@ impl Designer {
                             );
                             self.paint_control(ui.painter(), rect, control);
                             let hit = ui.interact(
-                                rect, ui.id().with(("designer-control", control.id)),
+                                rect,
+                                ui.id().with(("designer-control", control.id)),
                                 Sense::click_and_drag(),
                             );
                             if hit.clicked() || hit.drag_started() {
@@ -284,8 +305,11 @@ impl Designer {
                                     self.dragging = None;
                                 } else {
                                     ui.ctx().debug_painter().text(
-                                        pointer, Align2::LEFT_BOTTOM, kind.label(),
-                                        FontId::proportional(14.0), Color32::LIGHT_BLUE,
+                                        pointer,
+                                        Align2::LEFT_BOTTOM,
+                                        kind.label(),
+                                        FontId::proportional(14.0),
+                                        Color32::LIGHT_BLUE,
                                     );
                                 }
                             }
@@ -309,13 +333,17 @@ impl Designer {
                             ("X", &mut control.x, self.layout.width - control.width),
                             ("Y", &mut control.y, self.layout.height - control.height),
                             ("Width", &mut control.width, self.layout.width - control.x),
-                            ("Height", &mut control.height, self.layout.height - control.y),
+                            (
+                                "Height",
+                                &mut control.height,
+                                self.layout.height - control.y,
+                            ),
                         ] {
                             ui.horizontal(|ui| {
                                 ui.label(label);
-                                changed |= ui.add(
-                                    egui::DragValue::new(value).range(20.0_f32.min(max)..=max)
-                                ).changed();
+                                changed |= ui
+                                    .add(egui::DragValue::new(value).range(20.0_f32.min(max)..=max))
+                                    .changed();
                             });
                         }
                         self.dirty |= changed;
@@ -332,7 +360,10 @@ impl Designer {
                 ui.heading("Window");
                 ui.label("Title");
                 self.dirty |= ui.text_edit_singleline(&mut self.layout.title).changed();
-                ui.label(format!("{:.0} × {:.0}", self.layout.width, self.layout.height));
+                ui.label(format!(
+                    "{:.0} × {:.0}",
+                    self.layout.width, self.layout.height
+                ));
             });
         });
     }
@@ -341,18 +372,33 @@ impl Designer {
         let foreground = Color32::from_rgb(35, 43, 54);
         match control.kind {
             Kind::Label => {
-                painter.text(rect.left_center(), Align2::LEFT_CENTER, &control.text,
-                    FontId::proportional(15.0), foreground);
+                painter.text(
+                    rect.left_center(),
+                    Align2::LEFT_CENTER,
+                    &control.text,
+                    FontId::proportional(15.0),
+                    foreground,
+                );
             }
             Kind::Button => {
                 painter.rect_filled(rect, 5.0, Color32::from_rgb(212, 228, 247));
-                painter.text(rect.center(), Align2::CENTER_CENTER, &control.text,
-                    FontId::proportional(15.0), foreground);
+                painter.text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    &control.text,
+                    FontId::proportional(15.0),
+                    foreground,
+                );
             }
             Kind::TextField => {
                 painter.rect_filled(rect, 3.0, Color32::WHITE);
-                painter.text(rect.left_center() + egui::vec2(8.0, 0.0), Align2::LEFT_CENTER,
-                    &control.text, FontId::proportional(15.0), foreground);
+                painter.text(
+                    rect.left_center() + egui::vec2(8.0, 0.0),
+                    Align2::LEFT_CENTER,
+                    &control.text,
+                    FontId::proportional(15.0),
+                    foreground,
+                );
             }
             Kind::Checkbox => {
                 let check = egui::Rect::from_min_size(
@@ -360,8 +406,13 @@ impl Designer {
                     egui::vec2(16.0, 16.0),
                 );
                 painter.rect_filled(check, 2.0, Color32::WHITE);
-                painter.text(check.right_center() + egui::vec2(8.0, 0.0), Align2::LEFT_CENTER,
-                    &control.text, FontId::proportional(15.0), foreground);
+                painter.text(
+                    check.right_center() + egui::vec2(8.0, 0.0),
+                    Align2::LEFT_CENTER,
+                    &control.text,
+                    FontId::proportional(15.0),
+                    foreground,
+                );
             }
         }
         if self.selected == Some(control.id) {
@@ -408,7 +459,11 @@ mod tests {
     fn refuses_invalid_and_untrusted_layout_files() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("Bad.quarkui");
-        fs::write(&path, r#"{"version":999,"title":"bad","width":720,"height":480,"controls":[]}"#).unwrap();
+        fs::write(
+            &path,
+            r#"{"version":999,"title":"bad","width":720,"height":480,"controls":[]}"#,
+        )
+        .unwrap();
         assert!(Designer::open(path.clone()).is_err());
         let mut layout = Layout::default();
         layout.add(Kind::Checkbox, 8.0, 8.0).unwrap();
