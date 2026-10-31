@@ -10,7 +10,11 @@ struct Harness {
 }
 impl Harness {
     fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
+        // macOS may report /var via a symlink to /private/var; normalise
+        // the test sandbox to the same path used by Quark's canonicalize().
+        let root = std::env::temp_dir();
+        let canonical_root = root.canonicalize().unwrap_or(root);
+        let dir = tempfile::tempdir_in(canonical_root).unwrap();
         let mut q = Quark::from_state(Settings::default(), Session::default(), None, None);
         q.workspace_requested = false;
         q.settings.automatic_completion = false;

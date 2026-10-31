@@ -341,10 +341,16 @@ pub fn scan(revision: u64, selected: Option<&Path>, open_docs: &[(PathBuf, Strin
 mod tests {
     use super::*;
     fn temporary(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("quark-diag-{name}-{}", std::process::id()));
+        let tmp = std::env::temp_dir();
+        let root = tmp
+            .canonicalize()
+            .unwrap_or(tmp)
+            .join(format!("quark-diag-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        root
+        // Project::load returns canonical source paths (including Windows
+        // verbatim paths); test keys must use that same representation.
+        root.canonicalize().unwrap_or(root)
     }
     #[test]
     fn private_unused_and_referenced_across_projects() {

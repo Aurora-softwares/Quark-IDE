@@ -491,11 +491,12 @@ impl Quark {
     }
     pub(crate) fn bottom_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui|{
-            for(tab,label)in[(BottomTab::Terminal,"Terminal"),(BottomTab::Output,"Output")]{if ui.selectable_label(self.settings.bottom_tab==tab,label).clicked(){self.settings.bottom_tab=tab;self.persist();if tab==BottomTab::Terminal{if let Some(t)=&mut self.terminal{t.request_focus();}}}}
+            for(tab,label)in[(BottomTab::Terminal,"Terminal"),(BottomTab::Output,"Output"),(BottomTab::Problems,"Problems")]{if ui.selectable_label(self.settings.bottom_tab==tab,label).clicked(){self.settings.bottom_tab=tab;self.persist();if tab==BottomTab::Terminal{if let Some(t)=&mut self.terminal{t.request_focus();}}}}
             if self.settings.bottom_tab==BottomTab::Output&&self.job_rx.is_some(){ui.spinner();if ui.small_button("Stop job").clicked(){if let Some(flag)=&self.job_cancel{flag.store(true,Ordering::Relaxed);}}}
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
                 if ui.small_button("×").on_hover_text("Hide bottom panel · Ctrl+`").clicked(){self.settings.terminal_visible=false;self.persist();}
                 match self.settings.bottom_tab{
+                    BottomTab::Problems=>{if ui.small_button("Clear problems").clicked(){self.problems.clear();self.problem_output.clear();}},
                     BottomTab::Output=>{if ui.small_button("Clear").clicked(){self.output.clear();}
 if ui.small_button("Copy log").clicked(){ui.ctx().copy_text(self.output.clone());}},
                     BottomTab::Terminal=>{if ui.small_button("New session").on_hover_text("End this shell and start a new one in the selected workspace directory").clicked(){self.terminal.take();self.terminal_error=None;}
@@ -504,6 +505,37 @@ if ui.small_button("End session").clicked(){if let Some(t)=&mut self.terminal{t.
             });
         });
         match self.settings.bottom_tab {
+            BottomTab::Problems => {
+                let errors = self
+                    .problems
+                    .iter()
+                    .filter(|p| p.severity == problems::Severity::Error)
+                    .count();
+                let warnings = self.problems.len() - errors;
+                ui.label(format!("{errors} errors · {warnings} warnings"));
+                let mut selected = None;
+                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+                    if self.problems.is_empty() {
+                        ui.label("No file/line compiler diagnostics found in the latest command. See Output for other messages.");
+                    }
+                    for problem in &self.problems {
+                        let severity = match problem.severity {
+                            problems::Severity::Error => "Error",
+                            problems::Severity::Warning => "Warning",
+                        };
+                        let location = format!("{}:{}{}", problem.path.display(), problem.line,
+                            problem.column.map(|col| format!(":{col}")).unwrap_or_default());
+                        if ui.selectable_label(false, format!("{severity} · {location} · {}", problem.message))
+                            .on_hover_text("Open diagnostic location in editor").clicked() {
+                            selected = Some((problem.path.clone(), problem.line));
+                        }
+                    }
+                });
+                if let Some((path, line)) = selected {
+                    self.open(path.clone());
+                    self.pending_line = Some((path.canonicalize().unwrap_or(path), line));
+                }
+            }
             BottomTab::Output => {
                 ui.label(
                     RichText::new(
