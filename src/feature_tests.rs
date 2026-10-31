@@ -2636,3 +2636,51 @@ fn workspace_extension_scope_does_not_follow_terminal_directory_override() {
     assert!(!h.q.extension_enabled(&id));
     assert_eq!(h.q.workspace_root(), Some(root.canonicalize().unwrap()));
 }
+
+
+#[test]
+fn visual_designer_renders_toolbox_and_properties_and_saves() {
+    let mut h = Harness::new();
+    let layout_path = h.dir.path().join("Main.quarkui");
+    h.q.designer = Some(designer::Designer::create(layout_path.clone()).unwrap());
+    h.q.designer_active = true;
+    h.q.active = None;
+    let screen = h.draw(vec![]);
+    assert!(has_text(&screen, "UI Designer"));
+    assert!(has_text(&screen, "Toolbox"));
+    assert!(has_text(&screen, "Properties"));
+    h.q.designer.as_mut().unwrap().add(designer::Kind::Button, 30.0, 44.0).unwrap();
+    assert!(h.q.designer.as_ref().unwrap().dirty);
+    assert!(h.q.save_all());
+    assert!(!h.q.designer.as_ref().unwrap().dirty);
+    h.q.close_designer();
+    assert!(h.q.designer.is_none());
+    h.q.open_designer(layout_path);
+    assert_eq!(h.q.designer.as_ref().unwrap().layout.controls.len(), 1);
+}
+
+#[test]
+fn dirty_visual_layout_requires_confirmation_before_close() {
+    let mut h = Harness::new();
+    let path = h.dir.path().join("Form.quarkui");
+    h.q.designer = Some(designer::Designer::create(path).unwrap());
+    h.q.designer_active = true;
+    h.q.designer.as_mut().unwrap().add(designer::Kind::Label, 10.0, 10.0).unwrap();
+    h.q.close_designer();
+    assert!(h.q.pending_designer_close);
+    assert!(h.q.designer.is_some());
+    assert!(h.q.designer.as_ref().unwrap().dirty);
+    assert!(!h.q.save_active() || h.q.designer.as_ref().is_some_and(|d| !d.dirty));
+}
+
+#[test]
+fn start_window_exposes_create_and_open_project_actions() {
+    let mut h = Harness::new();
+    h.q.show_welcome();
+    let screen = h.draw(vec![]);
+    assert!(has_text(&screen, "Start Window"));
+    assert!(has_text(&screen, "Create a new project"));
+    assert!(has_text(&screen, "Recent projects"));
+    h.q.action(28, &h.ctx);
+    assert!(h.q.show_new_project);
+}
