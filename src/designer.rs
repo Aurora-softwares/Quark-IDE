@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,20 +329,20 @@ impl Designer {
                         changed |= ui.text_edit_singleline(&mut control.name).changed();
                         ui.label("Text");
                         changed |= ui.text_edit_singleline(&mut control.text).changed();
-                        for (label, value, max) in [
-                            ("X", &mut control.x, self.layout.width - control.width),
-                            ("Y", &mut control.y, self.layout.height - control.height),
-                            ("Width", &mut control.width, self.layout.width - control.x),
-                            (
-                                "Height",
-                                &mut control.height,
-                                self.layout.height - control.y,
-                            ),
+                        let max_x = (self.layout.width - control.width).max(0.0);
+                        let max_y = (self.layout.height - control.height).max(0.0);
+                        let max_width = (self.layout.width - control.x).max(20.0);
+                        let max_height = (self.layout.height - control.y).max(20.0);
+                        for (label, value, min, max) in [
+                            ("X", &mut control.x, 0.0_f32, max_x),
+                            ("Y", &mut control.y, 0.0_f32, max_y),
+                            ("Width", &mut control.width, 20.0_f32, max_width),
+                            ("Height", &mut control.height, 20.0_f32, max_height),
                         ] {
                             ui.horizontal(|ui| {
                                 ui.label(label);
                                 changed |= ui
-                                    .add(egui::DragValue::new(value).range(20.0_f32.min(max)..=max))
+                                    .add(egui::DragValue::new(value).range(min..=max))
                                     .changed();
                             });
                         }
@@ -416,7 +416,7 @@ impl Designer {
             }
         }
         if self.selected == Some(control.id) {
-            let outline = Stroke::new(2.0, Color32::from_rgb(55, 120, 230));
+            let outline = Stroke::new(2.0_f32, Color32::from_rgb(55, 120, 230));
             painter.line_segment([rect.left_top(), rect.right_top()], outline);
             painter.line_segment([rect.right_top(), rect.right_bottom()], outline);
             painter.line_segment([rect.right_bottom(), rect.left_bottom()], outline);
