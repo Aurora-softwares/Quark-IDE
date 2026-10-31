@@ -132,7 +132,7 @@ impl Quark {
         });
         ui.separator();
         let title = match self.settings.sidebar_view {
-            SidebarView::Explorer => "EXPLORER",
+            SidebarView::Explorer => "SOLUTION EXPLORER",
             SidebarView::Search => "SEARCH",
             SidebarView::SourceControl => "SOURCE CONTROL",
             SidebarView::Plugins => "EXTENSIONS",
@@ -157,11 +157,14 @@ impl Quark {
     }
     fn explorer_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if ui::view_tab(ui, "Files", self.explorer_view == ExplorerView::Files).clicked() {
+            if ui::view_tab(ui, "Solution", self.explorer_view == ExplorerView::Files).clicked() {
                 self.explorer_view = ExplorerView::Files;
             }
-            if ui::view_tab(ui, "Symbols", self.explorer_view == ExplorerView::Outline).clicked() {
+            if ui::view_tab(ui, "Class View", self.explorer_view == ExplorerView::Outline).clicked() {
                 self.explorer_view = ExplorerView::Outline;
+            }
+            if ui.small_button("New UI").on_hover_text("Add a visual UI layout to the selected project").clicked() {
+                self.show_new_layout = true;
             }
             if ui.small_button("Refresh").clicked() {
                 self.workspace_requested = true;
