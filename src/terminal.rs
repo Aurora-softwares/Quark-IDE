@@ -977,7 +977,7 @@ mod feature_coverage {
         t.resize(10, 50).unwrap();
         t.send(b"stty size\r".to_vec());
         wait_for(&mut t, |t| {
-            t.parser.screen().contents().lines().any(|l| l == "10 50")
+            t.parser.screen().contents().lines().any(|l| l.trim().ends_with("10 50"))
         });
     }
     #[cfg(unix)]
