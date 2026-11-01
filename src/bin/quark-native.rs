@@ -311,18 +311,51 @@ fn run_task(
     state: Rc<RefCell<Ide>>,
     output: naui::Label,
     status: naui::Label,
+    error_list: naui::List,
+    error_summary: naui::Label,
+    current_errors: Rc<RefCell<Vec<problems::Problem>>>,
     ui: Ui,
 ) {
     let project = state.borrow().workspace.selected.clone();
     let compiler = std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".into());
+    let project_dir = project
+        .as_ref()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."));
     status.set_text(&format!("{}…", task.label()));
     output.set_text(&format!("Running {}…", task.label()));
     let sender = ui.tasks().channel(move |result: native_commands::ResultLog| {
+        let parsed = problems::parse(&result.text, &project_dir);
+        let errors = parsed
+            .iter()
+            .filter(|item| item.severity == problems::Severity::Error)
+            .count();
+        let warnings = parsed.len() - errors;
+        error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
+        error_list.set_items(
+            &parsed
+                .iter()
+                .map(|item| {
+                    ListItem::new(format!(
+                        "{}: {}:{} — {}",
+                        if item.severity == problems::Severity::Error {
+                            "Error"
+                        } else {
+                            "Warning"
+                        },
+                        item.path.display(),
+                        item.line,
+                        item.message
+                    ))
+                })
+                .collect::<Vec<_>>(),
+        );
+        *current_errors.borrow_mut() = parsed;
         output.set_text(&result.text);
         status.set_text(if result.success {
             "Operation completed successfully"
         } else {
-            "Operation failed — review Output"
+            "Operation failed — review Output and Error List"
         });
     });
     std::thread::spawn(move || {
@@ -678,6 +711,55 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     status_bar.append(&workspace_name);
     root.append(&status_bar);
 
+    // Native docking/tab selection is independent of the active document.
+    let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
+        let bottom_pages = bottom_pages.clone();
+        let output_scroll = output_scroll.clone();
+        let errors_view = errors_view.clone();
+        let debug_view = debug_view.clone();
+        let tests_view = tests_view.clone();
+        let find_view = find_view.clone();
+        move |page| {
+            bottom_pages.clear();
+            match page {
+                1 => bottom_pages.append(&errors_view),
+                2 => bottom_pages.append(&debug_view),
+                3 => bottom_pages.append(&tests_view),
+                4 => bottom_pages.append(&find_view),
+                _ => bottom_pages.append(&output_scroll),
+            }
+        }
+    });
+    for (tab, page) in [
+        (&output_tab, 0),
+        (&errors_tab, 1),
+        (&debug_tab, 2),
+        (&test_tab, 3),
+        (&find_tab, 4),
+    ] {
+        let show_bottom = show_bottom.clone();
+        tab.on_click(move || show_bottom(page));
+    }
+
+    let left_panel: Rc<dyn Fn(usize)> = Rc::new({
+        let left_content = left_content.clone();
+        let toolbox = toolbox.clone();
+        let server_view = server_view.clone();
+        let data_view = data_view.clone();
+        move |index| {
+            left_content.clear();
+            match index {
+                1 => left_content.append(&server_view),
+                2 => left_content.append(&data_view),
+                _ => left_content.append(&toolbox),
+            }
+        }
+    });
+    for (button, index) in [(&toolbox_tab, 0), (&server_tab, 1), (&data_tab, 2)] {
+        let left_panel = left_panel.clone();
+        button.on_click(move || left_panel(index));
+    }
+
     // Pane display is controlled separately from the persistent file model.
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
         let state = state.clone();
@@ -703,6 +785,25 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let show_page = show_page.clone();
         button.on_click(move || show_page(page));
     }
+    for (kind, button) in toolbox_buttons {
+        let show_page = show_page.clone();
+        let state = state.clone();
+        button.on_click(move || {
+            state.borrow_mut().armed = Some(kind);
+            show_page(Page::Design);
+        });
+    }
+    collapse_solution.on_click({
+        let tree = tree.clone();
+        let solution_search = solution_search.clone();
+        let collapsed = Rc::new(std::cell::Cell::new(false));
+        move || {
+            let hidden = !collapsed.get();
+            collapsed.set(hidden);
+            tree.set_visible(!hidden);
+            solution_search.set_visible(!hidden);
+        }
+    });
 
     editor.on_change({
         let state = state.clone();
@@ -718,11 +819,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let tree = tree.clone();
         let recent = recent.clone();
         let workspace_name = workspace_name.clone();
+        let startup_project = startup_project.clone();
+        let solution_query = solution_query.clone();
+        let displayed_paths = displayed_paths.clone();
         move || {
             let ide = state.borrow();
-            let (items, _) = file_items(&ide);
+            let (items, paths) = filtered_file_items(&ide, &solution_query.borrow());
             tree.set_items(&items);
-            workspace_name.set_text(&display_project_name(&ide));
+            *displayed_paths.borrow_mut() = paths;
+            let project_name = display_project_name(&ide);
+            workspace_name.set_text(&project_name);
+            startup_project.set_items(&[&project_name]);
+            startup_project.set_selected(0);
             recent.set_items(
                 &ide.workspace
                     .recent
@@ -731,6 +839,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     .collect::<Vec<_>>(),
             );
         }
+    });
+    solution_search.on_change({
+        let solution_query = solution_query.clone();
+        let refresh_project = refresh_project.clone();
+        move |value| {
+            *solution_query.borrow_mut() = value.to_owned();
+            refresh_project();
+        }
+    });
+    refresh_solution.on_click({
+        let refresh_project = refresh_project.clone();
+        move || refresh_project()
     });
 
     let open_source: Rc<dyn Fn(PathBuf)> = Rc::new({
@@ -877,14 +997,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     });
 
     tree.on_select({
-        let state = state.clone();
+        let displayed_paths = displayed_paths.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
         move |position| {
             if position.len() < 2 || position[0] != 0 {
                 return;
             }
-            let files = file_items(&state.borrow()).1;
+            let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
                 if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
                     open_layout(path);
