@@ -543,11 +543,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // orbit → violet Quark. Leave the native OS controls untouched.
     let command_area = ui.stack(Orientation::Vertical)?;
     let brand_rule = ui.canvas()?;
-    brand_rule.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(4.0)),
-    );
+    brand_rule.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(4.0)));
     brand_rule.on_draw(|painter| {
         let width = painter.width();
         let height = painter.height();
@@ -633,15 +629,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // They are keyboard-focusable platform buttons, not a VS Code activity bar.
     let left_rail = ui.stack(Orientation::Vertical)?;
     left_rail.set_spacing(2.0);
-    left_rail.set_sizing(
-        Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)),
-    );
+    left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
     let rail_accent = ui.canvas()?;
-    rail_accent.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(4.0)),
-    );
+    rail_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(4.0)));
     rail_accent.on_draw(|painter| {
         let (r, g, b) = native_shell::QUARK_VIOLET;
         painter.fill_rect(
@@ -684,11 +674,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let document_tabs = ui.stack(Orientation::Horizontal)?;
     document_tabs.set_spacing(8.0);
     let tab_accent = ui.canvas()?;
-    tab_accent.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(3.0)),
-    );
+    tab_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(3.0)));
     tab_accent.on_draw(|painter| {
         let (r, g, b) = native_shell::HYDROGEN_CYAN;
         painter.fill_rect(
