@@ -64,6 +64,7 @@ struct Ide {
     other_documents: Vec<Document>,
     layout: Option<LayoutDocument>,
     other_layouts: Vec<LayoutDocument>,
+    tab_order: Vec<(Page, PathBuf)>,
     page: Page,
     armed: Option<ControlKind>,
     selected_id: Option<u64>,
@@ -85,6 +86,7 @@ impl Ide {
             other_documents: Vec::new(),
             layout: None,
             other_layouts: Vec::new(),
+            tab_order: Vec::new(),
             page: Page::Empty,
             armed: None,
             selected_id: None,
@@ -106,6 +108,7 @@ impl Ide {
         self.other_documents.clear();
         self.layout = None;
         self.other_layouts.clear();
+        self.tab_order.clear();
         self.page = Page::Empty;
         if let Some(path) = &self.workspace.selected {
             record_recent(path.clone());
@@ -129,6 +132,7 @@ impl Ide {
         self.other_documents.clear();
         self.layout = None;
         self.other_layouts.clear();
+        self.tab_order.clear();
         self.page = Page::Empty;
         record_recent(canonical);
         Ok(())
@@ -143,6 +147,7 @@ impl Ide {
         self.other_documents.clear();
         self.layout = None;
         self.other_layouts.clear();
+        self.tab_order.clear();
         self.page = Page::Empty;
     }
 
@@ -162,6 +167,9 @@ impl Ide {
             if let Some(current) = self.document.replace(loaded) {
                 self.other_documents.push(current);
             }
+        }
+        if !self.tab_order.iter().any(|(kind, p)| *kind == Page::Code && *p == path) {
+            self.tab_order.push((Page::Code, path));
         }
         self.page = Page::Code;
         Ok(())
@@ -184,26 +192,16 @@ impl Ide {
                 self.other_layouts.push(current);
             }
         }
+        if !self.tab_order.iter().any(|(kind, p)| *kind == Page::Design && *p == path) {
+            self.tab_order.push((Page::Design, path));
+        }
         self.page = Page::Design;
         self.selected_id = None;
         Ok(())
     }
 
     fn open_tabs(&self) -> Vec<(Page, PathBuf)> {
-        let mut tabs = Vec::new();
-        for document in &self.other_documents {
-            tabs.push((Page::Code, document.path.clone()));
-        }
-        if let Some(document) = &self.document {
-            tabs.push((Page::Code, document.path.clone()));
-        }
-        for layout in &self.other_layouts {
-            tabs.push((Page::Design, layout.path.clone()));
-        }
-        if let Some(layout) = &self.layout {
-            tabs.push((Page::Design, layout.path.clone()));
-        }
-        tabs
+        self.tab_order.clone()
     }
 
     fn display_page(&self, requested: Page) -> Page {
