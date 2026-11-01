@@ -148,7 +148,14 @@ impl History {
         }
     }
 
+    #[allow(dead_code)] // Compatibility API for the existing launcher model/tests.
     pub fn rows(&self, query: &str, now: u64) -> Vec<Row> {
+        self.rows_collapsed(query, now, &[])
+    }
+
+    /// Visible launcher rows with Visual Studio-style collapsible age groups.
+    /// Search always expands matching results, even if their group is folded.
+    pub fn rows_collapsed(&self, query: &str, now: u64, collapsed: &[AgeGroup]) -> Vec<Row> {
         let query = query.trim().to_lowercase();
         let mut result = Vec::new();
         for group in AgeGroup::ALL {
@@ -165,10 +172,14 @@ impl History {
             if entries.is_empty() {
                 continue;
             }
+            let folded = query.is_empty() && collapsed.contains(&group);
             result.push(Row {
-                title: format!("▸ {}", group.label()),
+                title: format!("{} {}", if folded { "▸" } else { "▾" }, group.label()),
                 path: None,
             });
+            if folded {
+                continue;
+            }
             for entry in entries {
                 let filename = entry.path.file_stem().unwrap_or_default().to_string_lossy();
                 let folder = entry.path.parent().unwrap_or_else(|| Path::new("."));
@@ -231,6 +242,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn age_groups_can_collapse_without_hiding_search_results() {
+        let history = History {
+            recent: vec![Recent {
+                path: PathBuf::from("/tmp/QuarkDemo.hyproj"),
+                opened_at: 200_000,
+                pinned: true,
+            }],
+            ..History::default()
+        };
+        let collapsed = history.rows_collapsed("", 200_100, &[AgeGroup::Pinned]);
+        assert_eq!(collapsed.len(), 1);
+        assert!(collapsed[0].title.contains("Pinned"));
+        assert!(collapsed[0].path.is_none());
+        let searched = history.rows_collapsed("quark", 200_100, &[AgeGroup::Pinned]);
+        assert_eq!(searched.len(), 2);
+        assert!(searched[1].path.is_some());
+    }
+
+    #[test]
+    fn expanded_age_groups_have_headers_and_selectable_entries() {
+        let history = History {
+            recent: vec![Recent {
+                path: PathBuf::from("/tmp/Recent.hyproj"),
+                opened_at: 200_000,
+                pinned: false,
+            }],
+            ..History::default()
+        };
+        let expanded = history.rows_collapsed("", 200_100, &[]);
+        assert!(expanded[0].title.contains("Today"));
+        assert_eq!(
+            expanded[1].path.as_ref().unwrap(),
+            &PathBuf::from("/tmp/Recent.hyproj")
+        );
+    }
+
+    #[test]
     fn recent_projects_group_by_pin_today_week_month_older() {
         let now = 100 * 86_400 + 40_000;
         let mut history = History::default();
@@ -270,7 +318,7 @@ mod tests {
             .collect();
         assert_eq!(
             headings,
-            ["▸ Pinned", "▸ Today", "▸ This week", "▸ This month"]
+            ["▾ Pinned", "▾ Today", "▾ This week", "▾ This month"]
         );
     }
 

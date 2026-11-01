@@ -45,7 +45,9 @@ use std::{
     rc::Rc,
 };
 
-use native_model::{ControlKind, Document, Layout, LayoutDocument, Workspace};
+use native_model::{
+    ControlKind, DockLayout, DockPane, Document, GeometryField, Layout, LayoutDocument, Workspace,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Page {
@@ -436,6 +438,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         1480.0,
         940.0,
     )?;
+    let dock_file = workspace_file().with_file_name("native-docking.json");
+    let dock = Rc::new(RefCell::new(
+        DockLayout::open(&dock_file).unwrap_or_default(),
+    ));
+    let saved_dock = *dock.borrow();
 
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
@@ -507,17 +514,57 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     root.attach(&command_strip, GridCell::new(0, 0));
 
     let toolbox = ui.stack(Orientation::Vertical)?;
-    toolbox.set_spacing(9.0);
+    toolbox.set_spacing(7.0);
     toolbox.append(&ui.label("TOOLBOX")?);
-    toolbox.append(&ui.label("Common Controls")?);
+    let toolbox_search = ui.search_input()?;
+    toolbox_search.set_placeholder("Search controls");
+    toolbox.append(&toolbox_search);
+    let toolbox_items = ui.stack(Orientation::Vertical)?;
+    toolbox_items.set_spacing(4.0);
     let mut toolbox_buttons = Vec::new();
-    for kind in ControlKind::ALL {
-        let button = ui.button(kind.title())?;
-        toolbox.append(&button);
-        toolbox_buttons.push((kind, button));
+    let mut toolbox_headers = Vec::new();
+    for category in ["Common Controls", "Containers", "Display"] {
+        let heading = ui.label(category)?;
+        toolbox_items.append(&heading);
+        toolbox_headers.push((category, heading));
+        for kind in ControlKind::ALL {
+            if kind.category() == category {
+                let button = ui.button(kind.title())?;
+                button.set_sizing(Sizing::fill_width());
+                toolbox_items.append(&button);
+                toolbox_buttons.push((kind, button));
+            }
+        }
     }
-    toolbox.append(&ui.label("Select a control, then click the designer surface to place it.")?);
+    let toolbox_scroll = ui.scroll()?;
+    toolbox_scroll.set_child(&toolbox_items);
+    toolbox_scroll.set_sizing(Sizing::fill());
+    toolbox.append(&toolbox_scroll);
+    toolbox.append(&ui.label("Select a control, then click the design surface.")?);
     toolbox.set_sizing(Sizing::fill());
+    toolbox_search.on_change({
+        let entries = toolbox_items.clone();
+        let controls = toolbox_buttons.clone();
+        move |search| {
+            let query = search.trim().to_lowercase();
+            entries.clear();
+            for (category, header) in &toolbox_headers {
+                let visible = controls
+                    .iter()
+                    .filter(|(kind, _)| {
+                        kind.category() == *category
+                            && (query.is_empty() || kind.title().to_lowercase().contains(&query))
+                    })
+                    .collect::<Vec<_>>();
+                if !visible.is_empty() {
+                    entries.append(header);
+                    for (_, button) in visible {
+                        entries.append(button);
+                    }
+                }
+            }
+        }
+    });
 
     // Visual Studio's compact auto-hide rail lives to the left of Toolbox.
     let left_rail = ui.stack(Orientation::Vertical)?;
@@ -660,17 +707,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&selected_name);
     properties_pane.append(&ui.label("Text")?);
     properties_pane.append(&selected_text);
+    let selected_x = ui.text_input("")?;
+    let selected_y = ui.text_input("")?;
+    let selected_width = ui.text_input("")?;
+    let selected_height = ui.text_input("")?;
+    for (title, field) in [
+        ("X position", &selected_x),
+        ("Y position", &selected_y),
+        ("Width", &selected_width),
+        ("Height", &selected_height),
+    ] {
+        properties_pane.append(&ui.label(title)?);
+        properties_pane.append(field);
+    }
     let delete_control = ui.button("Delete Selected Control")?;
     properties_pane.append(&delete_control);
     properties_pane.set_sizing(Sizing::fill());
 
-    // Right tool column: bottom Properties height follows the user's last
-    // drag, while Solution Explorer scrolls in its available space.
-    let inspector = ui.grid()?;
-    inspector.set_column_track(0, Track::FILL);
-    inspector.set_row_track(0, Track::FILL);
-    inspector.set_row_track(1, Track::Fixed(native_layout::HANDLE));
-    inspector.set_row_track(2, Track::Fixed(preferred.properties));
+    let inspector = ui.split_view(Orientation::Vertical)?;
+    inspector.set_start(&solution_pane);
+    inspector.set_end(&properties_pane);
+    inspector.set_position(saved_dock.solution_height);
+    inspector.set_min_sizes(190.0, 160.0);
     inspector.set_sizing(Sizing::fill());
     let properties_grip = ui.canvas()?;
     properties_grip.set_sizing(
@@ -721,23 +779,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
-    // The editor/designer alone owns Fill tracks. The sidebars and Output
-    // use Fixed tracks, so maximising the host window never expands them.
-    let document_workspace = ui.grid()?;
-    document_workspace.set_column_track(0, Track::FILL);
-    document_workspace.set_row_track(0, Track::FILL);
-    document_workspace.set_row_track(1, Track::Fixed(native_layout::HANDLE));
-    document_workspace.set_row_track(2, Track::Fixed(preferred.output));
-    document_workspace.set_sizing(Sizing::fill());
-    let output_grip = ui.canvas()?;
-    output_grip.set_sizing(
-        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
-    );
-    document_workspace.attach(&centre, GridCell::new(0, 0));
-    document_workspace.attach(&output_grip, GridCell::new(0, 1));
-    document_workspace.attach(&bottom, GridCell::new(0, 2));
+    // Native resizable pane splitters: NSSplitView on macOS, GtkPaned on
+    // Linux and WinUI 3 Grid-based dividers on Windows.
+    let edit_and_output = ui.split_view(Orientation::Vertical)?;
+    edit_and_output.set_start(&centre);
+    edit_and_output.set_end(&bottom);
+    edit_and_output.set_position(saved_dock.editor_height);
+    edit_and_output.set_min_sizes(260.0, 130.0);
+    edit_and_output.set_sizing(Sizing::fill());
 
-    let main_workspace = ui.grid()?;
+    let project_and_editor = ui.split_view(Orientation::Horizontal)?;
+    project_and_editor.set_start(&edit_and_output);
+    project_and_editor.set_end(&inspector);
+    project_and_editor.set_position(saved_dock.editor_width);
+    project_and_editor.set_min_sizes(350.0, 220.0);
+    project_and_editor.set_sizing(Sizing::fill());
+
+    let main_workspace = ui.split_view(Orientation::Horizontal)?;
+    main_workspace.set_start(&left_side);
+    main_workspace.set_end(&project_and_editor);
+    main_workspace.set_position(saved_dock.toolbox_width);
+    main_workspace.set_min_sizes(160.0, 500.0);
     main_workspace.set_sizing(Sizing::fill());
     main_workspace.set_row_track(0, Track::FILL);
     main_workspace.set_column_track(0, Track::Fixed(preferred.toolbox));
@@ -790,6 +852,65 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     status_bar.append(&status);
     status_bar.append(&workspace_name);
     root.attach(&status_bar, GridCell::new(0, 2));
+
+    // Native resize callbacks run for every pointer movement. Coalesce
+    // disk writes on a worker thread so fsync does not block the GTK/AppKit/
+    // WinUI event loop while the user drags a splitter.
+    let (dock_updates, dock_receiver) = std::sync::mpsc::channel::<DockLayout>();
+    let save_error = ui.tasks().channel({
+        let status = status.clone();
+        move |message: String| status.set_text(&message)
+    });
+    let destination = dock_file.clone();
+    std::thread::spawn(move || {
+        use std::time::Duration;
+        while let Ok(mut latest) = dock_receiver.recv() {
+            while let Ok(update) = dock_receiver.recv_timeout(Duration::from_millis(180)) {
+                latest = update;
+            }
+            if let Err(error) = latest.save(&destination) {
+                let _ = save_error.send(format!("Could not save window layout: {error}"));
+            }
+        }
+    });
+    for (splitter, pane) in [
+        (&main_workspace, DockPane::Toolbox),
+        (&project_and_editor, DockPane::Editor),
+        (&edit_and_output, DockPane::Output),
+        (&inspector, DockPane::Solution),
+    ] {
+        let dock = dock.clone();
+        let updates = dock_updates.clone();
+        splitter.on_resize(move |position| {
+            let mut current = dock.borrow_mut();
+            if current.set_position(pane, position) {
+                let _ = updates.send(*current);
+            }
+        });
+    }
+
+    let reset_window_layout: Rc<dyn Fn()> = Rc::new({
+        let dock = dock.clone();
+        let updates = dock_updates.clone();
+        let status = status.clone();
+        let main_workspace = main_workspace.clone();
+        let project_and_editor = project_and_editor.clone();
+        let edit_and_output = edit_and_output.clone();
+        let inspector = inspector.clone();
+        move || {
+            let restored = DockLayout::default();
+            *dock.borrow_mut() = restored;
+            main_workspace.set_position(restored.toolbox_width);
+            project_and_editor.set_position(restored.editor_width);
+            edit_and_output.set_position(restored.editor_height);
+            inspector.set_position(restored.solution_height);
+            if updates.send(restored).is_ok() {
+                status.set_text("Window layout reset to defaults.");
+            } else {
+                status.set_text("Could not queue window layout preferences for saving.");
+            }
+        }
+    });
 
     // Native docking/tab selection is independent of the active document.
     let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
@@ -1148,6 +1269,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         let selected_name = selected_name.clone();
         let selected_text = selected_text.clone();
+        let selected_x = selected_x.clone();
+        let selected_y = selected_y.clone();
+        let selected_width = selected_width.clone();
+        let selected_height = selected_height.clone();
         let status = status.clone();
         move |event| {
             let mut ide = state.borrow_mut();
@@ -1183,6 +1308,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         if let Some(control) = doc.layout.controls.iter().find(|c| c.id == id) {
                             selected_name.set_text(&control.name);
                             selected_text.set_text(&control.text);
+                            selected_x.set_text(&control.x.to_string());
+                            selected_y.set_text(&control.y.to_string());
+                            selected_width.set_text(&control.width.to_string());
+                            selected_height.set_text(&control.height.to_string());
                         }
                     }
                 }
@@ -1197,7 +1326,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         }
                     }
                 }
-                PointerPhase::Up => ide.drag = None,
+                PointerPhase::Up => {
+                    ide.drag = None;
+                    if let (Some(doc), Some(id)) = (&ide.layout, ide.selected_id) {
+                        if let Some(control) = doc.layout.controls.iter().find(|c| c.id == id) {
+                            selected_x.set_text(&control.x.to_string());
+                            selected_y.set_text(&control.y.to_string());
+                        }
+                    }
+                }
             }
             drop(ide);
             canvas.redraw();
@@ -1235,6 +1372,35 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             canvas.redraw();
         }
     });
+    // Property-grid edits update the same validated design model as dragging.
+    // Ignore incomplete numeric input while typing; invalid geometry is
+    // rejected without corrupting the layout on disk.
+    for (field, widget) in [
+        (GeometryField::X, &selected_x),
+        (GeometryField::Y, &selected_y),
+        (GeometryField::Width, &selected_width),
+        (GeometryField::Height, &selected_height),
+    ] {
+        let state = state.clone();
+        let canvas = canvas.clone();
+        let status = status.clone();
+        widget.on_change(move |text| {
+            let Ok(value) = text.trim().parse::<f32>() else {
+                return;
+            };
+            let mut ide = state.borrow_mut();
+            let selected_id = ide.selected_id;
+            let Some((layout, id)) = ide.layout.as_mut().zip(selected_id) else {
+                return;
+            };
+            let result = layout.layout.set_geometry(id, field, value);
+            drop(ide);
+            if let Err(error) = result {
+                status.set_text(&format!("Invalid control geometry: {error}"));
+            }
+            canvas.redraw();
+        });
+    }
     delete_control.on_click({
         let state = state.clone();
         let canvas = canvas.clone();
@@ -1358,9 +1524,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let left_panel = left_panel.clone();
         let status = status.clone();
         let window = window.clone();
-        let pane_sizes = pane_sizes.clone();
-        let refresh_tracks = refresh_tracks.clone();
-        let pane_path = pane_path.clone();
+        let reset_window_layout = reset_window_layout.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
             (0, 1) => {
@@ -1478,13 +1642,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (9, 0) => status.set_text("Native Options panel is planned."),
             (10, 0) => status.set_text("Native extension management is planned."),
-            (11, 0) => {
-                let defaults = native_layout::PaneSizes::default();
-                pane_sizes.set(defaults);
-                refresh_tracks(defaults);
-                let _ = defaults.save(&pane_path);
-                status.set_text("Tool-window sizes reset. Editor fills the remaining space.");
-            },
+            (11, 0) => reset_window_layout(),
             (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
             _ => {}
         }

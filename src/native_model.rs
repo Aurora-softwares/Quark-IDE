@@ -59,10 +59,33 @@ pub enum ControlKind {
     Button,
     TextField,
     Checkbox,
+    TextArea,
+    RadioButton,
+    ComboBox,
+    ListBox,
+    Slider,
+    ProgressBar,
+    Image,
+    Panel,
+    TabControl,
 }
 
 impl ControlKind {
-    pub const ALL: [Self; 4] = [Self::Label, Self::Button, Self::TextField, Self::Checkbox];
+    pub const ALL: [Self; 13] = [
+        Self::Label,
+        Self::Button,
+        Self::TextField,
+        Self::Checkbox,
+        Self::TextArea,
+        Self::RadioButton,
+        Self::ComboBox,
+        Self::ListBox,
+        Self::Slider,
+        Self::ProgressBar,
+        Self::Image,
+        Self::Panel,
+        Self::TabControl,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -70,6 +93,23 @@ impl ControlKind {
             Self::Button => "Button",
             Self::TextField => "Text Box",
             Self::Checkbox => "Check Box",
+            Self::TextArea => "Multiline Text Box",
+            Self::RadioButton => "Radio Button",
+            Self::ComboBox => "Combo Box",
+            Self::ListBox => "List Box",
+            Self::Slider => "Slider",
+            Self::ProgressBar => "Progress Bar",
+            Self::Image => "Image",
+            Self::Panel => "Panel",
+            Self::TabControl => "Tab Control",
+        }
+    }
+
+    pub fn category(self) -> &'static str {
+        match self {
+            Self::Panel | Self::TabControl => "Containers",
+            Self::Image | Self::ProgressBar => "Display",
+            _ => "Common Controls",
         }
     }
 
@@ -79,6 +119,15 @@ impl ControlKind {
             Self::Button => (130.0, 36.0),
             Self::TextField => (180.0, 36.0),
             Self::Checkbox => (160.0, 30.0),
+            Self::TextArea => (220.0, 100.0),
+            Self::RadioButton => (160.0, 30.0),
+            Self::ComboBox => (180.0, 36.0),
+            Self::ListBox => (200.0, 140.0),
+            Self::Slider => (200.0, 32.0),
+            Self::ProgressBar => (200.0, 24.0),
+            Self::Image => (160.0, 120.0),
+            Self::Panel => (300.0, 200.0),
+            Self::TabControl => (320.0, 220.0),
         }
     }
 }
@@ -93,6 +142,15 @@ pub struct Control {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+}
+
+/// Editable geometry fields shown in Quark's native Properties window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeometryField {
+    X,
+    Y,
+    Width,
+    Height,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -191,6 +249,38 @@ impl Layout {
             .map(|control| control.id)
     }
 
+    /// Apply a property-grid geometry change atomically. Invalid values
+    /// never leave a .quarkui layout unsaveable.
+    pub fn set_geometry(
+        &mut self,
+        id: u64,
+        field: GeometryField,
+        value: f32,
+    ) -> Result<(), String> {
+        if !value.is_finite() {
+            return Err("Geometry values must be finite numbers".into());
+        }
+        let control = self
+            .controls
+            .iter_mut()
+            .find(|control| control.id == id)
+            .ok_or("Select a control first")?;
+        let previous = control.clone();
+        match field {
+            GeometryField::X => control.x = value,
+            GeometryField::Y => control.y = value,
+            GeometryField::Width => control.width = value,
+            GeometryField::Height => control.height = value,
+        }
+        if let Err(error) = self.validate() {
+            if let Some(control) = self.controls.iter_mut().find(|control| control.id == id) {
+                *control = previous;
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
     pub fn position(&mut self, id: u64, x: f32, y: f32) -> bool {
         if !x.is_finite() || !y.is_finite() {
             return false;
@@ -246,6 +336,83 @@ impl LayoutDocument {
     }
 }
 
+/// Resizable professional IDE tool-window positions, separate from projects.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DockLayout {
+    pub toolbox_width: f64,
+    pub editor_width: f64,
+    pub editor_height: f64,
+    pub solution_height: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockPane {
+    Toolbox,
+    Editor,
+    Output,
+    Solution,
+}
+
+impl Default for DockLayout {
+    fn default() -> Self {
+        Self {
+            toolbox_width: 210.0,
+            editor_width: 930.0,
+            editor_height: 640.0,
+            solution_height: 430.0,
+        }
+    }
+}
+
+impl DockLayout {
+    pub fn set_position(&mut self, pane: DockPane, value: f64) -> bool {
+        let (slot, min, max) = match pane {
+            DockPane::Toolbox => (&mut self.toolbox_width, 160.0, 850.0),
+            DockPane::Editor => (&mut self.editor_width, 350.0, 2800.0),
+            DockPane::Output => (&mut self.editor_height, 260.0, 1900.0),
+            DockPane::Solution => (&mut self.solution_height, 190.0, 1700.0),
+        };
+        if !value.is_finite() {
+            return false;
+        }
+        let updated = value.clamp(min, max);
+        if *slot == updated {
+            return false;
+        }
+        *slot = updated;
+        true
+    }
+
+    pub fn open(path: &Path) -> Result<Self, String> {
+        match fs::read_to_string(path) {
+            Ok(contents) => {
+                let parsed: Self = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+                let mut validated = Self::default();
+                for (pane, value) in [
+                    (DockPane::Toolbox, parsed.toolbox_width),
+                    (DockPane::Editor, parsed.editor_width),
+                    (DockPane::Output, parsed.editor_height),
+                    (DockPane::Solution, parsed.solution_height),
+                ] {
+                    if !value.is_finite() {
+                        return Err("Invalid native dock position in preferences".into());
+                    }
+                    validated.set_position(pane, value);
+                }
+                Ok(validated)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        crate::storage::atomic_write(path, &bytes).map_err(|e| e.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Workspace {
@@ -293,6 +460,69 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_dock_positions_round_trip_across_restarts() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("docks.json");
+        let mut layout = DockLayout::default();
+        assert!(layout.set_position(DockPane::Toolbox, 315.0));
+        assert!(layout.set_position(DockPane::Output, 520.0));
+        layout.save(&path).unwrap();
+        let restored = DockLayout::open(&path).unwrap();
+        assert_eq!(restored, layout);
+        assert_eq!(restored.toolbox_width, 315.0);
+        assert_eq!(restored.editor_height, 520.0);
+    }
+
+    #[test]
+    fn native_dock_positions_reject_non_finite_values_and_clip_outliers() {
+        let mut layout = DockLayout::default();
+        assert!(!layout.set_position(DockPane::Editor, f64::NAN));
+        assert!(!layout.set_position(DockPane::Solution, f64::INFINITY));
+        assert_eq!(layout, DockLayout::default());
+        assert!(layout.set_position(DockPane::Toolbox, 50.0));
+        assert_eq!(layout.toolbox_width, 160.0);
+        assert!(layout.set_position(DockPane::Editor, 99999.0));
+        assert_eq!(layout.editor_width, 2800.0);
+    }
+
+    #[test]
+    fn native_dock_preferences_read_legacy_partial_files_and_reject_invalid_data() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("docks.json");
+        fs::write(&path, r#"{ "toolbox_width": 245.0 }"#).unwrap();
+        let read = DockLayout::open(&path).unwrap();
+        assert_eq!(read.toolbox_width, 245.0);
+        assert_eq!(read.solution_height, DockLayout::default().solution_height);
+        fs::write(&path, "corrupt").unwrap();
+        assert!(DockLayout::open(&path).is_err());
+    }
+
+    #[test]
+    fn all_designer_toolbox_controls_serialize_without_breaking_existing_layouts() {
+        assert!(ControlKind::ALL.len() >= 12);
+        let mut layout = Layout::default();
+        for kind in ControlKind::ALL {
+            assert!(!kind.title().is_empty());
+            let id = layout.add(kind, 5.0, 5.0).unwrap();
+            assert!(id > 0);
+        }
+        assert!(layout.validate().is_ok());
+        let serialized = serde_json::to_string(&layout).unwrap();
+        let reopened: Layout = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(layout, reopened);
+        assert!(serialized.contains("tab_control"));
+        assert!(serialized.contains("text_field"));
+    }
+
+    #[test]
+    fn toolbox_metadata_groups_containers_separately_from_regular_controls() {
+        assert_eq!(ControlKind::Panel.category(), "Containers");
+        assert_eq!(ControlKind::TabControl.category(), "Containers");
+        assert_eq!(ControlKind::Button.category(), "Common Controls");
+        assert_eq!(ControlKind::Image.category(), "Display");
+    }
+
+    #[test]
     fn source_save_rejects_concurrent_modification_and_keeps_text() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.hy");
@@ -303,6 +533,43 @@ mod tests {
         assert!(doc.save().is_err());
         assert_eq!(doc.text, "unsaved");
         assert_eq!(fs::read_to_string(path).unwrap(), "external");
+    }
+
+    #[test]
+    fn property_grid_edits_control_position_and_dimensions() {
+        let mut layout = Layout::default();
+        let id = layout.add(ControlKind::Button, 20.0, 30.0).unwrap();
+        layout.set_geometry(id, GeometryField::X, 80.0).unwrap();
+        layout.set_geometry(id, GeometryField::Y, 90.0).unwrap();
+        layout
+            .set_geometry(id, GeometryField::Width, 205.0)
+            .unwrap();
+        layout
+            .set_geometry(id, GeometryField::Height, 48.0)
+            .unwrap();
+        let control = &layout.controls[0];
+        assert_eq!(
+            (control.x, control.y, control.width, control.height),
+            (80.0, 90.0, 205.0, 48.0)
+        );
+        assert!(layout.validate().is_ok());
+    }
+
+    #[test]
+    fn invalid_geometry_edits_preserve_the_original_control() {
+        let mut layout = Layout::default();
+        let id = layout.add(ControlKind::TextField, 30.0, 30.0).unwrap();
+        let original = layout.controls[0].clone();
+        for (field, value) in [
+            (GeometryField::Width, 10.0),
+            (GeometryField::Width, 10000.0),
+            (GeometryField::X, -1.0),
+            (GeometryField::Y, f32::NAN),
+            (GeometryField::Height, f32::INFINITY),
+        ] {
+            assert!(layout.set_geometry(id, field, value).is_err());
+            assert_eq!(layout.controls[0], original);
+        }
     }
 
     #[test]

@@ -1827,6 +1827,62 @@
         "native_commands::tests::clean_removes_generated_files_not_source_documents",
         "native_commands::tests::commands_refuse_to_run_with_no_project_or_compiler"
       ]
+    },
+    {
+      "id": "native-launcher-collapsible-recent-groups",
+      "category": "Native Start Window",
+      "feature": "Collapsible pinned/today/week/month/older groups with search showing matching projects",
+      "tests": [
+        "native_launcher::tests::age_groups_can_collapse_without_hiding_search_results",
+        "native_launcher::tests::expanded_age_groups_have_headers_and_selectable_entries"
+      ]
+    },
+    {
+      "id": "native-designer-properties-geometry",
+      "category": "Native Interface Designer",
+      "feature": "Properties grid edits X/Y/width/height safely and preserves layout geometry",
+      "tests": [
+        "native_model::tests::property_grid_edits_control_position_and_dimensions",
+        "native_model::tests::invalid_geometry_edits_preserve_the_original_control"
+      ]
+    },
+    {
+      "id": "native-bundle-build-safety",
+      "category": "Native Build and Publish",
+      "feature": "Bundle/publish requires a successful fresh build and does not publish stale binaries",
+      "tests": [
+        "native_commands::tests::publish_requires_a_successful_fresh_build_not_a_stale_binary",
+        "native_commands::tests::publish_without_project_does_not_create_any_artifacts",
+        "native_commands::tests::publishes_actual_binary_as_zip_with_original_filename"
+      ]
+    },
+    {
+      "id": "native-docking-persistence",
+      "category": "Native Platform",
+      "feature": "Visual Studio-style native pane divider positions persist and reset safely between sessions",
+      "tests": [
+        "native_model::tests::native_dock_positions_round_trip_across_restarts",
+        "native_model::tests::native_dock_positions_reject_non_finite_values_and_clip_outliers",
+        "native_model::tests::native_dock_preferences_read_legacy_partial_files_and_reject_invalid_data"
+      ]
+    },
+    {
+      "id": "native-designer-extended-palette",
+      "category": "Native Interface Designer",
+      "feature": "Native searchable toolbox has thirteen grouped design-time controls that round-trip in .quarkui layouts",
+      "tests": [
+        "native_model::tests::all_designer_toolbox_controls_serialize_without_breaking_existing_layouts",
+        "native_model::tests::toolbox_metadata_groups_containers_separately_from_regular_controls"
+      ]
+    },
+    {
+      "id": "native-legacy-designer-json-compat",
+      "category": "Native Interface Designer",
+      "feature": "Existing Quark designer and native UI designer can round-trip all thirteen .quarkui control kinds without data loss",
+      "tests": [
+        "designer::tests::legacy_and_native_designers_can_open_each_others_extended_controls",
+        "native_model::tests::all_designer_toolbox_controls_serialize_without_breaking_existing_layouts"
+      ]
     }
   ]
 }

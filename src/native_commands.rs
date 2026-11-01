@@ -136,7 +136,35 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     let result = match task {
         Task::Clean => clean_generated(&plan).map(|()| "Generated build files removed".to_owned()),
         Task::Publish => {
-            publish_binary(&plan).map(|path| format!("Binary archive created: {}", path.display()))
+            // Publishing must build the current sources, rather than silently
+            // packaging a potentially stale executable from an earlier build.
+            let output_parent = if plan.output_is_directory {
+                &plan.output
+            } else {
+                plan.output.parent().unwrap_or_else(|| Path::new("."))
+            };
+            fs::create_dir_all(output_parent)
+                .map_err(|e| format!("Cannot create build directory: {e}"))
+                .and_then(|()| {
+                    let built = Command::new(&plan.program)
+                        .args(&plan.args)
+                        .current_dir(&plan.cwd)
+                        .output()
+                        .map_err(|e| format!("Cannot start Hydrogen build: {e}"))?;
+                    if !built.status.success() {
+                        return Err(format!(
+                            "Build failed; nothing was published.\n{}\n{}",
+                            String::from_utf8_lossy(&built.stdout),
+                            String::from_utf8_lossy(&built.stderr),
+                        ));
+                    }
+                    publish_binary(&plan).map(|path| {
+                        format!(
+                            "Build succeeded. Binary archive created: {}",
+                            path.display()
+                        )
+                    })
+                })
         }
         Task::Build | Task::Rebuild | Task::RunWithoutDebugging => {
             if task == Task::Rebuild {
@@ -207,6 +235,37 @@ mod tests {
             output_is_directory: false,
             description: "Sample build".into(),
         }
+    }
+
+    #[test]
+    fn publish_requires_a_successful_fresh_build_not_a_stale_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("Demo.hyproj");
+        fs::write(&project, "type='linux'\nsources=['Main.hy']").unwrap();
+        let plan = hydrogen::build_plan(
+            "a-compiler-that-does-not-exist-quark",
+            Some(&project),
+            None,
+            BuildScope::Project,
+        )
+        .unwrap();
+        fs::create_dir_all(plan.output.parent().unwrap()).unwrap();
+        fs::write(&plan.output, b"old stale binary").unwrap();
+        let result = run(
+            Task::Publish,
+            "a-compiler-that-does-not-exist-quark",
+            Some(&project),
+        );
+        assert!(!result.success);
+        assert!(result.text.contains("Cannot start Hydrogen build"));
+        assert!(!dir.path().join(".quark/publish").exists());
+    }
+
+    #[test]
+    fn publish_without_project_does_not_create_any_artifacts() {
+        let result = run(Task::Publish, "hy", None);
+        assert!(!result.success);
+        assert!(result.text.contains("Open a Hydrogen project"));
     }
 
     #[test]

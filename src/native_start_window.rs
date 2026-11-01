@@ -3,7 +3,7 @@
 //! folder or "Continue without code" is selected.
 
 use crate::{
-    native_launcher::{self, History, Row},
+    native_launcher::{self, AgeGroup, History, Row},
     native_model::Layout,
     startup,
 };
@@ -41,6 +41,7 @@ pub fn show(
     let selected: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
     let filter = Rc::new(RefCell::new(String::new()));
     let rows = Rc::new(RefCell::new(Vec::<Row>::new()));
+    let collapsed = Rc::new(RefCell::new(Vec::<AgeGroup>::new()));
 
     let root = ui.stack(Orientation::Vertical)?;
     root.set_padding(Padding::all(24.0));
@@ -135,10 +136,13 @@ pub fn show(
         let filter = filter.clone();
         let rows = rows.clone();
         let recent = recent.clone();
+        let collapsed = collapsed.clone();
         move || {
-            let rendered = history
-                .borrow()
-                .rows(&filter.borrow(), native_launcher::now_epoch());
+            let rendered = history.borrow().rows_collapsed(
+                &filter.borrow(),
+                native_launcher::now_epoch(),
+                &collapsed.borrow(),
+            );
             recent.set_items(
                 &rendered
                     .iter()
@@ -163,10 +167,35 @@ pub fn show(
     recent.on_select({
         let selected = selected.clone();
         let rows = rows.clone();
+        let collapsed = collapsed.clone();
+        let refresh = refresh.clone();
         move |indices| {
-            *selected.borrow_mut() = indices
+            let entry = indices
                 .first()
-                .and_then(|&index| rows.borrow().get(index).and_then(|row| row.path.clone()));
+                .and_then(|&index| rows.borrow().get(index).cloned());
+            let Some(row) = entry else {
+                *selected.borrow_mut() = None;
+                return;
+            };
+            if let Some(path) = row.path {
+                *selected.borrow_mut() = Some(path);
+                return;
+            }
+            *selected.borrow_mut() = None;
+            if let Some(group) = AgeGroup::ALL
+                .iter()
+                .copied()
+                .find(|group| row.title.ends_with(group.label()))
+            {
+                let mut folded = collapsed.borrow_mut();
+                if let Some(index) = folded.iter().position(|entry| *entry == group) {
+                    folded.remove(index);
+                } else {
+                    folded.push(group);
+                }
+                drop(folded);
+                refresh();
+            }
         }
     });
 
