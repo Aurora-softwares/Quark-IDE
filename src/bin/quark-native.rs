@@ -32,8 +32,8 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
-    Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
+    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings, Sizing,
+    Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
 };
 use std::{
     cell::RefCell,
