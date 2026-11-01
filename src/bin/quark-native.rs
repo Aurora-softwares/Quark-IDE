@@ -906,6 +906,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     xml_editor.set_sizing(Sizing::fill());
     xml_pane.attach(&xml_editor, GridCell::new(0, 1));
 
+    // XML is visible by default when a layout is opened. The Design tab
+    // collapses the lower source editor without closing or discarding it.
+    let source_visible = Rc::new(Cell::new(true));
+    let sync_xml = Rc::new(Cell::new(false));
+
     let xml_divider = ui.canvas()?;
     xml_divider.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(7.0)));
     xml_divider.on_draw(|p| {
@@ -914,6 +919,45 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     designer.attach(&design_surface, GridCell::new(0, 0));
     designer.attach(&xml_divider, GridCell::new(0, 1));
     designer.attach(&xml_pane, GridCell::new(0, 2));
+
+    xml_visual_tab.on_click({
+        let designer = designer.clone();
+        let source_visible = source_visible.clone();
+        move || {
+            source_visible.set(false);
+            designer.set_row_track(2, Track::Fixed(32.0));
+        }
+    });
+    xml_text_tab.on_click({
+        let designer = designer.clone();
+        let source_visible = source_visible.clone();
+        move || {
+            source_visible.set(true);
+            designer.set_row_track(2, Track::Fixed(260.0));
+        }
+    });
+    xml_editor.on_change({
+        let state = state.clone();
+        let canvas = canvas.clone();
+        let status = status.clone();
+        let sync_xml = sync_xml.clone();
+        move |text| {
+            if sync_xml.get() { return; }
+            let mut ide = state.borrow_mut();
+            if let Some(layout) = ide.layout.as_mut() {
+                match layout.edit_source(text.to_owned()) {
+                    Ok(()) => {
+                        status.set_text("Hydrogen UI XML valid · visual preview refreshed");
+                        drop(ide);
+                        canvas.redraw();
+                    }
+                    Err(error) => {
+                        status.set_text(&format!("XML needs correction: {error}"));
+                    }
+                }
+            }
+        }
+    });
 
     pages.append(&empty_workspace);
     centre.append(&pages);
@@ -1273,6 +1317,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let show_page_redraw = show_page_redraw.clone();
         let code = code.clone();
         let designer = designer.clone();
+        let xml_editor = xml_editor.clone();
+        let sync_xml = sync_xml.clone();
+        let source_visible = source_visible.clone();
         let tab_mode = tab_mode.clone();
         let active_side_tab = active_side_tab.clone();
         let side_tabs = side_tabs.clone();
@@ -1406,6 +1453,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 }
                 centre.append(&document_tabs);
                 centre.append(&tab_accent);
+            }
+            if page == Page::Design {
+                if let Some(doc) = state.borrow().layout.as_ref() {
+                    if let Ok(xml) = doc.source() {
+                        sync_xml.set(true);
+                        xml_editor.set_text(&xml);
+                        sync_xml.set(false);
+                    }
+                }
+                // Opening the designer defaults to the XML editor visible.
+                source_visible.set(true);
+                designer.set_row_track(2, Track::Fixed(260.0));
             }
             pages.clear();
             match page {
