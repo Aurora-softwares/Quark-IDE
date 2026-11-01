@@ -148,6 +148,7 @@ impl History {
         }
     }
 
+    #[allow(dead_code)] // Compatibility API for the existing launcher model/tests.
     pub fn rows(&self, query: &str, now: u64) -> Vec<Row> {
         self.rows_collapsed(query, now, &[])
     }
