@@ -307,7 +307,7 @@ mod tests {
             .collect();
         assert_eq!(
             headings,
-            ["▸ Pinned", "▸ Today", "▸ This week", "▸ This month"]
+            ["▾ Pinned", "▾ Today", "▾ This week", "▾ This month"]
         );
     }
 
