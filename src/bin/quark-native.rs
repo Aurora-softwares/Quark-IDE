@@ -539,7 +539,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     command_strip.append(&run_button);
     command_strip.append(&debug_button);
     command_strip.append(&publish_button);
-    root.attach(&command_strip, GridCell::new(0, 0));
+    // A small orbital-spectrum accent: cyan Hydrogen → blue electron
+    // orbit → violet Quark. Leave the native OS controls untouched.
+    let command_area = ui.stack(Orientation::Vertical)?;
+    let brand_rule = ui.canvas()?;
+    brand_rule.set_sizing(
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(4.0)),
+    );
+    brand_rule.on_draw(|painter| {
+        let width = painter.width();
+        let height = painter.height();
+        for (segment, color) in [
+            native_shell::HYDROGEN_CYAN,
+            native_shell::ORBIT_BLUE,
+            native_shell::QUARK_VIOLET,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let (r, g, b) = *color;
+            painter.fill_rect(
+                Rect::new(width * segment as f64 / 3.0, 0.0, width / 3.0 + 1.0, height),
+                Color::rgb(r, g, b),
+            );
+        }
+    });
+    command_area.append(&brand_rule);
+    command_area.append(&command_strip);
+    root.attach(&command_area, GridCell::new(0, 0));
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(7.0);
@@ -654,6 +683,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     centre.set_spacing(6.0);
     let document_tabs = ui.stack(Orientation::Horizontal)?;
     document_tabs.set_spacing(8.0);
+    let tab_accent = ui.canvas()?;
+    tab_accent.set_sizing(
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(3.0)),
+    );
+    tab_accent.on_draw(|painter| {
+        let (r, g, b) = native_shell::HYDROGEN_CYAN;
+        painter.fill_rect(
+            Rect::new(0.0, 0.0, painter.width(), painter.height()),
+            Color::rgb(r, g, b),
+        );
+    });
     let code_button = ui.button("Program.hy")?;
     let design_button = ui.button("Main.quarkui [Design]")?;
 
@@ -921,6 +963,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     }
 
     let status_bar = ui.stack(Orientation::Horizontal)?;
+    status_bar.append(&ui.label("✦ QUARK · HYDROGEN")?);
     status_bar.append(&status);
     status_bar.append(&workspace_name);
     root.attach(&status_bar, GridCell::new(0, 2));
@@ -996,6 +1039,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let state = state.clone();
         let centre = centre.clone();
         let document_tabs = document_tabs.clone();
+        let tab_accent = tab_accent.clone();
         let pages = pages.clone();
         let empty_workspace = empty_workspace.clone();
         let code_button = code_button.clone();
@@ -1019,6 +1063,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             if has_code || has_design {
                 centre.append(&document_tabs);
+                centre.append(&tab_accent);
             }
             pages.clear();
             match page {
@@ -1704,6 +1749,33 @@ fn main() -> naui::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn entering_full_ide_without_documents_is_a_blank_workspace() {
+        let mut ide = Ide::from_workspace(Workspace::default());
+        assert_eq!(ide.page, Page::Empty);
+        assert_eq!(ide.display_page(Page::Code), Page::Empty);
+        assert_eq!(ide.display_page(Page::Design), Page::Empty);
+        assert!(ide.document.is_none() && ide.layout.is_none());
+        assert!(ide.save_active().is_err());
+    }
+
+    #[test]
+    fn blank_workspace_is_restored_after_closing_a_folder_and_existing_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Program.hy");
+        fs::write(&path, "class Program {}").unwrap();
+        let mut ide = Ide::from_workspace(Workspace::default());
+        ide.remember_folder(dir.path().to_path_buf()).unwrap();
+        assert_eq!(ide.page, Page::Empty);
+        ide.open_source(&path).unwrap();
+        assert_eq!(ide.display_page(Page::Code), Page::Code);
+        assert_eq!(ide.display_page(Page::Design), Page::Empty);
+        ide.clear_workspace();
+        assert_eq!(ide.page, Page::Empty);
+        assert_eq!(ide.display_page(Page::Code), Page::Empty);
+        assert!(ide.document.is_none());
+    }
+
     #[test]
     fn platform_name_matches_native_target() {
         #[cfg(target_os = "windows")]
