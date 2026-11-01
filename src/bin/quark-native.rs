@@ -716,7 +716,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // Text-only vertical rail; each full label is drawn as upright glyphs
     // with no native button background or padding.
     let left_rail = ui.stack(Orientation::Vertical)?;
-    left_rail.set_spacing(0.0);
+    left_rail.set_spacing(4.0);
     left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
     let tab_mode = Rc::new(Cell::new(Page::Design));
     let active_side_tab = Rc::new(Cell::new(0_usize));
