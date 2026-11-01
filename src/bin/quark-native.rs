@@ -547,9 +547,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let left_rail = ui.stack(Orientation::Vertical)?;
     left_rail.set_spacing(0.0);
     left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
-    // The selection stripe belongs on the outside edge of the active tab,
-    // not across the top of the entire rail.
-    // The leading canvas is deliberately omitted from the compact rail.
     let toolbox_tab = ui.button(native_shell::SIDE_TABS[0].1)?;
     let server_tab = ui.button(native_shell::SIDE_TABS[1].1)?;
     let data_tab = ui.button(native_shell::SIDE_TABS[2].1)?;
@@ -706,7 +703,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     inspector.set_sizing(Sizing::fill());
     inspector.set_start(&solution_pane);
     inspector.set_end(&properties_pane);
-    inspector.set_position(420.0);
+    inspector.set_position(940.0 - preferred.properties - 145.0);
     inspector.set_min_sizes(110.0, 150.0);
 
     let bottom = ui.stack(Orientation::Vertical)?;
