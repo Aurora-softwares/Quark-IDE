@@ -137,14 +137,14 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
 }
 
 pub fn load<T: DeserializeOwned>(path: &std::path::Path, text: &str) -> Result<T, String> {
-    if path.extension().and_then(|e| e.to_str()) != Some("hyyui") {
+    if !matches!(path.extension().and_then(|e| e.to_str()), Some("hyyui" | "hyui")) {
         return Err("Expected a Hydrogen .hyyui UI layout".into());
     }
     decode(text)
 }
 
 pub fn save<T: Serialize>(path: &std::path::Path, layout: &T) -> Result<String, String> {
-    if path.extension().and_then(|e| e.to_str()) != Some("hyyui") {
+    if !matches!(path.extension().and_then(|e| e.to_str()), Some("hyyui" | "hyui")) {
         return Err("Expected a Hydrogen .hyyui UI layout".into());
     }
     encode(layout)
@@ -190,6 +190,7 @@ mod tests {
         };
         let xml = encode(&layout).unwrap();
         assert!(load::<SharedLayout>(Path::new("Form.hyyui"), &xml).is_ok());
+        assert!(load::<SharedLayout>(Path::new("Form.hyui"), &xml).is_ok());
         assert!(load::<SharedLayout>(Path::new("Form.layout"), &xml).is_err());
         assert!(save(Path::new("Form.layout"), &layout).is_err());
     }
