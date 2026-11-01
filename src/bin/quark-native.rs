@@ -1612,10 +1612,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let tab_offset = tab_offset.clone();
         let status = status.clone();
         let canvas = canvas.clone();
+        let design_heading = design_heading.clone();
         move |path| {
             let result = state.borrow_mut().open_design(&path);
             match result {
                 Ok(()) => {
+                    if state.borrow().layout.as_ref().is_some_and(|d| d.native_window) {
+                        design_heading.set_text(
+                            "Hydrogen <Window> preview · responsive source can be edited below",
+                        );
+                    } else {
+                        design_heading.set_text("Visual Designer · Native window preview");
+                    }
                     let tabs = state.borrow().open_tabs();
                     let index = tabs
                         .iter()
@@ -1801,6 +1809,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let status = status.clone();
         move |event| {
             let mut ide = state.borrow_mut();
+            if ide.layout.as_ref().is_some_and(|doc| doc.native_window) {
+                if event.phase == PointerPhase::Down {
+                    status.set_text(
+                        "Hydrogen responsive UI: edit in XML Source; native visual editing is not yet available.",
+                    );
+                }
+                // This flat preview is read-only for responsive Hydrogen
+                // documents. Modifying it would lose nested containers and
+                // their event bindings on save.
+                return;
+            }
             match event.phase {
                 PointerPhase::Down => {
                     let (x, y) = if let Some(doc) = ide.layout.as_ref() {
@@ -1915,6 +1934,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let sync_design_source = sync_design_source.clone();
         move |text| {
             let mut ide = state.borrow_mut();
+            if ide.layout.as_ref().is_some_and(|d| d.native_window) {
+                return;
+            }
             let id = ide.selected_id;
             if let Some(control) = ide
                 .layout
@@ -1933,6 +1955,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         move |text| {
             let mut ide = state.borrow_mut();
+            if ide.layout.as_ref().is_some_and(|d| d.native_window) {
+                return;
+            }
             let id = ide.selected_id;
             if let Some(control) = ide
                 .layout
@@ -1964,6 +1989,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 return;
             };
             let mut ide = state.borrow_mut();
+            if ide.layout.as_ref().is_some_and(|d| d.native_window) {
+                return;
+            }
             let selected_id = ide.selected_id;
             let Some((layout, id)) = ide.layout.as_mut().zip(selected_id) else {
                 return;
@@ -1984,6 +2012,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         move || {
             let mut ide = state.borrow_mut();
+            if ide.layout.as_ref().is_some_and(|d| d.native_window) {
+                return;
+            }
             if let Some(id) = ide.selected_id.take() {
                 if let Some(doc) = ide.layout.as_mut() {
                     doc.layout.controls.retain(|c| c.id != id);
