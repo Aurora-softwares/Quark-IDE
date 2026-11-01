@@ -820,7 +820,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         move |sizes| {
             left_split.set_position(sizes.toolbox);
             main_workspace.set_position((viewport_width.get() - sizes.inspector - 6.0).max(300.0));
-            document_workspace.set_position((viewport_height.get() - sizes.output - 6.0).max(160.0));
+            document_workspace
+                .set_position((viewport_height.get() - sizes.output - 6.0).max(160.0));
             inspector.set_position((viewport_height.get() - sizes.properties - 6.0).max(110.0));
         }
     });
@@ -1753,7 +1754,11 @@ mod tests {
         fs::write(&manifest, "name = 'Sample'\nsources = ['Program.hy']").unwrap();
         fs::write(dir.path().join("Program.hy"), "class Program {}").unwrap();
         let layout = dir.path().join("Main.hyyui");
-        fs::write(&layout, ui_xml::encode(&Layout::default()).unwrap().into_bytes()).unwrap();
+        fs::write(
+            &layout,
+            ui_xml::encode(&Layout::default()).unwrap().into_bytes(),
+        )
+        .unwrap();
         let mut workspace = Workspace::default();
         workspace.selected = Some(manifest.clone());
         workspace.projects.push(manifest.clone());

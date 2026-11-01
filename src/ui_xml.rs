@@ -113,9 +113,10 @@ pub fn encode<T: Serialize>(layout: &T) -> Result<String, String> {
     let shared: SharedLayout =
         serde_json::from_value(serde_json::to_value(layout).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
-    let xml =
-        quick_xml::se::to_string(&XmlLayout::from(shared)).map_err(|e| e.to_string())?;
-    Ok(format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n{xml}\n"))
+    let xml = quick_xml::se::to_string(&XmlLayout::from(shared)).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n{xml}\n"
+    ))
 }
 
 pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {

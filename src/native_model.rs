@@ -691,11 +691,7 @@ mod tests {
     fn layout_save_refuses_external_modification() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("Main.hyyui");
-        fs::write(
-            &path,
-            crate::ui_xml::encode(&Layout::default()).unwrap(),
-        )
-        .unwrap();
+        fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.add(ControlKind::Label, 25.0, 35.0).unwrap();
         fs::write(&path, "external").unwrap();

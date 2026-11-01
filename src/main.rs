@@ -2,7 +2,6 @@ mod catalog;
 mod catalog_ui;
 mod command;
 mod designer;
-mod ui_xml;
 mod diagnostics;
 mod editor;
 #[cfg(test)]
@@ -34,6 +33,7 @@ mod symbols;
 mod terminal;
 mod theme;
 mod ui;
+mod ui_xml;
 mod window;
 mod workspace;
 
