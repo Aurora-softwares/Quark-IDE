@@ -1239,7 +1239,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             };
             tab_mode.set(page);
             active_side_tab.set(0);
-            for tab in &side_tabs {
+            for (index, tab) in side_tabs.iter().enumerate() {
+                tab.set_visible(page != Page::Code || index < 2);
                 tab.redraw();
             }
             left_panel(0);
