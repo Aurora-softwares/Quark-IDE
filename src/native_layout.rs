@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 
 pub const HANDLE: f64 = 6.0;
-pub const MIN_EDITOR_WIDTH: f64 = 320.0;
-pub const MIN_EDITOR_HEIGHT: f64 = 200.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
@@ -74,6 +72,8 @@ impl PaneSizes {
 
     /// Model the useful centre area with the same fixed-track arithmetic as
     /// the native grid. No window resize should change the sizes of tool panes.
+    /// This is a geometry contract used by the regression tests.
+    #[cfg(test)]
     pub fn editor_area(self, window_width: f64, window_height: f64) -> (f64, f64) {
         (
             (window_width - self.toolbox - self.inspector - 2.0 * HANDLE).max(0.0),

@@ -35,8 +35,8 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, GridCell, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect,
-    Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
+    Color, GridCell, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
+    Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -45,9 +45,7 @@ use std::{
     rc::Rc,
 };
 
-use native_model::{
-    ControlKind, DockLayout, DockPane, Document, GeometryField, Layout, LayoutDocument, Workspace,
-};
+use native_model::{ControlKind, Document, GeometryField, Layout, LayoutDocument, Workspace};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Page {
@@ -406,13 +404,17 @@ fn attach_pane_grip(
         } else {
             Rect::new(0.0, (height - 1.0) / 2.0, width, 1.0)
         };
-        painter.fill_rect(line, Color::rgb(0x777777));
+        painter.fill_rect(line, Color::rgb(0x77, 0x77, 0x77));
     });
     let dragging = Rc::new(Cell::new(None::<(f64, native_layout::PaneSizes)>));
     grip.on_pointer({
         let dragging = dragging.clone();
         move |event| {
-            let coordinate = if vertical_divider { event.point.x } else { event.point.y };
+            let coordinate = if vertical_divider {
+                event.point.x
+            } else {
+                event.point.y
+            };
             match event.phase {
                 PointerPhase::Down => dragging.set(Some((coordinate, prefs.get()))),
                 PointerPhase::Move => {
@@ -438,12 +440,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         1480.0,
         940.0,
     )?;
-    let dock_file = workspace_file().with_file_name("native-docking.json");
-    let dock = Rc::new(RefCell::new(
-        DockLayout::open(&dock_file).unwrap_or_default(),
-    ));
-    let saved_dock = *dock.borrow();
-
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
     let menu = ui.menu_bar()?;
@@ -724,15 +720,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&delete_control);
     properties_pane.set_sizing(Sizing::fill());
 
-    let inspector = ui.split_view(Orientation::Vertical)?;
-    inspector.set_start(&solution_pane);
-    inspector.set_end(&properties_pane);
-    inspector.set_position(saved_dock.solution_height);
-    inspector.set_min_sizes(190.0, 160.0);
+    let inspector = ui.grid()?;
     inspector.set_sizing(Sizing::fill());
+    inspector.set_column_track(0, Track::FILL);
+    inspector.set_row_track(0, Track::FILL);
+    inspector.set_row_track(1, Track::Fixed(native_layout::HANDLE));
+    inspector.set_row_track(2, Track::Fixed(preferred.properties));
     let properties_grip = ui.canvas()?;
     properties_grip.set_sizing(
-        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(native_layout::HANDLE)),
     );
     inspector.attach(&solution_pane, GridCell::new(0, 0));
     inspector.attach(&properties_grip, GridCell::new(0, 1));
@@ -779,27 +777,26 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
-    // Native resizable pane splitters: NSSplitView on macOS, GtkPaned on
-    // Linux and WinUI 3 Grid-based dividers on Windows.
-    let edit_and_output = ui.split_view(Orientation::Vertical)?;
-    edit_and_output.set_start(&centre);
-    edit_and_output.set_end(&bottom);
-    edit_and_output.set_position(saved_dock.editor_height);
-    edit_and_output.set_min_sizes(260.0, 130.0);
-    edit_and_output.set_sizing(Sizing::fill());
+    // Fixed tool-pane tracks with a Fill editor preserve Visual Studio-style
+    // proportions when the OS window is resized. Users adjust the pane sizes
+    // using the narrow canvas grips; those preferences are persisted.
+    let document_workspace = ui.grid()?;
+    document_workspace.set_sizing(Sizing::fill());
+    document_workspace.set_column_track(0, Track::FILL);
+    document_workspace.set_row_track(0, Track::FILL);
+    document_workspace.set_row_track(1, Track::Fixed(native_layout::HANDLE));
+    document_workspace.set_row_track(2, Track::Fixed(preferred.output));
+    let output_grip = ui.canvas()?;
+    output_grip.set_sizing(
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(native_layout::HANDLE)),
+    );
+    document_workspace.attach(&centre, GridCell::new(0, 0));
+    document_workspace.attach(&output_grip, GridCell::new(0, 1));
+    document_workspace.attach(&bottom, GridCell::new(0, 2));
 
-    let project_and_editor = ui.split_view(Orientation::Horizontal)?;
-    project_and_editor.set_start(&edit_and_output);
-    project_and_editor.set_end(&inspector);
-    project_and_editor.set_position(saved_dock.editor_width);
-    project_and_editor.set_min_sizes(350.0, 220.0);
-    project_and_editor.set_sizing(Sizing::fill());
-
-    let main_workspace = ui.split_view(Orientation::Horizontal)?;
-    main_workspace.set_start(&left_side);
-    main_workspace.set_end(&project_and_editor);
-    main_workspace.set_position(saved_dock.toolbox_width);
-    main_workspace.set_min_sizes(160.0, 500.0);
+    let main_workspace = ui.grid()?;
     main_workspace.set_sizing(Sizing::fill());
     main_workspace.set_row_track(0, Track::FILL);
     main_workspace.set_column_track(0, Track::Fixed(preferred.toolbox));
@@ -809,11 +806,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     main_workspace.set_column_track(4, Track::Fixed(preferred.inspector));
     let toolbox_grip = ui.canvas()?;
     toolbox_grip.set_sizing(
-        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+        Sizing::new()
+            .width(Length::Fixed(native_layout::HANDLE))
+            .height(Length::Fill),
     );
     let inspector_grip = ui.canvas()?;
     inspector_grip.set_sizing(
-        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+        Sizing::new()
+            .width(Length::Fixed(native_layout::HANDLE))
+            .height(Length::Fill),
     );
     main_workspace.attach(&left_side, GridCell::new(0, 0));
     main_workspace.attach(&toolbox_grip, GridCell::new(1, 0));
@@ -853,61 +854,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     status_bar.append(&workspace_name);
     root.attach(&status_bar, GridCell::new(0, 2));
 
-    // Native resize callbacks run for every pointer movement. Coalesce
-    // disk writes on a worker thread so fsync does not block the GTK/AppKit/
-    // WinUI event loop while the user drags a splitter.
-    let (dock_updates, dock_receiver) = std::sync::mpsc::channel::<DockLayout>();
-    let save_error = ui.tasks().channel({
-        let status = status.clone();
-        move |message: String| status.set_text(&message)
-    });
-    let destination = dock_file.clone();
-    std::thread::spawn(move || {
-        use std::time::Duration;
-        while let Ok(mut latest) = dock_receiver.recv() {
-            while let Ok(update) = dock_receiver.recv_timeout(Duration::from_millis(180)) {
-                latest = update;
-            }
-            if let Err(error) = latest.save(&destination) {
-                let _ = save_error.send(format!("Could not save window layout: {error}"));
-            }
-        }
-    });
-    for (splitter, pane) in [
-        (&main_workspace, DockPane::Toolbox),
-        (&project_and_editor, DockPane::Editor),
-        (&edit_and_output, DockPane::Output),
-        (&inspector, DockPane::Solution),
-    ] {
-        let dock = dock.clone();
-        let updates = dock_updates.clone();
-        splitter.on_resize(move |position| {
-            let mut current = dock.borrow_mut();
-            if current.set_position(pane, position) {
-                let _ = updates.send(*current);
-            }
-        });
-    }
-
     let reset_window_layout: Rc<dyn Fn()> = Rc::new({
-        let dock = dock.clone();
-        let updates = dock_updates.clone();
+        let pane_sizes = pane_sizes.clone();
+        let pane_path = pane_path.clone();
+        let refresh_tracks = refresh_tracks.clone();
         let status = status.clone();
-        let main_workspace = main_workspace.clone();
-        let project_and_editor = project_and_editor.clone();
-        let edit_and_output = edit_and_output.clone();
-        let inspector = inspector.clone();
         move || {
-            let restored = DockLayout::default();
-            *dock.borrow_mut() = restored;
-            main_workspace.set_position(restored.toolbox_width);
-            project_and_editor.set_position(restored.editor_width);
-            edit_and_output.set_position(restored.editor_height);
-            inspector.set_position(restored.solution_height);
-            if updates.send(restored).is_ok() {
-                status.set_text("Window layout reset to defaults.");
-            } else {
-                status.set_text("Could not queue window layout preferences for saving.");
+            let defaults = native_layout::PaneSizes::default();
+            pane_sizes.set(defaults);
+            refresh_tracks(defaults);
+            match defaults.save(&pane_path) {
+                Ok(()) => status.set_text("Window layout reset to defaults."),
+                Err(error) => status.set_text(&format!("Could not save window layout: {error}")),
             }
         }
     });
