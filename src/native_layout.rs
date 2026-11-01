@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn grip_hit_target_is_accessible_and_keyboard_adjustments_preserve_fixed_tracks() {
-        assert!(HANDLE >= 10.0);
+        assert_eq!(HANDLE, 12.0);
         let original = PaneSizes::default();
         assert_eq!(
             original.adjust(Pane::Toolbox, 1).toolbox,
@@ -192,11 +192,12 @@ mod tests {
 
     #[test]
     fn layout_rejects_unbounded_nan_and_infinite_sizes() {
-        let mut sizes = PaneSizes::default();
-        sizes.inspector = f64::NAN;
-        sizes.toolbox = f64::INFINITY;
-        sizes.output = -40_000.0;
-        sizes.properties = 200_000.0;
+        let sizes = PaneSizes {
+            inspector: f64::NAN,
+            toolbox: f64::INFINITY,
+            output: -40_000.0,
+            properties: 200_000.0,
+        };
         let safe = sizes.sanitize();
         assert_eq!(safe.inspector, PaneSizes::default().inspector);
         assert_eq!(safe.toolbox, PaneSizes::default().toolbox);
