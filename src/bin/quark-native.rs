@@ -1761,6 +1761,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let state = state.clone();
         let canvas = canvas.clone();
         let canvas_width = canvas_width.clone();
+        let xml_editor = xml_editor.clone();
+        let sync_xml = sync_xml.clone();
         let selected_name = selected_name.clone();
         let selected_text = selected_text.clone();
         let selected_x = selected_x.clone();
@@ -1819,14 +1821,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         if let Some(layout) = ide.layout.as_mut() {
                             layout.layout.position(
                                 id,
-                                event.point.x as f32 - dx,
-                                event.point.y as f32 - dy,
+                                (event.point.x
+                                    - ((canvas_width.get() - f64::from(layout.layout.width)) / 2.0)
+                                        .max(20.0)) as f32 - dx,
+                                (event.point.y - 60.0) as f32 - dy,
                             );
                         }
                     }
                 }
                 PointerPhase::Up => {
                     ide.drag = None;
+                    if let Some(doc) = ide.layout.as_mut() {
+                        match doc.refresh_designer_xml() {
+                            Ok(xml) => {
+                                sync_xml.set(true);
+                                xml_editor.set_text(&xml);
+                                sync_xml.set(false);
+                            }
+                            Err(error) => status.set_text(&format!(
+                                "Fix XML source before editing visually: {error}"
+                            )),
+                        }
+                    }
                     if let (Some(doc), Some(id)) = (&ide.layout, ide.selected_id) {
                         if let Some(control) = doc.layout.controls.iter().find(|c| c.id == id) {
                             selected_x.set_text(&control.x.to_string());
