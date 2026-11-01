@@ -3,8 +3,6 @@
 //! a deeply nested widget never flattens panels, tabs, event handlers or text.
 use roxmltree::{Document, Node};
 
-pub type ElementPath = Vec<usize>;
-
 fn element_at<'a, 'input>(
     document: &'a Document<'input>,
     path: &[usize],
