@@ -42,3 +42,32 @@ jobs:
             target/release/quark-ide
             target/release/quark-ide.exe
           if-no-files-found: error
+
+  native-frontend:
+    name: native UI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: GTK4 and libadwaita build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libgtk-4-dev libadwaita-1-dev
+      - name: Verify native UI frontend
+        run: cargo clippy --features native-ui --bin quark-native -- -D warnings
+      - name: Native UI model tests
+        run: cargo test --features native-ui --bin quark-native
+      - name: Build native UI frontend
+        run: cargo build --release --features native-ui --bin quark-native
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quark-native-${{ runner.os }}
+          path: |
+            target/release/quark-native
+            target/release/quark-native.exe
+          if-no-files-found: error
