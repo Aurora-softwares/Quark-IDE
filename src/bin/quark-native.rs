@@ -12,6 +12,8 @@ mod hydrogen;
 mod native_commands;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
+#[path = "../native_layout.rs"]
+mod native_layout;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
@@ -33,11 +35,11 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings, Sizing,
-    Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
+    Color, GridCell, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect,
+    Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     fs,
     path::{Path, PathBuf},
     rc::Rc,
@@ -382,6 +384,52 @@ fn run_task(
     });
 }
 
+/// User-initiated tool-pane resizing. OS window resizes never update
+/// these stored widths/heights: the centre's Fill tracks absorb the change.
+fn attach_pane_grip(
+    grip: &naui::Canvas,
+    pane: native_layout::Pane,
+    prefs: Rc<Cell<native_layout::PaneSizes>>,
+    save_path: PathBuf,
+    apply: Rc<dyn Fn(native_layout::PaneSizes)>,
+) {
+    let vertical_divider = matches!(
+        pane,
+        native_layout::Pane::Toolbox | native_layout::Pane::Inspector
+    );
+    grip.on_draw(move |painter| {
+        let (width, height) = (painter.width(), painter.height());
+        let line = if vertical_divider {
+            Rect::new((width - 1.0) / 2.0, 0.0, 1.0, height)
+        } else {
+            Rect::new(0.0, (height - 1.0) / 2.0, width, 1.0)
+        };
+        painter.fill_rect(line, Color::rgb(0x777777));
+    });
+    let dragging = Rc::new(Cell::new(None::<(f64, native_layout::PaneSizes)>));
+    grip.on_pointer({
+        let dragging = dragging.clone();
+        move |event| {
+            let coordinate = if vertical_divider { event.point.x } else { event.point.y };
+            match event.phase {
+                PointerPhase::Down => dragging.set(Some((coordinate, prefs.get()))),
+                PointerPhase::Move => {
+                    if let Some((begin, original)) = dragging.get() {
+                        let next = original.resized(pane, coordinate - begin);
+                        prefs.set(next);
+                        apply(next);
+                    }
+                }
+                PointerPhase::Up => {
+                    if dragging.replace(None).is_some() {
+                        let _ = prefs.get().save(&save_path);
+                    }
+                }
+            }
+        }
+    });
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let window = ui.window(
         "Quark IDE — Hydrogen Development Environment",
@@ -419,8 +467,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // Professional IDE layout, deliberately different from the VS Code-style
     // activity bar. The centre owns documents/designers; tools and properties
     // live in persistent surrounding panes.
-    let root = ui.stack(Orientation::Vertical)?;
+    let root = ui.grid()?;
     root.set_sizing(Sizing::fill());
+    root.set_column_track(0, Track::FILL);
+    root.set_row_track(0, Track::Fixed(45.0));
+    root.set_row_track(1, Track::FILL);
+    root.set_row_track(2, Track::Fixed(26.0));
+    let pane_path = workspace_file().with_file_name("native-pane-layout.json");
+    let preferred = native_layout::PaneSizes::open(&pane_path).unwrap_or_default();
+    let pane_sizes = Rc::new(Cell::new(preferred));
 
     // The familiar Visual Studio command strip lives below the native menu.
     // Configuration and architecture are visible now; native compiler flag
@@ -449,7 +504,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     command_strip.append(&run_button);
     command_strip.append(&debug_button);
     command_strip.append(&publish_button);
-    root.append(&command_strip);
+    root.attach(&command_strip, GridCell::new(0, 0));
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(9.0);
@@ -609,12 +664,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&delete_control);
     properties_pane.set_sizing(Sizing::fill());
 
-    let inspector = ui.split_view(Orientation::Vertical)?;
-    inspector.set_start(&solution_pane);
-    inspector.set_end(&properties_pane);
-    inspector.set_position(430.0);
-    inspector.set_min_sizes(190.0, 160.0);
+    // Right tool column: bottom Properties height follows the user's last
+    // drag, while Solution Explorer scrolls in its available space.
+    let inspector = ui.grid()?;
+    inspector.set_column_track(0, Track::FILL);
+    inspector.set_row_track(0, Track::FILL);
+    inspector.set_row_track(1, Track::Fixed(native_layout::HANDLE));
+    inspector.set_row_track(2, Track::Fixed(preferred.properties));
     inspector.set_sizing(Sizing::fill());
+    let properties_grip = ui.canvas()?;
+    properties_grip.set_sizing(
+        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+    );
+    inspector.attach(&solution_pane, GridCell::new(0, 0));
+    inspector.attach(&properties_grip, GridCell::new(0, 1));
+    inspector.attach(&properties_pane, GridCell::new(0, 2));
 
     let bottom = ui.stack(Orientation::Vertical)?;
     let bottom_tabs = ui.stack(Orientation::Horizontal)?;
@@ -657,34 +721,75 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
-    // Native resizable pane splitters: NSSplitView on macOS, GtkPaned on
-    // Linux and WinUI 3 Grid-based dividers on Windows.
-    let edit_and_output = ui.split_view(Orientation::Vertical)?;
-    edit_and_output.set_start(&centre);
-    edit_and_output.set_end(&bottom);
-    edit_and_output.set_position(640.0);
-    edit_and_output.set_min_sizes(260.0, 130.0);
-    edit_and_output.set_sizing(Sizing::fill());
+    // The editor/designer alone owns Fill tracks. The sidebars and Output
+    // use Fixed tracks, so maximising the host window never expands them.
+    let document_workspace = ui.grid()?;
+    document_workspace.set_column_track(0, Track::FILL);
+    document_workspace.set_row_track(0, Track::FILL);
+    document_workspace.set_row_track(1, Track::Fixed(native_layout::HANDLE));
+    document_workspace.set_row_track(2, Track::Fixed(preferred.output));
+    document_workspace.set_sizing(Sizing::fill());
+    let output_grip = ui.canvas()?;
+    output_grip.set_sizing(
+        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+    );
+    document_workspace.attach(&centre, GridCell::new(0, 0));
+    document_workspace.attach(&output_grip, GridCell::new(0, 1));
+    document_workspace.attach(&bottom, GridCell::new(0, 2));
 
-    let project_and_editor = ui.split_view(Orientation::Horizontal)?;
-    project_and_editor.set_start(&edit_and_output);
-    project_and_editor.set_end(&inspector);
-    project_and_editor.set_position(930.0);
-    project_and_editor.set_min_sizes(350.0, 220.0);
-    project_and_editor.set_sizing(Sizing::fill());
-
-    let main_workspace = ui.split_view(Orientation::Horizontal)?;
-    main_workspace.set_start(&left_side);
-    main_workspace.set_end(&project_and_editor);
-    main_workspace.set_position(210.0);
-    main_workspace.set_min_sizes(160.0, 500.0);
+    let main_workspace = ui.grid()?;
     main_workspace.set_sizing(Sizing::fill());
-    root.append(&main_workspace);
+    main_workspace.set_row_track(0, Track::FILL);
+    main_workspace.set_column_track(0, Track::Fixed(preferred.toolbox));
+    main_workspace.set_column_track(1, Track::Fixed(native_layout::HANDLE));
+    main_workspace.set_column_track(2, Track::FILL);
+    main_workspace.set_column_track(3, Track::Fixed(native_layout::HANDLE));
+    main_workspace.set_column_track(4, Track::Fixed(preferred.inspector));
+    let toolbox_grip = ui.canvas()?;
+    toolbox_grip.set_sizing(
+        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+    );
+    let inspector_grip = ui.canvas()?;
+    inspector_grip.set_sizing(
+        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+    );
+    main_workspace.attach(&left_side, GridCell::new(0, 0));
+    main_workspace.attach(&toolbox_grip, GridCell::new(1, 0));
+    main_workspace.attach(&document_workspace, GridCell::new(2, 0));
+    main_workspace.attach(&inspector_grip, GridCell::new(3, 0));
+    main_workspace.attach(&inspector, GridCell::new(4, 0));
+    root.attach(&main_workspace, GridCell::new(0, 1));
+
+    let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
+        let main_workspace = main_workspace.clone();
+        let document_workspace = document_workspace.clone();
+        let inspector = inspector.clone();
+        move |sizes| {
+            main_workspace.set_column_track(0, Track::Fixed(sizes.toolbox));
+            main_workspace.set_column_track(4, Track::Fixed(sizes.inspector));
+            document_workspace.set_row_track(2, Track::Fixed(sizes.output));
+            inspector.set_row_track(2, Track::Fixed(sizes.properties));
+        }
+    });
+    for (grip, pane) in [
+        (&toolbox_grip, native_layout::Pane::Toolbox),
+        (&inspector_grip, native_layout::Pane::Inspector),
+        (&output_grip, native_layout::Pane::Output),
+        (&properties_grip, native_layout::Pane::Properties),
+    ] {
+        attach_pane_grip(
+            grip,
+            pane,
+            pane_sizes.clone(),
+            pane_path.clone(),
+            refresh_tracks.clone(),
+        );
+    }
 
     let status_bar = ui.stack(Orientation::Horizontal)?;
     status_bar.append(&status);
     status_bar.append(&workspace_name);
-    root.append(&status_bar);
+    root.attach(&status_bar, GridCell::new(0, 2));
 
     // Native docking/tab selection is independent of the active document.
     let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
@@ -1253,6 +1358,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let left_panel = left_panel.clone();
         let status = status.clone();
         let window = window.clone();
+        let pane_sizes = pane_sizes.clone();
+        let refresh_tracks = refresh_tracks.clone();
+        let pane_path = pane_path.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
             (0, 1) => {
@@ -1370,7 +1478,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (9, 0) => status.set_text("Native Options panel is planned."),
             (10, 0) => status.set_text("Native extension management is planned."),
-            (11, 0) => status.set_text("Window panes can be resized by dragging their separators."),
+            (11, 0) => {
+                let defaults = native_layout::PaneSizes::default();
+                pane_sizes.set(defaults);
+                refresh_tracks(defaults);
+                let _ = defaults.save(&pane_path);
+                status.set_text("Tool-window sizes reset. Editor fills the remaining space.");
+            },
             (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
             _ => {}
         }
