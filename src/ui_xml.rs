@@ -1,5 +1,5 @@
 //! Hydrogen UI XML interchange for both Quark frontends.
-//! .hyyui is the sole supported UI layout format; its contents are XML.
+//! .hyui is the sole supported UI layout format; its contents are XML.
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -139,9 +139,9 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
 pub fn load<T: DeserializeOwned>(path: &std::path::Path, text: &str) -> Result<T, String> {
     if !matches!(
         path.extension().and_then(|e| e.to_str()),
-        Some("hyyui" | "hyui")
+        Some("hyui")
     ) {
-        return Err("Expected a Hydrogen .hyyui UI layout".into());
+        return Err("Expected a Hydrogen .hyui UI layout".into());
     }
     decode(text)
 }
@@ -149,9 +149,9 @@ pub fn load<T: DeserializeOwned>(path: &std::path::Path, text: &str) -> Result<T
 pub fn save<T: Serialize>(path: &std::path::Path, layout: &T) -> Result<String, String> {
     if !matches!(
         path.extension().and_then(|e| e.to_str()),
-        Some("hyyui" | "hyui")
+        Some("hyui")
     ) {
-        return Err("Expected a Hydrogen .hyyui UI layout".into());
+        return Err("Expected a Hydrogen .hyui UI layout".into());
     }
     encode(layout)
 }
@@ -195,14 +195,15 @@ mod tests {
             controls: Vec::new(),
         };
         let xml = encode(&layout).unwrap();
-        assert!(load::<SharedLayout>(Path::new("Form.hyyui"), &xml).is_ok());
         assert!(load::<SharedLayout>(Path::new("Form.hyui"), &xml).is_ok());
+        assert!(load::<SharedLayout>(Path::new("Form.hyyui"), &xml).is_err());
+        assert!(save(Path::new("Form.hyyui"), &layout).is_err());
         assert!(load::<SharedLayout>(Path::new("Form.layout"), &xml).is_err());
         assert!(save(Path::new("Form.layout"), &layout).is_err());
     }
 
     #[test]
-    fn wrong_xml_and_json_under_hyyui_are_rejected() {
+    fn wrong_xml_and_json_under_hyui_are_rejected() {
         assert!(decode::<SharedLayout>(r#"{\"version\":1}"#).is_err());
         assert!(decode::<SharedLayout>("<Unexpected />").is_err());
     }
