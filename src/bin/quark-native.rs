@@ -937,7 +937,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let xml_divider = ui.canvas()?;
     xml_divider.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(7.0)));
     xml_divider.on_draw(|p| {
-        p.fill_rect(Rect::new(0.0, 2.0, p.width(), 3.0), Color::rgb(0x56, 0x57, 0x61));
+        p.fill_rect(
+            Rect::new(0.0, 2.0, p.width(), 3.0),
+            Color::rgb(0x56, 0x57, 0x61),
+        );
     });
     designer.attach(&design_surface, GridCell::new(0, 0));
     designer.attach(&xml_divider, GridCell::new(0, 1));
@@ -965,7 +968,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let status = status.clone();
         let sync_xml = sync_xml.clone();
         move |text| {
-            if sync_xml.get() { return; }
+            if sync_xml.get() {
+                return;
+            }
             let mut ide = state.borrow_mut();
             if let Some(layout) = ide.layout.as_mut() {
                 match layout.edit_source(text.to_owned()) {
@@ -1797,7 +1802,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             match event.phase {
                 PointerPhase::Down => {
                     let (x, y) = if let Some(doc) = ide.layout.as_ref() {
-                        let left = ((canvas_width.get() - f64::from(doc.layout.width)) / 2.0).max(20.0);
+                        let left =
+                            ((canvas_width.get() - f64::from(doc.layout.width)) / 2.0).max(20.0);
                         ((event.point.x - left) as f32, (event.point.y - 60.0) as f32)
                     } else {
                         (event.point.x as f32, event.point.y as f32)
@@ -1841,7 +1847,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 PointerPhase::Move => {
                     if let Some((id, dx, dy)) = ide.drag {
                         if let Some(layout) = ide.layout.as_mut() {
-                            let left = ((canvas_width.get() - f64::from(layout.layout.width)) / 2.0)
+                            let left = ((canvas_width.get() - f64::from(layout.layout.width))
+                                / 2.0)
                                 .max(20.0);
                             let x = (event.point.x - left) as f32 - dx;
                             let y = (event.point.y - 60.0) as f32 - dy;
@@ -1882,7 +1889,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let sync_xml = sync_xml.clone();
         let status = status.clone();
         move || {
-            let result = state.borrow_mut().layout.as_mut()
+            let result = state
+                .borrow_mut()
+                .layout
+                .as_mut()
                 .map(|doc| doc.refresh_designer_xml());
             match result {
                 Some(Ok(xml)) => {
@@ -1890,9 +1900,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     xml_editor.set_text(&xml);
                     sync_xml.set(false);
                 }
-                Some(Err(error)) => status.set_text(&format!(
-                    "Fix XML source before visual edits: {error}"
-                )),
+                Some(Err(error)) => {
+                    status.set_text(&format!("Fix XML source before visual edits: {error}"))
+                }
                 None => {}
             }
         }
