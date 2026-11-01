@@ -7,6 +7,8 @@
 
 #[path = "../editor.rs"]
 mod editor;
+#[path = "../theme.rs"]
+mod theme;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
@@ -748,10 +750,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let mode = tab_mode.clone();
             let active = active_side_tab.clone();
             move |p| {
-                let names = if mode.get() == Page::Code {
-                    native_shell::CODE_SIDE_TABS
+                let names: &[&str] = if mode.get() == Page::Code {
+                    &native_shell::CODE_SIDE_TABS
                 } else {
-                    native_shell::DESIGN_SIDE_TABS
+                    &native_shell::DESIGN_SIDE_TABS
                 };
                 let Some(title) = names.get(index) else {
                     return;
@@ -1494,7 +1496,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui" | "hyui") {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") || path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -1830,7 +1832,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui" | "hyui") {
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") || path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                         open_layout(path);
                     } else {
                         open_source(path);
