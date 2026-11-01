@@ -2640,7 +2640,7 @@ fn workspace_extension_scope_does_not_follow_terminal_directory_override() {
 #[test]
 fn visual_designer_renders_toolbox_and_properties_and_saves() {
     let mut h = Harness::new();
-    let layout_path = h.dir.path().join("Main.quarkui");
+    let layout_path = h.dir.path().join("Main.hyyui");
     h.q.designer = Some(designer::Designer::create(layout_path.clone()).unwrap());
     h.q.designer_active = true;
     h.q.active = None;
@@ -2665,7 +2665,7 @@ fn visual_designer_renders_toolbox_and_properties_and_saves() {
 #[test]
 fn dirty_visual_layout_requires_confirmation_before_close() {
     let mut h = Harness::new();
-    let path = h.dir.path().join("Form.quarkui");
+    let path = h.dir.path().join("Form.hyyui");
     h.q.designer = Some(designer::Designer::create(path).unwrap());
     h.q.designer_active = true;
     h.q.designer
