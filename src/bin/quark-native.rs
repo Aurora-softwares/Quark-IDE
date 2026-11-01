@@ -1082,6 +1082,33 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
+    // File > New Project reuses the native launcher wizard as a separate
+    // window, without reopening the IDE's removed Start document or closing
+    // the IDE when creation completes.
+    let show_new_project: Rc<dyn Fn()> = Rc::new({
+        let ui = ui.clone();
+        let window = window.clone();
+        let open_project = open_project.clone();
+        let status = status.clone();
+        move || {
+            let launch: native_start_window::Launch = Rc::new({
+                let open_project = open_project.clone();
+                move |action| match action {
+                    native_start_window::Action::Project(manifest) => {
+                        open_project(manifest);
+                        Ok(())
+                    }
+                    _ => Err("Choose a new Hydrogen project".into()),
+                }
+            });
+            if let Err(error) =
+                native_start_window::create_project_wizard(&ui, window.clone(), launch, false)
+            {
+                status.set_text(&format!("Cannot open project wizard: {error}"));
+            }
+        }
+    });
+
     tree.on_select({
         let displayed_paths = displayed_paths.clone();
         let open_source = open_source.clone();
@@ -1363,12 +1390,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     toolbar.on_activate({
         let save_action = save_action.clone();
         let open_project = open_project.clone();
-        let show_page = show_page.clone();
+        let show_new_project = show_new_project.clone();
         let task_action = task_action.clone();
         let status = status.clone();
         let solution_search = solution_search.clone();
         move |index| match index {
-            0 => show_page(Page::Empty),
+            0 => show_new_project(),
             1 => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Hydrogen project", &["hyproj"])
@@ -1394,6 +1421,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let state = state.clone();
         let save_action = save_action.clone();
         let show_page = show_page.clone();
+        let show_new_project = show_new_project.clone();
         let open_project = open_project.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
@@ -1405,7 +1433,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let window = window.clone();
         let reset_window_layout = reset_window_layout.clone();
         move |menu, action| match (menu, action) {
-            (0, 0) => show_page(Page::Empty),
+            (0, 0) => show_new_project(),
             (0, 1) => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Hydrogen", &["hyproj"])
