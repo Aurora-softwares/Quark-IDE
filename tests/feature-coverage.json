@@ -1889,8 +1889,8 @@
       "category": "Native platform",
       "feature": "Empty full-IDE workspace has no in-window Start page or fake document tabs and restores blank after project closure",
       "tests": [
-        "tests::entering_full_ide_without_documents_is_a_blank_workspace",
-        "tests::blank_workspace_is_restored_after_closing_a_folder_and_existing_source"
+        "native_model::tests::blank_workspace_never_displays_fake_code_or_designer_tabs",
+        "native_model::tests::document_tabs_require_their_matching_open_document"
       ]
     },
     {
