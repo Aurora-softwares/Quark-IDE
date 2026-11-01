@@ -71,6 +71,7 @@ impl Recent {
 #[serde(default)]
 pub struct History {
     pub recent: Vec<Recent>,
+    pub hidden: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +97,7 @@ impl History {
 
     pub fn remember(&mut self, path: PathBuf, now: u64) {
         let path = path.canonicalize().unwrap_or(path);
+        self.hidden.retain(|item| item != &path);
         let pinned = self
             .recent
             .iter()
@@ -116,7 +118,9 @@ impl History {
     pub fn migrate_paths(&mut self, paths: &[PathBuf], now: u64) {
         for path in paths.iter().rev() {
             let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
-            if !self.recent.iter().any(|entry| entry.path == canonical) {
+            if !self.recent.iter().any(|entry| entry.path == canonical)
+                && !self.hidden.contains(&canonical)
+            {
                 self.remember(canonical, now);
             }
         }
@@ -132,6 +136,10 @@ impl History {
 
     pub fn remove(&mut self, path: &Path) {
         self.recent.retain(|entry| entry.path != path);
+        if !self.hidden.iter().any(|item| item == path) {
+            self.hidden.push(path.to_path_buf());
+            self.hidden.truncate(MAX_RECENTS);
+        }
     }
 
     pub fn rows(&self, query: &str, now: u64) -> Vec<Row> {
@@ -259,6 +267,8 @@ mod tests {
         history.remove(&manifest.canonicalize().unwrap());
         assert!(history.rows("", 500_000).is_empty());
         assert_eq!(fs::read_to_string(manifest).unwrap(), "keep me");
+        history.migrate_paths(&[dir.path().join("App.hyproj")], 500_001);
+        assert!(history.recent.is_empty());
     }
 
     #[test]
