@@ -84,8 +84,8 @@ impl Ide {
     }
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
-        if self.document.as_ref().is_some_and(Document::dirty) {
-            return Err("Save the current source file before opening another".into());
+        if self.has_unsaved() {
+            return Err("Save open source and UI layout changes before replacing a document".into());
         }
         self.document = Some(Document::open(file)?);
         self.page = Page::Code;
