@@ -2051,6 +2051,23 @@ mod tests {
     }
 
     #[test]
+    fn switching_documents_keeps_unsaved_buffers_in_tabs() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = dir.path().join("First.hy");
+        let second = dir.path().join("Second.hy");
+        fs::write(&first, "class First {}").unwrap();
+        fs::write(&second, "class Second {}").unwrap();
+        let mut ide = Ide::from_workspace(Workspace::default());
+        ide.open_source(&first).unwrap();
+        ide.document.as_mut().unwrap().text = "class First { int Changed; }".into();
+        ide.open_source(&second).unwrap();
+        assert_eq!(ide.open_tabs().len(), 2);
+        assert!(ide.has_unsaved());
+        ide.open_source(&first).unwrap();
+        assert!(ide.document.as_ref().unwrap().text.contains("Changed"));
+    }
+
+    #[test]
     fn platform_name_matches_native_target() {
         #[cfg(target_os = "windows")]
         assert!(backend().contains("WinUI"));
