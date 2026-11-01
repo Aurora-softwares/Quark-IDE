@@ -695,6 +695,41 @@ mod tests {
     }
 
     #[test]
+    fn source_editing_updates_visual_model_and_preserves_invalid_draft() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Form.hyyui");
+        fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
+        let mut doc = LayoutDocument::open(&path).unwrap();
+        let mut changed = doc.layout.clone();
+        changed.add(ControlKind::Button, 20.0, 30.0).unwrap();
+        let xml = crate::ui_xml::encode(&changed).unwrap();
+        doc.edit_source(xml.clone()).unwrap();
+        assert_eq!(doc.layout.controls.len(), 1);
+        assert!(doc.dirty());
+        assert_eq!(doc.source().unwrap(), xml);
+        let invalid = "<HydrogenUI".to_owned();
+        assert!(doc.edit_source(invalid.clone()).is_err());
+        assert_eq!(doc.source().unwrap(), invalid);
+        assert_eq!(doc.layout.controls.len(), 1);
+        assert!(doc.save().is_err());
+        doc.edit_source(xml.clone()).unwrap();
+        doc.save().unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(), xml);
+        assert!(!doc.dirty());
+    }
+
+    #[test]
+    fn source_draft_blocks_save_on_invalid_xml() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Form.hyui");
+        fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
+        let mut doc = LayoutDocument::open(&path).unwrap();
+        assert!(doc.edit_source("<HydrogenUI/>".into()).is_err());
+        assert!(doc.save().is_err());
+        assert_ne!(doc.source().unwrap(), fs::read_to_string(path).unwrap());
+    }
+
+    #[test]
     fn untrusted_layouts_are_bounded_and_invalid_geometry_is_rejected() {
         let mut layout = Layout::default();
         let id = layout.add(ControlKind::Checkbox, 2.0, 3.0).unwrap();
