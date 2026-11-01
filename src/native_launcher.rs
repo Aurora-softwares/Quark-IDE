@@ -242,12 +242,14 @@ mod tests {
 
     #[test]
     fn age_groups_can_collapse_without_hiding_search_results() {
-        let mut history = History::default();
-        history.recent = vec![Recent {
-            path: PathBuf::from("/tmp/QuarkDemo.hyproj"),
-            opened_at: 200_000,
-            pinned: true,
-        }];
+        let history = History {
+            recent: vec![Recent {
+                path: PathBuf::from("/tmp/QuarkDemo.hyproj"),
+                opened_at: 200_000,
+                pinned: true,
+            }],
+            ..History::default()
+        };
         let collapsed = history.rows_collapsed("", 200_100, &[AgeGroup::Pinned]);
         assert_eq!(collapsed.len(), 1);
         assert!(collapsed[0].title.contains("Pinned"));
@@ -259,12 +261,14 @@ mod tests {
 
     #[test]
     fn expanded_age_groups_have_headers_and_selectable_entries() {
-        let mut history = History::default();
-        history.recent = vec![Recent {
-            path: PathBuf::from("/tmp/Recent.hyproj"),
-            opened_at: 200_000,
-            pinned: false,
-        }];
+        let history = History {
+            recent: vec![Recent {
+                path: PathBuf::from("/tmp/Recent.hyproj"),
+                opened_at: 200_000,
+                pinned: false,
+            }],
+            ..History::default()
+        };
         let expanded = history.rows_collapsed("", 200_100, &[]);
         assert!(expanded[0].title.contains("Today"));
         assert_eq!(
