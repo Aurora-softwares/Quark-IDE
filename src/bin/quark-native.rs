@@ -168,7 +168,11 @@ impl Ide {
                 self.other_documents.push(current);
             }
         }
-        if !self.tab_order.iter().any(|(kind, p)| *kind == Page::Code && *p == path) {
+        if !self
+            .tab_order
+            .iter()
+            .any(|(kind, p)| *kind == Page::Code && *p == path)
+        {
             self.tab_order.push((Page::Code, path));
         }
         self.page = Page::Code;
@@ -192,7 +196,11 @@ impl Ide {
                 self.other_layouts.push(current);
             }
         }
-        if !self.tab_order.iter().any(|(kind, p)| *kind == Page::Design && *p == path) {
+        if !self
+            .tab_order
+            .iter()
+            .any(|(kind, p)| *kind == Page::Design && *p == path)
+        {
             self.tab_order.push((Page::Design, path));
         }
         self.page = Page::Design;
@@ -1266,8 +1274,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     .unwrap_or_else(|| path.display().to_string());
                 let selected = active_path.as_ref() == Some(path);
                 if let Ok(tab) = ui.canvas() {
-                    let tab_width = (filename.chars().count() as f64 * 7.0 + 20.0)
-                        .clamp(70.0, 144.0);
+                    let tab_width =
+                        (filename.chars().count() as f64 * 7.0 + 20.0).clamp(70.0, 144.0);
                     tab.set_sizing(
                         Sizing::new()
                             .width(Length::Fixed(tab_width))
@@ -1453,9 +1461,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 Ok(()) => {
                     let text = state.borrow().document.as_ref().unwrap().text.clone();
                     let tabs = state.borrow().open_tabs();
-                    let index = tabs.iter().position(|(kind, candidate)| {
-                        *kind == Page::Code && candidate == &path
-                    }).unwrap_or(0);
+                    let index = tabs
+                        .iter()
+                        .position(|(kind, candidate)| *kind == Page::Code && candidate == &path)
+                        .unwrap_or(0);
                     tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
                     editor.set_text(&text);
                     symbols_list.set_items(&project_symbols(&state.borrow()));
@@ -1478,9 +1487,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             match result {
                 Ok(()) => {
                     let tabs = state.borrow().open_tabs();
-                    let index = tabs.iter().position(|(kind, candidate)| {
-                        *kind == Page::Design && candidate == &path
-                    }).unwrap_or(0);
+                    let index = tabs
+                        .iter()
+                        .position(|(kind, candidate)| *kind == Page::Design && candidate == &path)
+                        .unwrap_or(0);
                     tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
                     show_page(Page::Design);
                     canvas.redraw();
