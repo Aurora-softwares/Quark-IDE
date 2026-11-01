@@ -43,8 +43,9 @@ impl Document {
 
     pub fn save(&mut self) -> Result<(), String> {
         // Refuse external modifications/deletion instead of silently overwriting.
-        crate::storage::save_checked(&self.path, &self.text, &self.saved)
-            .map_err(|error| format!("File was modified externally or cannot be saved: {error:?}"))?;
+        crate::storage::save_checked(&self.path, &self.text, &self.saved).map_err(|error| {
+            format!("File was modified externally or cannot be saved: {error:?}")
+        })?;
         self.saved = self.text.clone();
         Ok(())
     }
@@ -224,12 +225,15 @@ impl LayoutDocument {
         let saved = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let layout: Layout = serde_json::from_str(&saved).map_err(|e| e.to_string())?;
         layout.validate()?;
-        Ok(Self { path, layout, saved })
+        Ok(Self {
+            path,
+            layout,
+            saved,
+        })
     }
 
     pub fn dirty(&self) -> bool {
-        serde_json::to_string_pretty(&self.layout)
-            .is_ok_and(|current| current != self.saved)
+        serde_json::to_string_pretty(&self.layout).is_ok_and(|current| current != self.saved)
     }
 
     pub fn save(&mut self) -> Result<(), String> {
@@ -254,7 +258,11 @@ pub struct Workspace {
 impl Workspace {
     pub fn remember(&mut self, path: PathBuf, project: bool) {
         let path = path.canonicalize().unwrap_or(path);
-        let target = if project { &mut self.projects } else { &mut self.folders };
+        let target = if project {
+            &mut self.projects
+        } else {
+            &mut self.folders
+        };
         if !target.contains(&path) {
             target.push(path.clone());
         }
@@ -322,7 +330,10 @@ mod tests {
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.controls[0].text = "Launch".into();
         document.save().unwrap();
-        assert_eq!(LayoutDocument::open(&path).unwrap().layout.controls[0].text, "Launch");
+        assert_eq!(
+            LayoutDocument::open(&path).unwrap().layout.controls[0].text,
+            "Launch"
+        );
     }
 
     #[test]
@@ -348,14 +359,21 @@ mod tests {
         assert_eq!(workspace.projects.len(), 1);
         assert_eq!(workspace.recent.len(), 1);
         workspace.save(&path).unwrap();
-        assert_eq!(Workspace::open(&path).unwrap().selected, Some(project.canonicalize().unwrap()));
+        assert_eq!(
+            Workspace::open(&path).unwrap().selected,
+            Some(project.canonicalize().unwrap())
+        );
     }
 
     #[test]
     fn layout_save_refuses_external_modification() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("Main.quarkui");
-        fs::write(&path, serde_json::to_string_pretty(&Layout::default()).unwrap()).unwrap();
+        fs::write(
+            &path,
+            serde_json::to_string_pretty(&Layout::default()).unwrap(),
+        )
+        .unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.add(ControlKind::Label, 25.0, 35.0).unwrap();
         fs::write(&path, "external").unwrap();
