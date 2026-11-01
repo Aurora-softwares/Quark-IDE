@@ -8,11 +8,10 @@ use crate::{
     startup,
 };
 use naui::{
-    Length, ListItem, Orientation, Padding, Settings as _, Sizing, TextColor, TextStyle, Ui, Window,
+    Length, ListItem, Orientation, Padding, Sizing, TextColor, TextStyle, Ui, Window,
 };
 use std::{
     cell::RefCell,
-    fs,
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -466,6 +465,7 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
             let wizard = wizard.clone();
             let launcher = launcher.clone();
             let status = status.clone();
+            let destination_for_worker = destination.clone();
             let sender = ui
                 .tasks()
                 .channel(move |result: Result<(), String>| match result {
@@ -488,7 +488,7 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
                     .arg("clone")
                     .arg("--")
                     .arg(&origin)
-                    .arg(&destination)
+                    .arg(&destination_for_worker)
                     .output();
                 let result = match output {
                     Ok(out) if out.status.success() => Ok(()),
