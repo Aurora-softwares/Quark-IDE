@@ -269,7 +269,7 @@ impl Layout {
     }
 
     /// Apply a property-grid geometry change atomically. Invalid values
-    /// never leave a .hyyui layout unsaveable.
+    /// never leave a .hyui layout unsaveable.
     pub fn set_geometry(
         &mut self,
         id: u64,
@@ -682,9 +682,9 @@ mod tests {
     }
 
     #[test]
-    fn layout_round_trips_hydrogen_hyyui_xml() {
+    fn layout_round_trips_hydrogen_hyui_xml() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("Main.hyyui");
+        let path = directory.path().join("Main.hyui");
         let mut layout = Layout::default();
         let id = layout.add(ControlKind::Button, 120.0, 90.0).unwrap();
         assert_eq!(layout.hit_test(125.0, 96.0), Some(id));
@@ -702,7 +702,7 @@ mod tests {
     #[test]
     fn source_editing_updates_visual_model_and_preserves_invalid_draft() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("Form.hyyui");
+        let path = directory.path().join("Form.hyui");
         fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
         let mut doc = LayoutDocument::open(&path).unwrap();
         let mut changed = doc.layout.clone();
@@ -766,7 +766,7 @@ mod tests {
     #[test]
     fn layout_save_refuses_external_modification() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Main.hyyui");
+        let path = dir.path().join("Main.hyui");
         fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.add(ControlKind::Label, 25.0, 35.0).unwrap();
