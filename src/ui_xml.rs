@@ -60,21 +60,39 @@ struct XmlControl {
 
 impl From<SharedControl> for XmlControl {
     fn from(c: SharedControl) -> Self {
-        Self { id: c.id, kind: c.kind, name: c.name, text: c.text,
-            x: c.x, y: c.y, width: c.width, height: c.height }
+        Self {
+            id: c.id,
+            kind: c.kind,
+            name: c.name,
+            text: c.text,
+            x: c.x,
+            y: c.y,
+            width: c.width,
+            height: c.height,
+        }
     }
 }
 impl From<XmlControl> for SharedControl {
     fn from(c: XmlControl) -> Self {
-        Self { id: c.id, kind: c.kind, name: c.name, text: c.text,
-            x: c.x, y: c.y, width: c.width, height: c.height }
+        Self {
+            id: c.id,
+            kind: c.kind,
+            name: c.name,
+            text: c.text,
+            x: c.x,
+            y: c.y,
+            width: c.width,
+            height: c.height,
+        }
     }
 }
 impl From<SharedLayout> for XmlLayout {
     fn from(layout: SharedLayout) -> Self {
         Self {
-            version: layout.version, title: layout.title,
-            width: layout.width, height: layout.height,
+            version: layout.version,
+            title: layout.title,
+            width: layout.width,
+            height: layout.height,
             controls: layout.controls.into_iter().map(Into::into).collect(),
         }
     }
@@ -82,22 +100,35 @@ impl From<SharedLayout> for XmlLayout {
 impl From<XmlLayout> for SharedLayout {
     fn from(layout: XmlLayout) -> Self {
         Self {
-            version: layout.version, title: layout.title,
-            width: layout.width, height: layout.height,
+            version: layout.version,
+            title: layout.title,
+            width: layout.width,
+            height: layout.height,
             controls: layout.controls.into_iter().map(Into::into).collect(),
         }
     }
 }
 
 pub fn encode<T: Serialize>(layout: &T) -> Result<String, String> {
-    let shared: SharedLayout = serde_json::from_value(
-        serde_json::to_value(layout).map_err(|e| e.to_string())?
-    ).map_err(|e| e.to_string())?;
-    let xml = quick_xml::se::to_string(&XmlLayout::from(shared)).map_err(|e| e.to_string())?;
+    let shared: SharedLayout =
+        serde_json::from_value(serde_json::to_value(layout).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let xml =
+        quick_xml::se::to_string(&XmlLayout::from(shared)).map_err(|e| e.to_string())?;
     Ok(format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n{xml}\n"))
 }
 
 pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
+    let document = text.trim_start();
+    let root = if document.starts_with("<?xml") {
+        let end = document.find("?>").ok_or("Invalid XML declaration")?;
+        document[end + 2..].trim_start()
+    } else {
+        document
+    };
+    if !root.starts_with("<HydrogenUI ") && !root.starts_with("<HydrogenUI>") {
+        return Err("Expected a <HydrogenUI> XML root".into());
+    }
     let xml: XmlLayout = quick_xml::de::from_str(text).map_err(|e| e.to_string())?;
     let shared = SharedLayout::from(xml);
     serde_json::from_value(serde_json::to_value(shared).map_err(|e| e.to_string())?)
@@ -124,10 +155,20 @@ mod tests {
     #[test]
     fn xml_round_trip_preserves_controls_and_escaping() {
         let input = SharedLayout {
-            version: 1, title: "Hello <Hydrogen> & Quark".into(), width: 720.0, height: 480.0,
-            controls: vec![SharedControl { id: 1, kind: "button".into(),
-                name: "launch".into(), text: "Save & close \"now\"".into(),
-                x: 10.0, y: 20.0, width: 100.0, height: 30.0 }],
+            version: 1,
+            title: "Hello <Hydrogen> & Quark".into(),
+            width: 720.0,
+            height: 480.0,
+            controls: vec![SharedControl {
+                id: 1,
+                kind: "button".into(),
+                name: "launch".into(),
+                text: "Save & close \"now\"".into(),
+                x: 10.0,
+                y: 20.0,
+                width: 100.0,
+                height: 30.0,
+            }],
         };
         let xml = encode(&input).unwrap();
         assert!(xml.contains("<HydrogenUI"));
