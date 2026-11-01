@@ -8,9 +8,19 @@
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
+#[path = "../native_commands.rs"]
+mod native_commands;
+#[path = "../native_launcher.rs"]
+mod native_launcher;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
+#[path = "../native_shell.rs"]
+mod native_shell;
+#[path = "../native_start_window.rs"]
+mod native_start_window;
+#[path = "../problems.rs"]
+mod problems;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../project.rs"]
 mod project;
@@ -22,7 +32,7 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
+    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
     Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
 };
 use std::{
@@ -73,14 +83,50 @@ impl Ide {
     }
 
     fn remember_project(&mut self, manifest: PathBuf) -> Result<(), String> {
+        if self.has_unsaved() {
+            return Err("Save open source and UI design changes before changing projects".into());
+        }
         if manifest.extension().and_then(|s| s.to_str()) != Some("hyproj") || !manifest.is_file() {
             return Err("Choose an existing Hydrogen .hyproj file".into());
         }
         self.workspace.remember(manifest, true);
         self.workspace.save(&workspace_file())?;
         self.project = self.workspace.selected.as_deref().map(project::load);
+        self.document = None;
+        self.layout = None;
         self.page = Page::Code;
+        if let Some(path) = &self.workspace.selected {
+            record_recent(path.clone());
+        }
         Ok(())
+    }
+
+    fn remember_folder(&mut self, folder: PathBuf) -> Result<(), String> {
+        if self.has_unsaved() {
+            return Err("Save open source and UI design changes before changing folders".into());
+        }
+        if !folder.is_dir() {
+            return Err("Choose an existing folder".into());
+        }
+        self.workspace.remember(folder, false);
+        self.workspace.selected = None;
+        self.workspace.save(&workspace_file())?;
+        self.project = None;
+        self.document = None;
+        self.layout = None;
+        self.page = Page::Code;
+        if let Some(path) = self.workspace.folders.last() {
+            record_recent(path.clone());
+        }
+        Ok(())
+    }
+
+    fn clear_workspace(&mut self) {
+        self.project = None;
+        self.workspace.selected = None;
+        self.document = None;
+        self.layout = None;
+        self.page = Page::Start;
     }
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
@@ -140,6 +186,15 @@ fn workspace_file() -> PathBuf {
         .join("QuarkIDE/native-workspace.json")
 }
 
+fn record_recent(path: PathBuf) {
+    let file = workspace_file().with_file_name("native-launcher.json");
+    // A damaged history file must not be overwritten automatically.
+    if let Ok(mut history) = native_launcher::History::open(&file) {
+        history.remember(path, native_launcher::now_epoch());
+        let _ = history.save(&file);
+    }
+}
+
 fn backend() -> &'static str {
     if cfg!(target_os = "windows") {
         "WinUI 3 / Fluent"
@@ -159,9 +214,40 @@ fn display_project_name(ide: &Ide) -> String {
 
 fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     let Some(project) = &ide.project else {
+        let Some(folder) = ide.workspace.folders.last() else {
+            return (vec![TreeItem::new("No solution loaded")], vec![]);
+        };
+        let mut files = fs::read_dir(folder)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.is_file()
+                    && matches!(
+                        path.extension().and_then(|ext| ext.to_str()),
+                        Some("hy" | "hyproj" | "quarkui")
+                    )
+            })
+            .collect::<Vec<_>>();
+        files.sort();
+        let children: Vec<TreeItem> = files
+            .iter()
+            .map(|path| {
+                TreeItem::new(
+                    path.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                )
+            })
+            .collect();
         return (
-            vec![TreeItem::new("Open or create a Hydrogen project")],
-            vec![],
+            vec![TreeItem::new(format!("Folder '{}'", folder.display()))
+                .expanded(true)
+                .children(children)],
+            files,
         );
     };
     let mut paths = Vec::new();
@@ -201,64 +287,99 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     )
 }
 
-fn run_build(state: Rc<RefCell<Ide>>, output: naui::Label, status: naui::Label, ui: Ui) {
-    let plan = {
-        let ide = state.borrow();
-        let compiler = std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".into());
-        hydrogen::build_plan(
-            &compiler,
-            ide.workspace.selected.as_deref(),
-            ide.document.as_ref().map(|doc| doc.path.as_path()),
-            hydrogen::BuildScope::Project,
-        )
-    };
-    let Ok(plan) = plan else {
-        status.set_text(&plan.unwrap_err());
-        return;
-    };
-    let directory = if plan.output_is_directory {
-        plan.output.clone()
-    } else {
-        plan.output
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf()
-    };
-    if let Err(error) = fs::create_dir_all(directory) {
-        status.set_text(&format!("Build folder error: {error}"));
-        return;
+fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>) {
+    let (original, files) = file_items(ide);
+    let pattern = search.trim().to_lowercase();
+    if pattern.is_empty() {
+        return (original, files);
     }
-    status.set_text("Building Hydrogen project…");
-    output.set_text(&format!("{}\n", plan.description));
-    let sender = ui.tasks().channel(move |message: String| {
-        output.set_text(&message);
-        status.set_text(if message.contains("[Exit code: 0]") {
-            "Build succeeded"
-        } else {
-            "Build completed — review Output"
+    let matching: Vec<_> = files
+        .into_iter()
+        .filter(|path| path.to_string_lossy().to_lowercase().contains(&pattern))
+        .collect();
+    let children: Vec<TreeItem> = matching
+        .iter()
+        .map(|path| {
+            TreeItem::new(
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+            )
+        })
+        .collect();
+    let label = ide
+        .project
+        .as_ref()
+        .map(|p| format!("Solution '{}'", p.name))
+        .unwrap_or_else(|| "Folder".to_owned());
+    (
+        vec![TreeItem::new(label).expanded(true).children(children)],
+        matching,
+    )
+}
+
+fn run_task(
+    task: native_commands::Task,
+    state: Rc<RefCell<Ide>>,
+    output: naui::Label,
+    status: naui::Label,
+    error_list: naui::List,
+    error_summary: naui::Label,
+    current_errors: Rc<RefCell<Vec<problems::Problem>>>,
+    ui: Ui,
+) {
+    let project = state.borrow().workspace.selected.clone();
+    let compiler = std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".into());
+    let project_dir = project
+        .as_ref()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."));
+    status.set_text(&format!("{}…", task.label()));
+    output.set_text(&format!("Running {}…", task.label()));
+    let sender = ui
+        .tasks()
+        .channel(move |result: native_commands::ResultLog| {
+            let parsed = problems::parse(&result.text, &project_dir);
+            let errors = parsed
+                .iter()
+                .filter(|item| item.severity == problems::Severity::Error)
+                .count();
+            let warnings = parsed.len() - errors;
+            error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
+            error_list.set_items(
+                &parsed
+                    .iter()
+                    .map(|item| {
+                        ListItem::new(format!(
+                            "{}: {}:{} — {}",
+                            if item.severity == problems::Severity::Error {
+                                "Error"
+                            } else {
+                                "Warning"
+                            },
+                            item.path.display(),
+                            item.line,
+                            item.message
+                        ))
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            *current_errors.borrow_mut() = parsed;
+            output.set_text(&result.text);
+            status.set_text(if result.success {
+                "Operation completed successfully"
+            } else {
+                "Operation failed — review Output and Error List"
+            });
         });
-    });
     std::thread::spawn(move || {
-        let result = std::process::Command::new(&plan.program)
-            .args(&plan.args)
-            .current_dir(&plan.cwd)
-            .output();
-        let message = match result {
-            Ok(completed) => format!(
-                "{}\n{}\n{}\n[Exit code: {}]",
-                plan.description,
-                String::from_utf8_lossy(&completed.stdout),
-                String::from_utf8_lossy(&completed.stderr),
-                completed.status.code().unwrap_or(-1)
-            ),
-            Err(error) => format!("Cannot start Hydrogen compiler: {error}"),
-        };
-        let _ = sender.send(message);
+        let result = native_commands::run(task, &compiler, project.as_deref());
+        let _ = sender.send(result);
     });
 }
 
-fn build(ui: &Ui) -> naui::Result<()> {
-    let state = Rc::new(RefCell::new(Ide::load()));
+fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let window = ui.window(
         "Quark IDE — Hydrogen Development Environment",
         1480.0,
@@ -268,40 +389,27 @@ fn build(ui: &Ui) -> naui::Result<()> {
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
     let menu = ui.menu_bar()?;
-    menu.set_menus(&[
-        MenuSpec::new(
-            "File",
-            [
-                MenuItem::new("New Project"),
-                MenuItem::new("Open Project"),
-                MenuItem::new("Open File"),
-                MenuItem::new("Save"),
-                MenuItem::new("Exit"),
-            ],
-        ),
-        MenuSpec::new("Edit", ["Undo", "Redo", "Find"]),
-        MenuSpec::new("View", ["Start Window", "Code Editor", "UI Designer"]),
-        MenuSpec::new("Project", ["New UI Layout", "Solution Explorer"]),
-        MenuSpec::new("Build", ["Build Solution"]),
-        MenuSpec::new(
-            "Debug",
-            [
-                "Start Without Debugging",
-                "Start Debugging (not yet implemented)",
-            ],
-        ),
-        MenuSpec::new("Tools", ["Options"]),
-        MenuSpec::new("Window", ["Reset Window Layout"]),
-        MenuSpec::new("Help", ["About Quark"]),
-    ]);
+    menu.set_menus(
+        &native_shell::MENUS
+            .iter()
+            .map(|(name, items)| MenuSpec::new(*name, items.iter().copied()))
+            .collect::<Vec<_>>(),
+    );
     window.set_menu_bar(&menu);
 
     let toolbar = ui.toolbar()?;
     toolbar.set_items(&[
         ToolbarItem::new(ToolbarIcon::New, "New Project"),
         ToolbarItem::new(ToolbarIcon::Open, "Open Project"),
-        ToolbarItem::separator(),
         ToolbarItem::new(ToolbarIcon::Save, "Save"),
+        ToolbarItem::separator(),
+        ToolbarItem::new(ToolbarIcon::Undo, "Undo"),
+        ToolbarItem::new(ToolbarIcon::Redo, "Redo"),
+        ToolbarItem::separator(),
+        ToolbarItem::new(ToolbarIcon::Refresh, "Build Solution"),
+        ToolbarItem::new(ToolbarIcon::Forward, "Start Without Debugging"),
+        ToolbarItem::new(ToolbarIcon::Share, "Publish Binaries"),
+        ToolbarItem::new(ToolbarIcon::Search, "Search Solution"),
     ]);
     window.set_toolbar(&toolbar);
 
@@ -311,22 +419,71 @@ fn build(ui: &Ui) -> naui::Result<()> {
     let root = ui.stack(Orientation::Vertical)?;
     root.set_sizing(Sizing::fill());
 
+    // The familiar Visual Studio command strip lives below the native menu.
+    // Configuration and architecture are visible now; native compiler flag
+    // support is a separate milestone, so no selection is silently invented.
+    let command_strip = ui.stack(Orientation::Horizontal)?;
+    command_strip.set_spacing(8.0);
+    let configuration = ui.combo_box()?;
+    configuration.set_items(&["Debug", "Release"]);
+    configuration.set_selected(0);
+    let architecture = ui.combo_box()?;
+    architecture.set_items(&["Any CPU", "x64", "arm64"]);
+    architecture.set_selected(0);
+    let startup_project = ui.combo_box()?;
+    startup_project.set_items(&[&display_project_name(&state.borrow())]);
+    startup_project.set_selected(0);
+    let build_button = ui.button("Build")?;
+    let run_button = ui.button("▶ Run without debugging")?;
+    let debug_button = ui.button("▶ Start debugging")?;
+    debug_button.set_enabled(false); // Requires a verified native debugger adapter.
+    let publish_button = ui.button("Publish binaries")?;
+    command_strip.append(&ui.label("Configuration:")?);
+    command_strip.append(&configuration);
+    command_strip.append(&architecture);
+    command_strip.append(&startup_project);
+    command_strip.append(&build_button);
+    command_strip.append(&run_button);
+    command_strip.append(&debug_button);
+    command_strip.append(&publish_button);
+    root.append(&command_strip);
+
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(9.0);
     toolbox.append(&ui.label("TOOLBOX")?);
     toolbox.append(&ui.label("Common Controls")?);
+    let mut toolbox_buttons = Vec::new();
     for kind in ControlKind::ALL {
         let button = ui.button(kind.title())?;
-        let state = state.clone();
-        button.on_click(move || {
-            let mut ide = state.borrow_mut();
-            ide.armed = Some(kind);
-            ide.page = Page::Design;
-        });
         toolbox.append(&button);
+        toolbox_buttons.push((kind, button));
     }
     toolbox.append(&ui.label("Select a control, then click the designer surface to place it.")?);
     toolbox.set_sizing(Sizing::fill());
+
+    // Visual Studio's compact auto-hide rail lives to the left of Toolbox.
+    let left_rail = ui.stack(Orientation::Vertical)?;
+    left_rail.set_spacing(5.0);
+    left_rail.set_sizing(Sizing::new().width(Length::Fixed(85.0)));
+    let server_tab = ui.button("Server")?;
+    let toolbox_tab = ui.button("Toolbox")?;
+    let data_tab = ui.button("Data")?;
+    left_rail.append(&server_tab);
+    left_rail.append(&toolbox_tab);
+    left_rail.append(&data_tab);
+    let server_view = ui.stack(Orientation::Vertical)?;
+    server_view.append(&ui.label("SERVER EXPLORER")?);
+    server_view.append(&ui.label("Server connections can be added here in a future update.")?);
+    let data_view = ui.stack(Orientation::Vertical)?;
+    data_view.append(&ui.label("DATA SOURCES")?);
+    data_view.append(&ui.label("Data source integration is planned.")?);
+    let left_content = ui.stack(Orientation::Vertical)?;
+    left_content.append(&toolbox);
+    left_content.set_sizing(Sizing::fill());
+    let left_side = ui.stack(Orientation::Horizontal)?;
+    left_side.append(&left_rail);
+    left_side.append(&left_content);
+    left_side.set_sizing(Sizing::fill());
 
     let centre = ui.stack(Orientation::Vertical)?;
     centre.set_spacing(6.0);
@@ -409,38 +566,89 @@ fn build(ui: &Ui) -> naui::Result<()> {
     centre.append(&pages);
     centre.set_sizing(Sizing::fill());
 
-    let inspector = ui.stack(Orientation::Vertical)?;
-    inspector.set_spacing(9.0);
-    inspector.append(&ui.label("SOLUTION EXPLORER")?);
+    let solution_pane = ui.stack(Orientation::Vertical)?;
+    solution_pane.set_spacing(6.0);
+    let solution_heading = ui.stack(Orientation::Horizontal)?;
+    let heading = ui.label("SOLUTION EXPLORER")?;
+    heading.set_style(naui::TextStyle::Heading);
+    solution_heading.append(&heading);
+    let refresh_solution = ui.button("⟳")?;
+    let collapse_solution = ui.button("−")?;
+    solution_heading.append(&refresh_solution);
+    solution_heading.append(&collapse_solution);
+    solution_pane.append(&solution_heading);
+    let solution_search = ui.search_input()?;
+    solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
+    solution_pane.append(&solution_search);
     let tree = ui.tree()?;
-    tree.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(310.0)),
-    );
-    let (initial_tree, _) = file_items(&state.borrow());
+    tree.set_sizing(Sizing::fill());
+    let (initial_tree, initial_paths) = file_items(&state.borrow());
+    let displayed_paths = Rc::new(RefCell::new(initial_paths));
+    let solution_query = Rc::new(RefCell::new(String::new()));
     tree.set_items(&initial_tree);
-    inspector.append(&tree);
-    inspector.append(&ui.label("PROPERTIES")?);
+    solution_pane.append(&tree);
+    solution_pane.set_sizing(Sizing::fill());
+
+    let properties_pane = ui.stack(Orientation::Vertical)?;
+    properties_pane.set_spacing(7.0);
+    let properties_heading = ui.label("PROPERTIES")?;
+    properties_heading.set_style(naui::TextStyle::Heading);
+    properties_pane.append(&properties_heading);
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
     selected_text.set_placeholder("Text");
-    inspector.append(&ui.label("Control name")?);
-    inspector.append(&selected_name);
-    inspector.append(&ui.label("Text")?);
-    inspector.append(&selected_text);
+    properties_pane.append(&ui.label("Control name")?);
+    properties_pane.append(&selected_name);
+    properties_pane.append(&ui.label("Text")?);
+    properties_pane.append(&selected_text);
     let delete_control = ui.button("Delete Selected Control")?;
-    inspector.append(&delete_control);
+    properties_pane.append(&delete_control);
+    properties_pane.set_sizing(Sizing::fill());
+
+    let inspector = ui.split_view(Orientation::Vertical)?;
+    inspector.set_start(&solution_pane);
+    inspector.set_end(&properties_pane);
+    inspector.set_position(430.0);
+    inspector.set_min_sizes(190.0, 160.0);
     inspector.set_sizing(Sizing::fill());
 
     let bottom = ui.stack(Orientation::Vertical)?;
-    bottom.append(&ui.label("OUTPUT  |  ERROR LIST  |  BUILD")?);
-    let output = ui.label("Ready — choose a project from the Start Window.")?;
+    let bottom_tabs = ui.stack(Orientation::Horizontal)?;
+    bottom_tabs.set_spacing(8.0);
+    let output_tab = ui.button("Output")?;
+    let errors_tab = ui.button("Error List")?;
+    let debug_tab = ui.button("Debug")?;
+    let test_tab = ui.button("Test Results")?;
+    let find_tab = ui.button("Find Results")?;
+    bottom_tabs.append(&output_tab);
+    bottom_tabs.append(&errors_tab);
+    bottom_tabs.append(&debug_tab);
+    bottom_tabs.append(&test_tab);
+    bottom_tabs.append(&find_tab);
+    bottom.append(&bottom_tabs);
+
+    let bottom_pages = ui.stack(Orientation::Vertical)?;
+    bottom_pages.set_sizing(Sizing::fill());
+    let output = ui.label("Ready. Open a Hydrogen project to build, run or publish.")?;
     let output_scroll = ui.scroll()?;
     output_scroll.set_sizing(Sizing::fill());
     output_scroll.set_child(&output);
-    bottom.append(&output_scroll);
+    let errors_view = ui.stack(Orientation::Vertical)?;
+    let error_summary = ui.label("0 errors, 0 warnings")?;
+    let error_list = ui.list()?;
+    error_list.set_sizing(Sizing::fill());
+    let current_errors = Rc::new(RefCell::new(Vec::<problems::Problem>::new()));
+    errors_view.append(&error_summary);
+    errors_view.append(&error_list);
+    let debug_view =
+        ui.label("Debugger not yet attached. Source-level Hydrogen debug support is planned.")?;
+    let tests_view =
+        ui.label("Test Explorer integration is planned. Use the Hydrogen CLI in the meantime.")?;
+    let find_view =
+        ui.label("Search results appear here after the solution search service is connected.")?;
+    bottom_pages.append(&output_scroll);
+    bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
 
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
@@ -463,7 +671,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
     project_and_editor.set_sizing(Sizing::fill());
 
     let main_workspace = ui.split_view(Orientation::Horizontal)?;
-    main_workspace.set_start(&toolbox);
+    main_workspace.set_start(&left_side);
     main_workspace.set_end(&project_and_editor);
     main_workspace.set_position(210.0);
     main_workspace.set_min_sizes(160.0, 500.0);
@@ -474,6 +682,55 @@ fn build(ui: &Ui) -> naui::Result<()> {
     status_bar.append(&status);
     status_bar.append(&workspace_name);
     root.append(&status_bar);
+
+    // Native docking/tab selection is independent of the active document.
+    let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
+        let bottom_pages = bottom_pages.clone();
+        let output_scroll = output_scroll.clone();
+        let errors_view = errors_view.clone();
+        let debug_view = debug_view.clone();
+        let tests_view = tests_view.clone();
+        let find_view = find_view.clone();
+        move |page| {
+            bottom_pages.clear();
+            match page {
+                1 => bottom_pages.append(&errors_view),
+                2 => bottom_pages.append(&debug_view),
+                3 => bottom_pages.append(&tests_view),
+                4 => bottom_pages.append(&find_view),
+                _ => bottom_pages.append(&output_scroll),
+            }
+        }
+    });
+    for (tab, page) in [
+        (&output_tab, 0),
+        (&errors_tab, 1),
+        (&debug_tab, 2),
+        (&test_tab, 3),
+        (&find_tab, 4),
+    ] {
+        let show_bottom = show_bottom.clone();
+        tab.on_click(move || show_bottom(page));
+    }
+
+    let left_panel: Rc<dyn Fn(usize)> = Rc::new({
+        let left_content = left_content.clone();
+        let toolbox = toolbox.clone();
+        let server_view = server_view.clone();
+        let data_view = data_view.clone();
+        move |index| {
+            left_content.clear();
+            match index {
+                1 => left_content.append(&server_view),
+                2 => left_content.append(&data_view),
+                _ => left_content.append(&toolbox),
+            }
+        }
+    });
+    for (button, index) in [(&toolbox_tab, 0), (&server_tab, 1), (&data_tab, 2)] {
+        let left_panel = left_panel.clone();
+        button.on_click(move || left_panel(index));
+    }
 
     // Pane display is controlled separately from the persistent file model.
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
@@ -500,6 +757,31 @@ fn build(ui: &Ui) -> naui::Result<()> {
         let show_page = show_page.clone();
         button.on_click(move || show_page(page));
     }
+    for (kind, button) in toolbox_buttons {
+        let show_page = show_page.clone();
+        let state = state.clone();
+        button.on_click(move || {
+            state.borrow_mut().armed = Some(kind);
+            show_page(Page::Design);
+        });
+    }
+    collapse_solution.on_click({
+        let solution_pane = solution_pane.clone();
+        let solution_heading = solution_heading.clone();
+        let tree = tree.clone();
+        let solution_search = solution_search.clone();
+        let collapsed = Rc::new(std::cell::Cell::new(false));
+        move || {
+            let hidden = !collapsed.get();
+            collapsed.set(hidden);
+            solution_pane.clear();
+            solution_pane.append(&solution_heading);
+            if !hidden {
+                solution_pane.append(&solution_search);
+                solution_pane.append(&tree);
+            }
+        }
+    });
 
     editor.on_change({
         let state = state.clone();
@@ -515,11 +797,18 @@ fn build(ui: &Ui) -> naui::Result<()> {
         let tree = tree.clone();
         let recent = recent.clone();
         let workspace_name = workspace_name.clone();
+        let startup_project = startup_project.clone();
+        let solution_query = solution_query.clone();
+        let displayed_paths = displayed_paths.clone();
         move || {
             let ide = state.borrow();
-            let (items, _) = file_items(&ide);
+            let (items, paths) = filtered_file_items(&ide, &solution_query.borrow());
             tree.set_items(&items);
-            workspace_name.set_text(&display_project_name(&ide));
+            *displayed_paths.borrow_mut() = paths;
+            let project_name = display_project_name(&ide);
+            workspace_name.set_text(&project_name);
+            startup_project.set_items(&[&project_name]);
+            startup_project.set_selected(0);
             recent.set_items(
                 &ide.workspace
                     .recent
@@ -528,6 +817,18 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     .collect::<Vec<_>>(),
             );
         }
+    });
+    solution_search.on_change({
+        let solution_query = solution_query.clone();
+        let refresh_project = refresh_project.clone();
+        move |value| {
+            *solution_query.borrow_mut() = value.to_owned();
+            refresh_project();
+        }
+    });
+    refresh_solution.on_click({
+        let refresh_project = refresh_project.clone();
+        move || refresh_project()
     });
 
     let open_source: Rc<dyn Fn(PathBuf)> = Rc::new({
@@ -674,14 +975,14 @@ fn build(ui: &Ui) -> naui::Result<()> {
     });
 
     tree.on_select({
-        let state = state.clone();
+        let displayed_paths = displayed_paths.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
         move |position| {
             if position.len() < 2 || position[0] != 0 {
                 return;
             }
-            let files = file_items(&state.borrow()).1;
+            let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
                 if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
                     open_layout(path);
@@ -853,10 +1154,66 @@ fn build(ui: &Ui) -> naui::Result<()> {
         }
     });
 
+    // Build/Run/Publish execute off the main thread and keep the IDE responsive.
+    let task_action: Rc<dyn Fn(native_commands::Task)> = Rc::new({
+        let state = state.clone();
+        let output = output.clone();
+        let status = status.clone();
+        let error_list = error_list.clone();
+        let error_summary = error_summary.clone();
+        let current_errors = current_errors.clone();
+        let ui = ui.clone();
+        let show_bottom = show_bottom.clone();
+        move |task| {
+            show_bottom(0);
+            run_task(
+                task,
+                state.clone(),
+                output.clone(),
+                status.clone(),
+                error_list.clone(),
+                error_summary.clone(),
+                current_errors.clone(),
+                ui.clone(),
+            );
+        }
+    });
+    for (button, task) in [
+        (&build_button, native_commands::Task::Build),
+        (&run_button, native_commands::Task::RunWithoutDebugging),
+        (&publish_button, native_commands::Task::Publish),
+    ] {
+        let task_action = task_action.clone();
+        button.on_click(move || task_action(task));
+    }
+
+    error_list.on_select({
+        let errors = current_errors.clone();
+        let open_source = open_source.clone();
+        let status = status.clone();
+        move |indices| {
+            let problem = indices
+                .first()
+                .and_then(|&index| errors.borrow().get(index).cloned());
+            if let Some(problem) = problem {
+                open_source(problem.path.clone());
+                status.set_text(&format!(
+                    "{}:{} — {}",
+                    problem.path.display(),
+                    problem.line,
+                    problem.message
+                ));
+            }
+        }
+    });
+
     toolbar.on_activate({
         let save_action = save_action.clone();
         let open_project = open_project.clone();
         let show_page = show_page.clone();
+        let task_action = task_action.clone();
+        let status = status.clone();
+        let solution_search = solution_search.clone();
         move |index| match index {
             0 => show_page(Page::Start),
             1 => {
@@ -867,7 +1224,15 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     open_project(path);
                 }
             }
-            3 => save_action(),
+            2 => save_action(),
+            4 | 5 => status.set_text("Undo/Redo integration is pending for the native editor."),
+            7 => task_action(native_commands::Task::Build),
+            8 => task_action(native_commands::Task::RunWithoutDebugging),
+            9 => task_action(native_commands::Task::Publish),
+            10 => {
+                solution_search.set_text("");
+                status.set_text("Use the Solution Explorer search field to find project files.");
+            }
             _ => {}
         }
     });
@@ -879,10 +1244,13 @@ fn build(ui: &Ui) -> naui::Result<()> {
         let open_project = open_project.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
+        let refresh_project = refresh_project.clone();
+        let task_action = task_action.clone();
+        let show_bottom = show_bottom.clone();
+        let left_panel = left_panel.clone();
         let status = status.clone();
         let tree = tree.clone();
-        let output = output.clone();
-        let ui = ui.clone();
+        let window = window.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
             (0, 1) => {
@@ -894,6 +1262,17 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 }
             }
             (0, 2) => {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    match state.borrow_mut().remember_folder(path) {
+                        Ok(()) => {
+                            refresh_project();
+                            show_page(Page::Start);
+                        }
+                        Err(error) => status.set_text(&error),
+                    }
+                }
+            }
+            (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
                     if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
                         open_layout(path);
@@ -902,47 +1281,160 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     }
                 }
             }
-            (0, 3) => save_action(),
+            (0, 4) => save_action(),
+            (0, 5) => {
+                if state.borrow().has_unsaved() {
+                    status.set_text(
+                        "Save modified documents and layouts before closing the workspace.",
+                    );
+                } else {
+                    state.borrow_mut().clear_workspace();
+                    refresh_project();
+                    show_page(Page::Start);
+                }
+            }
+            (0, 6) => {
+                if state.borrow().has_unsaved() {
+                    status.set_text("Save modified documents and layouts before quitting.");
+                } else {
+                    window.close();
+                }
+            }
+            (1, _) => status.set_text("Native editor editing commands are being integrated."),
             (2, 0) => show_page(Page::Start),
             (2, 1) => show_page(Page::Code),
             (2, 2) => show_page(Page::Design),
-            (3, 0) => {
-                let path = state
+            (2, 3) => refresh_project(),
+            (2, 4) => left_panel(0),
+            (2, 5) => show_bottom(0),
+            (2, 6) => show_bottom(1),
+            (3, 0) => status.set_text("Clone a repository from the Quark Start Window."),
+            (3, 1) => status.set_text("Native Git Changes pane is not yet integrated."),
+            (4, 0) => {
+                let base = state
                     .borrow()
                     .workspace
                     .selected
                     .as_ref()
-                    .and_then(|p| p.parent().map(|p| p.join("NewWindow.quarkui")));
-                if let Some(path) = path {
-                    if !path.exists() {
-                        let data =
-                            serde_json::to_vec_pretty(&Layout::default()).unwrap_or_default();
-                        if let Err(err) = fs::write(&path, data) {
-                            status.set_text(&format!("Unable to create design: {err}"));
+                    .and_then(|p| p.parent().map(Path::to_path_buf))
+                    .or_else(|| state.borrow().workspace.folders.last().cloned());
+                if let Some(folder) = base {
+                    let mut number = 1_u32;
+                    let target = loop {
+                        let path = folder.join(format!("Window{number}.quarkui"));
+                        if !path.exists() {
+                            break path;
+                        }
+                        number += 1;
+                        if number > 200 {
+                            status.set_text("Cannot create more UI layouts in this folder.");
                             return;
                         }
+                    };
+                    match serde_json::to_vec_pretty(&Layout::default()) {
+                        Ok(contents) => match crate::storage::atomic_write(&target, &contents) {
+                            Ok(()) => {
+                                open_layout(target);
+                                refresh_project();
+                            }
+                            Err(error) => {
+                                status.set_text(&format!("Cannot create design: {error}"))
+                            }
+                        },
+                        Err(error) => status.set_text(&error.to_string()),
                     }
-                    open_layout(path);
-                    let (items, _) = file_items(&state.borrow());
-                    tree.set_items(&items);
+                } else {
+                    status.set_text("Open a project or folder to add a UI layout.");
                 }
             }
-            (4, 0) => run_build(state.clone(), output.clone(), status.clone(), ui.clone()),
-            (5, 0) => status
-                .set_text("Run without debugging uses Hydrogen CLI; select Build Solution first."),
-            (5, 1) => {
-                status.set_text("Source-level debugger not integrated in this native frontend yet.")
+            (4, 1) => status.set_text("Project Properties integration is planned."),
+            (5, 0) => task_action(native_commands::Task::Build),
+            (5, 1) => task_action(native_commands::Task::Rebuild),
+            (5, 2) => task_action(native_commands::Task::Clean),
+            (5, 3) => task_action(native_commands::Task::Publish),
+            (6, 0) => {
+                show_bottom(2);
+                status.set_text("Native source-level Hydrogen debugging is not implemented yet.");
             }
-            (8, 0) => status.set_text("Quark native frontend: WinUI 3, AppKit and GTK 4 controls."),
+            (6, 1) => task_action(native_commands::Task::RunWithoutDebugging),
+            (6, 2) => status.set_text("No native debug session is running."),
+            (7, 0) => show_bottom(3),
+            (7, 1) => status.set_text("Test execution integration is planned."),
+            (8, 0) => {
+                show_bottom(1);
+                status.set_text(
+                    "Static analysis is available through Hydrogen check in the legacy IDE.",
+                );
+            }
+            (9, 0) => status.set_text("Native Options panel is planned."),
+            (10, 0) => status.set_text("Native extension management is planned."),
+            (11, 0) => status.set_text("Window panes can be resized by dragging their separators."),
+            (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
             _ => {}
         }
     });
+
+    // Projects selected in the small launcher open directly in an editor tab.
+    // "Continue without code" enters the full IDE with no selected project.
+    let initial_document = {
+        let ide = state.borrow();
+        (
+            ide.document.as_ref().map(|doc| doc.text.clone()),
+            ide.layout.is_some(),
+        )
+    };
+    if let Some(text) = initial_document.0 {
+        editor.set_text(&text);
+        show_page(Page::Code);
+    } else if initial_document.1 {
+        show_page(Page::Design);
+    } else {
+        show_page(Page::Start);
+    }
 
     // The native shell provides the actual OS frame and follows the system's
     // appearance; unlike the legacy renderer, none of these widgets is egui.
     window.set_child(&root);
     window.show();
     Ok(())
+}
+
+fn build(ui: &Ui) -> naui::Result<()> {
+    let state = Rc::new(RefCell::new(Ide::load()));
+    let existing = state.borrow().workspace.recent.clone();
+    let handle = ui.clone();
+    let launch_state = state.clone();
+    let launch: Rc<dyn Fn(native_start_window::Action) -> Result<(), String>> =
+        Rc::new(move |action| {
+            {
+                let mut ide = launch_state.borrow_mut();
+                match action {
+                    native_start_window::Action::Project(path) => {
+                        ide.remember_project(path)?;
+                        let source = ide
+                            .project
+                            .as_ref()
+                            .and_then(|project| project.sources.first().cloned());
+                        if let Some(source) = source {
+                            ide.open_source(&source)?;
+                        }
+                    }
+                    native_start_window::Action::Folder(path) => {
+                        ide.remember_folder(path)?;
+                    }
+                    native_start_window::Action::Empty => {
+                        ide.clear_workspace();
+                    }
+                }
+            }
+            build_ide(&handle, launch_state.clone()).map_err(|error| error.to_string())
+        });
+    native_start_window::show(
+        ui,
+        workspace_file().with_file_name("native-launcher.json"),
+        &existing,
+        launch,
+    )
 }
 
 fn main() -> naui::Result<()> {

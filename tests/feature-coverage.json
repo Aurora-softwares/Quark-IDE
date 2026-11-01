@@ -1753,6 +1753,80 @@
         "native_model::tests::native_workspace_recent_items_are_deduplicated_and_persisted",
         "native_model::tests::source_round_trip_can_open_edit_and_save"
       ]
+    },
+    {
+      "id": "native-start-window-recent-management",
+      "category": "Native launcher",
+      "feature": "Separate native Start Window recent-project search, grouping, pinning and removal",
+      "tests": [
+        "native_launcher::tests::recent_projects_group_by_pin_today_week_month_older",
+        "native_launcher::tests::recent_search_is_case_insensitive_and_remove_is_non_destructive",
+        "native_launcher::tests::pin_and_recent_history_survive_persistence_and_reopening"
+      ]
+    },
+    {
+      "id": "native-launcher-project-creation",
+      "category": "Native launcher",
+      "feature": "Create Hydrogen projects and discover existing project manifests",
+      "tests": [
+        "startup::tests::creates_hydrogen_manifest_that_project_loader_accepts",
+        "native_launcher::tests::discovers_local_project_manifest_without_opening_or_modifying_files"
+      ]
+    },
+    {
+      "id": "native-launcher-git-cloning",
+      "category": "Native launcher",
+      "feature": "Validate repository URLs and local clone destinations safely",
+      "tests": [
+        "native_launcher::tests::cloning_rejects_invalid_urls_paths_and_existing_directories",
+        "native_launcher::tests::discovers_local_project_manifest_without_opening_or_modifying_files"
+      ]
+    },
+    {
+      "id": "native-launcher-history-migration",
+      "category": "Native launcher",
+      "feature": "Migrate recent projects without duplicates or restoring removed items",
+      "tests": [
+        "native_launcher::tests::migration_keeps_existing_order_and_deduplicates_paths",
+        "native_launcher::tests::recent_search_is_case_insensitive_and_remove_is_non_destructive"
+      ]
+    },
+    {
+      "id": "native-professional-main-shell",
+      "category": "Native shell",
+      "feature": "Visual Studio Professional-style menus, launcher actions and native tool-window structure",
+      "tests": [
+        "native_shell::tests::professional_menus_include_debug_build_test_analyze_and_extensions",
+        "native_shell::tests::full_ide_contains_visual_studio_tool_windows",
+        "native_shell::tests::launcher_has_project_management_and_no_heavy_editor_actions"
+      ]
+    },
+    {
+      "id": "native-debug-status",
+      "category": "Native shell",
+      "feature": "Distinguish Run Without Debugging from unsupported source-level debugging",
+      "tests": [
+        "native_shell::tests::start_debugging_is_not_misrepresented_as_implemented",
+        "native_shell::tests::professional_menus_include_debug_build_test_analyze_and_extensions"
+      ]
+    },
+    {
+      "id": "native-binary-publishing",
+      "category": "Native commands",
+      "feature": "Bundle generated binary outputs into a ZIP without claiming unbuilt artifacts exist",
+      "tests": [
+        "native_commands::tests::publishes_actual_binary_as_zip_with_original_filename",
+        "native_commands::tests::publish_refuses_missing_output_instead_of_claiming_success"
+      ]
+    },
+    {
+      "id": "native-build-clean-safety",
+      "category": "Native commands",
+      "feature": "Build commands check project prerequisites and Clean preserves sources",
+      "tests": [
+        "native_commands::tests::clean_removes_generated_files_not_source_documents",
+        "native_commands::tests::commands_refuse_to_run_with_no_project_or_compiler"
+      ]
     }
   ]
 }
