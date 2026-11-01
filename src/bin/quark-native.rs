@@ -1375,7 +1375,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     // Only opened documents appear as tabs. An empty workspace contains no
     // fake editor or designer tabs and never replaces the launcher.
-    let show_page_redraw: Rc<RefCell<Option<Rc<dyn Fn(Page)>>>> = Rc::new(RefCell::new(None));
+    type PageRedraw = Rc<dyn Fn(Page)>;
+    let show_page_redraw: Rc<RefCell<Option<PageRedraw>>> = Rc::new(RefCell::new(None));
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
         let state = state.clone();
         let centre = centre.clone();
