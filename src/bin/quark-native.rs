@@ -542,6 +542,28 @@ fn retain_trailing_size(split: &naui::SplitView) {
     use gtk4::prelude::*;
     use naui::Widget as _;
     if let Ok(paned) = split.native_widget().downcast::<gtk4::Paned>() {
+        paned.add_css_class("quark-resize-pane");
+        // Make the hit region visible without the neon accent lines that
+        // previously overwhelmed the native dark shell.
+        thread_local! {
+            static CSS_INSTALLED: Cell<bool> = const { Cell::new(false) };
+        }
+        CSS_INSTALLED.with(|installed| {
+            if !installed.replace(true) {
+                if let Some(display) = gtk4::gdk::Display::default() {
+                    let provider = gtk4::CssProvider::new();
+                    provider.load_from_data(
+                        "paned.quark-resize-pane > separator { background: #484a53; min-width: 7px; min-height: 7px; } \
+                         paned.quark-resize-pane > separator:hover { background: #817a98; }"
+                    );
+                    gtk4::style_context_add_provider_for_display(
+                        &display,
+                        &provider,
+                        gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                    );
+                }
+            }
+        });
         paned.set_resize_start_child(true);
         paned.set_resize_end_child(false);
         paned.set_shrink_start_child(false);
