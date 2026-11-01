@@ -2,7 +2,7 @@
 //! GTK 4/libadwaita on Linux. This does not draw egui controls.
 //!
 //! The existing full-featured egui IDE remains available during the migration.
-//! This native frontend deliberately shares .hyproj, .hy and .quarkui files
+//! This native frontend deliberately shares .hyproj, .hy and .hyyui files
 //! instead of silently converting or rewriting them.
 
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
@@ -33,6 +33,8 @@ mod startup;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../storage.rs"]
 mod storage;
+#[path = "../ui_xml.rs"]
+mod ui_xml;
 
 use naui::{
     Color, GridCell, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
@@ -230,7 +232,7 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
                 path.is_file()
                     && matches!(
                         path.extension().and_then(|ext| ext.to_str()),
-                        Some("hy" | "hyproj" | "quarkui")
+                        Some("hy" | "hyproj" | "hyyui")
                     )
             })
             .collect::<Vec<_>>();
@@ -263,7 +265,7 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
         if let Ok(entries) = fs::read_dir(folder) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
                     paths.push(path);
                 }
             }
@@ -635,7 +637,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         );
     });
     let code_button = ui.button("Program.hy")?;
-    let design_button = ui.button("Main.quarkui [Design]")?;
+    let design_button = ui.button("Main.hyyui [Design]")?;
 
     let pages = ui.stack(Orientation::Vertical)?;
     pages.set_sizing(Sizing::fill());
@@ -1199,7 +1201,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -1218,7 +1220,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let ide = state.borrow();
             let Some(layout) = ide.layout.as_ref().map(|doc| &doc.layout) else {
                 painter.text(
-                    "Open or create Main.quarkui to use the designer",
+                    "Open or create Main.hyyui to use the designer",
                     Point::new(24.0, 36.0),
                     15.0,
                     Color::BLACK,
@@ -1535,7 +1537,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
                         open_layout(path);
                     } else {
                         open_source(path);
@@ -1582,7 +1584,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 if let Some(folder) = base {
                     let mut number = 1_u32;
                     let target = loop {
-                        let path = folder.join(format!("Window{number}.quarkui"));
+                        let path = folder.join(format!("Window{number}.hyyui"));
                         if !path.exists() {
                             break path;
                         }
@@ -1592,7 +1594,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                             return;
                         }
                     };
-                    match serde_json::to_vec_pretty(&Layout::default()) {
+                    match ui_xml::encode(&Layout::default()).map(String::into_bytes) {
                         Ok(contents) => match crate::storage::atomic_write(&target, &contents) {
                             Ok(()) => {
                                 open_layout(target);
@@ -1750,8 +1752,8 @@ mod tests {
         let manifest = dir.path().join("Sample.hyproj");
         fs::write(&manifest, "name = 'Sample'\nsources = ['Program.hy']").unwrap();
         fs::write(dir.path().join("Program.hy"), "class Program {}").unwrap();
-        let layout = dir.path().join("Main.quarkui");
-        fs::write(&layout, serde_json::to_vec(&Layout::default()).unwrap()).unwrap();
+        let layout = dir.path().join("Main.hyyui");
+        fs::write(&layout, ui_xml::encode(&Layout::default()).unwrap().into_bytes()).unwrap();
         let mut workspace = Workspace::default();
         workspace.selected = Some(manifest.clone());
         workspace.projects.push(manifest.clone());
@@ -1761,7 +1763,7 @@ mod tests {
         assert!(files.contains(&manifest.canonicalize().unwrap()));
         assert!(files
             .iter()
-            .any(|path| path.file_name().unwrap() == "Main.quarkui"));
+            .any(|path| path.file_name().unwrap() == "Main.hyyui"));
     }
 
     #[test]
