@@ -45,14 +45,9 @@ use std::{
     rc::Rc,
 };
 
-use native_model::{ControlKind, Document, GeometryField, Layout, LayoutDocument, Workspace};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Page {
-    Empty,
-    Code,
-    Design,
-}
+use native_model::{
+    ControlKind, Document, DocumentPage as Page, GeometryField, Layout, LayoutDocument, Workspace,
+};
 
 struct Ide {
     workspace: Workspace,
@@ -155,11 +150,7 @@ impl Ide {
     }
 
     fn display_page(&self, requested: Page) -> Page {
-        match requested {
-            Page::Code if self.document.is_none() => Page::Empty,
-            Page::Design if self.layout.is_none() => Page::Empty,
-            _ => requested,
-        }
+        requested.available(self.document.is_some(), self.layout.is_some())
     }
 
     fn save_active(&mut self) -> Result<(), String> {
