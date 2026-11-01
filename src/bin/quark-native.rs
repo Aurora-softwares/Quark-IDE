@@ -15,6 +15,9 @@ mod hydrogen;
 mod native_commands;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
+#[cfg(target_os = "linux")]
+#[path = "../native_hydrogen_preview.rs"]
+mod native_hydrogen_preview;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
 #[path = "../native_layout.rs"]
 mod native_layout;
@@ -912,6 +915,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     canvas.set_sizing(Sizing::fill());
     let canvas_width = Rc::new(Cell::new(0.0_f64));
     design_surface.append(&canvas);
+    // Linux renders the document using real GTK4 controls inside a scroller.
+    #[cfg(target_os = "linux")]
+    let native_preview: Option<gtk4::ScrolledWindow> = {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        design_surface.native_widget().downcast::<gtk4::Box>().ok().map(|box_| {
+            let preview = gtk4::ScrolledWindow::new();
+            preview.set_hexpand(true);
+            preview.set_vexpand(true);
+            preview.set_visible(false);
+            box_.append(&preview);
+            preview
+        })
+    };
 
     let xml_pane = ui.grid()?;
     xml_pane.set_sizing(Sizing::fill());
@@ -968,6 +985,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         let status = status.clone();
         let sync_xml = sync_xml.clone();
+        #[cfg(target_os = "linux")]
+        let native_preview = native_preview.clone();
         move |text| {
             if sync_xml.get() {
                 return;
@@ -977,7 +996,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 match layout.edit_source(text.to_owned()) {
                     Ok(()) => {
                         status.set_text("Hydrogen UI XML valid · visual preview refreshed");
+                        let native_window = layout.native_window;
                         drop(ide);
+                        #[cfg(target_os = "linux")]
+                        {
+                            use gtk4::prelude::*;
+                            use naui::Widget as _;
+                            if let Some(host) = &native_preview {
+                                if native_window {
+                                    if let Ok(widget) = native_hydrogen_preview::build_preview(text) {
+                                        host.set_child(Some(&widget));
+                                        host.set_visible(true);
+                                        canvas.native_widget().set_visible(false);
+                                    }
+                                } else {
+                                    host.set_visible(false);
+                                    canvas.native_widget().set_visible(true);
+                                }
+                            }
+                        }
+                        #[cfg(not(target_os = "linux"))]
+                        let _ = native_window;
                         canvas.redraw();
                     }
                     Err(error) => {
@@ -1610,10 +1649,33 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let status = status.clone();
         let canvas = canvas.clone();
         let design_heading = design_heading.clone();
+        #[cfg(target_os = "linux")]
+        let native_preview = native_preview.clone();
         move |path| {
             let result = state.borrow_mut().open_design(&path);
             match result {
                 Ok(()) => {
+                    #[cfg(target_os = "linux")]
+                    {
+                        use gtk4::prelude::*;
+                        use naui::Widget as _;
+                        if let Some(host) = &native_preview {
+                            if let Some(layout) = state.borrow().layout.as_ref() {
+                                if layout.native_window {
+                                    if let Ok(xml) = layout.source() {
+                                        if let Ok(widget) = native_hydrogen_preview::build_preview(&xml) {
+                                            host.set_child(Some(&widget));
+                                            host.set_visible(true);
+                                            canvas.native_widget().set_visible(false);
+                                        }
+                                    }
+                                } else {
+                                    host.set_visible(false);
+                                    canvas.native_widget().set_visible(true);
+                                }
+                            }
+                        }
+                    }
                     if state
                         .borrow()
                         .layout
