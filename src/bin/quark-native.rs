@@ -13,6 +13,10 @@ mod hydrogen;
 mod native_model;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
+#[path = "../native_commands.rs"]
+mod native_commands;
+#[path = "../problems.rs"]
+mod problems;
 #[path = "../native_start_window.rs"]
 mod native_start_window;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
@@ -250,59 +254,28 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     )
 }
 
-fn run_build(state: Rc<RefCell<Ide>>, output: naui::Label, status: naui::Label, ui: Ui) {
-    let plan = {
-        let ide = state.borrow();
-        let compiler = std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".into());
-        hydrogen::build_plan(
-            &compiler,
-            ide.workspace.selected.as_deref(),
-            ide.document.as_ref().map(|doc| doc.path.as_path()),
-            hydrogen::BuildScope::Project,
-        )
-    };
-    let Ok(plan) = plan else {
-        status.set_text(&plan.unwrap_err());
-        return;
-    };
-    let directory = if plan.output_is_directory {
-        plan.output.clone()
-    } else {
-        plan.output
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf()
-    };
-    if let Err(error) = fs::create_dir_all(directory) {
-        status.set_text(&format!("Build folder error: {error}"));
-        return;
-    }
-    status.set_text("Building Hydrogen project…");
-    output.set_text(&format!("{}\n", plan.description));
-    let sender = ui.tasks().channel(move |message: String| {
-        output.set_text(&message);
-        status.set_text(if message.contains("[Exit code: 0]") {
-            "Build succeeded"
+fn run_task(
+    task: native_commands::Task,
+    state: Rc<RefCell<Ide>>,
+    output: naui::Label,
+    status: naui::Label,
+    ui: Ui,
+) {
+    let project = state.borrow().workspace.selected.clone();
+    let compiler = std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".into());
+    status.set_text(&format!("{}…", task.label()));
+    output.set_text(&format!("Running {}…", task.label()));
+    let sender = ui.tasks().channel(move |result: native_commands::ResultLog| {
+        output.set_text(&result.text);
+        status.set_text(if result.success {
+            "Operation completed successfully"
         } else {
-            "Build completed — review Output"
+            "Operation failed — review Output"
         });
     });
     std::thread::spawn(move || {
-        let result = std::process::Command::new(&plan.program)
-            .args(&plan.args)
-            .current_dir(&plan.cwd)
-            .output();
-        let message = match result {
-            Ok(completed) => format!(
-                "{}\n{}\n{}\n[Exit code: {}]",
-                plan.description,
-                String::from_utf8_lossy(&completed.stdout),
-                String::from_utf8_lossy(&completed.stderr),
-                completed.status.code().unwrap_or(-1)
-            ),
-            Err(error) => format!("Cannot start Hydrogen compiler: {error}"),
-        };
-        let _ = sender.send(message);
+        let result = native_commands::run(task, &compiler, project.as_deref());
+        let _ = sender.send(result);
     });
 }
 
@@ -988,10 +961,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     // Projects selected in the small launcher open directly in an editor tab.
     // "Continue without code" enters the full IDE with no selected project.
-    if let Some(text) = state.borrow().document.as_ref().map(|document| document.text.clone()) {
+    let initial_document = {
+        let ide = state.borrow();
+        (ide.document.as_ref().map(|doc| doc.text.clone()), ide.layout.is_some())
+    };
+    if let Some(text) = initial_document.0 {
         editor.set_text(&text);
         show_page(Page::Code);
-    } else if state.borrow().layout.is_some() {
+    } else if initial_document.1 {
         show_page(Page::Design);
     } else {
         show_page(Page::Start);
