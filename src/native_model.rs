@@ -211,7 +211,10 @@ impl Layout {
         if !value.is_finite() {
             return Err("Geometry values must be finite numbers".into());
         }
-        let control = self.controls.iter_mut().find(|control| control.id == id)
+        let control = self
+            .controls
+            .iter_mut()
+            .find(|control| control.id == id)
             .ok_or("Select a control first")?;
         let previous = control.clone();
         match field {
@@ -349,10 +352,17 @@ mod tests {
         let id = layout.add(ControlKind::Button, 20.0, 30.0).unwrap();
         layout.set_geometry(id, GeometryField::X, 80.0).unwrap();
         layout.set_geometry(id, GeometryField::Y, 90.0).unwrap();
-        layout.set_geometry(id, GeometryField::Width, 205.0).unwrap();
-        layout.set_geometry(id, GeometryField::Height, 48.0).unwrap();
+        layout
+            .set_geometry(id, GeometryField::Width, 205.0)
+            .unwrap();
+        layout
+            .set_geometry(id, GeometryField::Height, 48.0)
+            .unwrap();
         let control = &layout.controls[0];
-        assert_eq!((control.x, control.y, control.width, control.height), (80.0, 90.0, 205.0, 48.0));
+        assert_eq!(
+            (control.x, control.y, control.width, control.height),
+            (80.0, 90.0, 205.0, 48.0)
+        );
         assert!(layout.validate().is_ok());
     }
 
