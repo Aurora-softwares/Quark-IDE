@@ -78,7 +78,6 @@ pub struct History {
 pub struct Row {
     pub title: String,
     pub path: Option<PathBuf>,
-    pub pinned: bool,
 }
 
 impl History {
@@ -155,14 +154,13 @@ impl History {
                             || entry.path.to_string_lossy().to_lowercase().contains(&query))
                 })
                 .collect();
-            entries.sort_by(|a, b| b.opened_at.cmp(&a.opened_at));
+            entries.sort_by_key(|entry| std::cmp::Reverse(entry.opened_at));
             if entries.is_empty() {
                 continue;
             }
             result.push(Row {
                 title: format!("▸ {}", group.label()),
                 path: None,
-                pinned: false,
             });
             for entry in entries {
                 let filename = entry.path.file_stem().unwrap_or_default().to_string_lossy();
@@ -175,7 +173,6 @@ impl History {
                         folder.display()
                     ),
                     path: Some(entry.path.clone()),
-                    pinned: entry.pinned,
                 });
             }
         }
