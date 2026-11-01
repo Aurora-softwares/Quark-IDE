@@ -368,6 +368,25 @@ mod tests {
     }
 
     #[test]
+    fn actual_hydrogen_studio_sample_loads_without_converting_its_xml() {
+        let xml = include_str!("../tests/fixtures/Studio.hyui");
+        assert!(is_native_window(xml));
+        let layout: SharedLayout = load(
+            std::path::Path::new("Studio.hyui"),
+            xml,
+        ).unwrap();
+        assert_eq!(layout.title, "Hydrogen Studio");
+        assert_eq!((layout.width, layout.height), (1120.0, 900.0));
+        assert!(layout.controls.iter().any(|c| c.name == "build"));
+        assert!(layout.controls.iter().any(|c| c.name == "projectName"));
+        assert!(!layout.controls.iter().any(|c| c.name == "showDialog"));
+        // The source, including onClick/onChange handlers and nested Tabs,
+        // is retained by LayoutDocument instead of flattened on save.
+        assert!(xml.contains("onClick=\"Build\""));
+        assert!(xml.contains("<GridPanel"));
+    }
+
+    #[test]
     fn wrong_xml_and_json_under_hyui_are_rejected() {
         assert!(decode::<SharedLayout>(r#"{\"version\":1}"#).is_err());
         assert!(decode::<SharedLayout>("<Unexpected />").is_err());
