@@ -123,6 +123,7 @@ pub fn encode<T: Serialize>(layout: &T) -> Result<String, String> {
 /// former flat Quark designer schema. Read it without removing any nodes,
 /// events, attributes or layout containers from the source document.
 /// This converts only a *preview projection* into editable Layout metadata.
+#[allow(dead_code)] // Shared with egui; used by the native Hydrogen designer.
 pub fn is_native_window(text: &str) -> bool {
     roxmltree::Document::parse(text)
         .ok()
