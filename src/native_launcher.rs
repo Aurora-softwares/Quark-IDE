@@ -165,11 +165,7 @@ impl History {
                 pinned: false,
             });
             for entry in entries {
-                let filename = entry
-                    .path
-                    .file_stem()
-                    .unwrap_or_default()
-                    .to_string_lossy();
+                let filename = entry.path.file_stem().unwrap_or_default().to_string_lossy();
                 let folder = entry.path.parent().unwrap_or_else(|| Path::new("."));
                 result.push(Row {
                     title: format!(
@@ -243,17 +239,35 @@ mod tests {
             history.remember(PathBuf::from(format!("/fake/{name}.hyproj")), opened);
         }
         assert_eq!(
-            history.recent.iter().find(|x| x.path.ends_with("week.hyproj")).unwrap().group(now),
+            history
+                .recent
+                .iter()
+                .find(|x| x.path.ends_with("week.hyproj"))
+                .unwrap()
+                .group(now),
             AgeGroup::ThisWeek
         );
         let pinned = PathBuf::from("/fake/older.hyproj");
         history.toggle_pin(&pinned);
         assert_eq!(
-            history.recent.iter().find(|x| x.path == pinned).unwrap().group(now),
+            history
+                .recent
+                .iter()
+                .find(|x| x.path == pinned)
+                .unwrap()
+                .group(now),
             AgeGroup::Pinned
         );
-        let headings: Vec<_> = history.rows("", now).into_iter().filter(|row| row.path.is_none()).map(|row| row.title).collect();
-        assert_eq!(headings, ["▸ Pinned", "▸ Today", "▸ This week", "▸ This month"]);
+        let headings: Vec<_> = history
+            .rows("", now)
+            .into_iter()
+            .filter(|row| row.path.is_none())
+            .map(|row| row.title)
+            .collect();
+        assert_eq!(
+            headings,
+            ["▸ Pinned", "▸ Today", "▸ This week", "▸ This month"]
+        );
     }
 
     #[test]
@@ -263,7 +277,14 @@ mod tests {
         fs::write(&manifest, "keep me").unwrap();
         let mut history = History::default();
         history.remember(manifest.clone(), 500_000);
-        assert_eq!(history.rows("APP", 500_000).iter().filter(|r| r.path.is_some()).count(), 1);
+        assert_eq!(
+            history
+                .rows("APP", 500_000)
+                .iter()
+                .filter(|r| r.path.is_some())
+                .count(),
+            1
+        );
         history.remove(&manifest.canonicalize().unwrap());
         assert!(history.rows("", 500_000).is_empty());
         assert_eq!(fs::read_to_string(manifest).unwrap(), "keep me");
@@ -291,11 +312,14 @@ mod tests {
     #[test]
     fn migration_keeps_existing_order_and_deduplicates_paths() {
         let mut history = History::default();
-        history.migrate_paths(&[
-            PathBuf::from("/missing/new.hyproj"),
-            PathBuf::from("/missing/old.hyproj"),
-            PathBuf::from("/missing/new.hyproj"),
-        ], 20);
+        history.migrate_paths(
+            &[
+                PathBuf::from("/missing/new.hyproj"),
+                PathBuf::from("/missing/old.hyproj"),
+                PathBuf::from("/missing/new.hyproj"),
+            ],
+            20,
+        );
         assert_eq!(history.recent.len(), 2);
         assert!(history.recent[0].path.ends_with("new.hyproj"));
     }
@@ -303,13 +327,23 @@ mod tests {
     #[test]
     fn cloning_rejects_invalid_urls_paths_and_existing_directories() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(clone_request("https://github.com/example/project.git", dir.path(), "Project").is_ok());
+        assert!(clone_request(
+            "https://github.com/example/project.git",
+            dir.path(),
+            "Project"
+        )
+        .is_ok());
         assert!(clone_request("git@github.com:example/project.git", dir.path(), "Project").is_ok());
         assert!(clone_request("https://evil.example/hey.git", dir.path(), "Project").is_err());
         assert!(clone_request("-config", dir.path(), "Project").is_err());
         assert!(clone_request("https://github.com/a/b.git", dir.path(), "../escape").is_err());
         fs::create_dir(dir.path().join("Project")).unwrap();
-        assert!(clone_request("https://github.com/example/project.git", dir.path(), "Project").is_err());
+        assert!(clone_request(
+            "https://github.com/example/project.git",
+            dir.path(),
+            "Project"
+        )
+        .is_err());
     }
 
     #[test]
@@ -317,7 +351,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("b.hyproj"), "format=2").unwrap();
         fs::write(dir.path().join("a.hyproj"), "format=2").unwrap();
-        assert_eq!(first_project(dir.path()).unwrap().file_name().unwrap(), "a.hyproj");
+        assert_eq!(
+            first_project(dir.path()).unwrap().file_name().unwrap(),
+            "a.hyproj"
+        );
         assert!(first_project(&dir.path().join("absent")).is_none());
     }
 }
