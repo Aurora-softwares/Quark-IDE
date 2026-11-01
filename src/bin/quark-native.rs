@@ -393,7 +393,10 @@ fn attach_fixed_grip(
     save_path: PathBuf,
     apply: Rc<dyn Fn(native_layout::PaneSizes)>,
 ) {
-    let vertical = matches!(pane, native_layout::Pane::Inspector | native_layout::Pane::Toolbox);
+    let vertical = matches!(
+        pane,
+        native_layout::Pane::Inspector | native_layout::Pane::Toolbox
+    );
     grip.on_draw(move |p| {
         let marker = if vertical {
             Rect::new((p.width() - 1.0) / 2.0, 0.0, 1.0, p.height())
@@ -408,7 +411,11 @@ fn attach_fixed_grip(
         let anchor = anchor.clone();
         let changed = changed.clone();
         move |event| {
-            let coord = if vertical { event.point.x } else { event.point.y };
+            let coord = if vertical {
+                event.point.x
+            } else {
+                event.point.y
+            };
             match event.phase {
                 PointerPhase::Down => {
                     anchor.set(Some(coord));
@@ -773,7 +780,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     inspector.set_row_track(2, Track::Fixed(preferred.properties));
     let properties_grip = ui.canvas()?;
     properties_grip.set_sizing(
-        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(native_layout::HANDLE)),
     );
     inspector.attach(&solution_pane, GridCell::new(0, 0));
     inspector.attach(&properties_grip, GridCell::new(0, 1));
@@ -835,7 +844,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     document_workspace.set_row_track(2, Track::Fixed(preferred.output));
     let output_grip = ui.canvas()?;
     output_grip.set_sizing(
-        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(native_layout::HANDLE)),
     );
     document_workspace.attach(&centre, GridCell::new(0, 0));
     document_workspace.attach(&output_grip, GridCell::new(0, 1));
@@ -851,11 +862,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     main_workspace.set_column_track(4, Track::Fixed(preferred.inspector));
     let toolbox_grip = ui.canvas()?;
     toolbox_grip.set_sizing(
-        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+        Sizing::new()
+            .width(Length::Fixed(native_layout::HANDLE))
+            .height(Length::Fill),
     );
     let inspector_grip = ui.canvas()?;
     inspector_grip.set_sizing(
-        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+        Sizing::new()
+            .width(Length::Fixed(native_layout::HANDLE))
+            .height(Length::Fill),
     );
     main_workspace.attach(&left_side, GridCell::new(0, 0));
     main_workspace.attach(&toolbox_grip, GridCell::new(1, 0));
@@ -882,7 +897,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         (&properties_grip, native_layout::Pane::Properties),
     ] {
         attach_fixed_grip(
-            grip, pane, pane_sizes.clone(), pane_path.clone(), refresh_tracks.clone(),
+            grip,
+            pane,
+            pane_sizes.clone(),
+            pane_path.clone(),
+            refresh_tracks.clone(),
         );
     }
 
