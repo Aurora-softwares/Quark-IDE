@@ -1750,8 +1750,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("Program.hy");
         fs::write(&path, "class Program {}").unwrap();
-        let mut ide = Ide::from_workspace(Workspace::default());
-        ide.remember_folder(dir.path().to_path_buf()).unwrap();
+        // Keep unit tests isolated from the user's real workspace history.
+        let mut workspace = Workspace::default();
+        workspace.remember(dir.path().to_path_buf(), false);
+        let mut ide = Ide::from_workspace(workspace);
         assert_eq!(ide.page, Page::Empty);
         ide.open_source(&path).unwrap();
         assert_eq!(ide.display_page(Page::Code), Page::Code);
