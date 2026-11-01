@@ -1255,7 +1255,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     previous.on_click(move || {
                         shift.set(shift.get().saturating_sub(1));
                         if let Some(redraw) = redraw.borrow().as_ref() {
-                            redraw(state.borrow().page);
+                            let page = state.borrow().page;
+                            redraw(page);
                         }
                     });
                     document_tabs.append(&previous);
@@ -1268,7 +1269,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     next.on_click(move || {
                         shift.set((shift.get() + 1).min(maximum_offset));
                         if let Some(redraw) = redraw.borrow().as_ref() {
-                            redraw(state.borrow().page);
+                            let page = state.borrow().page;
+                            redraw(page);
                         }
                     });
                     document_tabs.append(&next);
