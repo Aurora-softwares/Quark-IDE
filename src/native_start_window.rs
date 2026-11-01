@@ -52,6 +52,11 @@ pub fn show(
     let subtitle = ui.label("Hydrogen Development Environment")?;
     subtitle.set_color(TextColor::Secondary);
     root.append(&subtitle);
+    // Navigation errors must remain visible even when the lower section of
+    // the Start Window is clipped by a smaller macOS display.
+    let status = ui.label("Choose an existing workspace or create something new.")?;
+    status.set_color(TextColor::Secondary);
+    root.append(&status);
 
     let left = ui.stack(Orientation::Vertical)?;
     left.set_padding(Padding::all(12.0));
@@ -127,10 +132,6 @@ pub fn show(
     columns.set_min_sizes(330.0, 340.0);
     columns.set_sizing(Sizing::fill());
     root.append(&columns);
-    let status = ui.label("Choose an existing workspace or create something new.")?;
-    status.set_color(TextColor::Secondary);
-    root.append(&status);
-
     // Never replace the AppKit NSWindow content while its NSButton handler
     // is still on the stack. Defer every launch action to the next UI tick.
     // A single pending flag also prevents double-clicks opening twice.
