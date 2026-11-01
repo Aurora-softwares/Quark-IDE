@@ -324,6 +324,9 @@ pub struct LayoutDocument {
     saved: String,
     /// Retains partially edited XML without discarding text on parse errors.
     source_draft: Option<String>,
+    /// The Hydrogen compiler's actual <Window> hierarchy is retained
+    /// verbatim; a flat designer projection may never replace it on save.
+    pub native_window: bool,
 }
 
 impl LayoutDocument {
@@ -336,11 +339,13 @@ impl LayoutDocument {
         let saved = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let layout: Layout = crate::ui_xml::load(&path, &saved)?;
         layout.validate()?;
+        let native_window = crate::ui_xml::is_native_window(&saved);
         Ok(Self {
             path,
             layout,
+            source_draft: native_window.then(|| saved.clone()),
             saved,
-            source_draft: None,
+            native_window,
         })
     }
 
@@ -363,12 +368,20 @@ impl LayoutDocument {
         let parsed: Layout = crate::ui_xml::load(&self.path, &text)?;
         parsed.validate()?;
         self.layout = parsed;
+        self.native_window = crate::ui_xml::is_native_window(&text);
         Ok(())
     }
 
     /// A designer mutation invalidates an older XML draft only when the
     /// draft is valid; invalid text must be resolved before visual edits.
     pub fn refresh_designer_xml(&mut self) -> Result<String, String> {
+        if self.native_window {
+            return Err(
+                "Responsive Hydrogen <Window> documents must retain their nested XML. \
+                 Edit in XML Source until the hierarchical visual editor supports native controls."
+                    .into(),
+            );
+        }
         if self.source_draft.is_some() {
             let current = self.source()?;
             let parsed: Layout = crate::ui_xml::load(&self.path, &current)?;
@@ -390,8 +403,9 @@ impl LayoutDocument {
         crate::storage::save_checked(&self.path, &text, &self.saved)
             .map_err(|e| format!("Layout was modified externally or cannot be saved: {e:?}"))?;
         self.layout = parsed;
-        self.saved = text;
-        self.source_draft = None;
+        self.native_window = crate::ui_xml::is_native_window(&text);
+        self.saved = text.clone();
+        self.source_draft = self.native_window.then_some(text);
         Ok(())
     }
 }
@@ -721,6 +735,35 @@ mod tests {
         doc.save().unwrap();
         assert_eq!(fs::read_to_string(path).unwrap(), xml);
         assert!(!doc.dirty());
+    }
+
+    #[test]
+    fn native_hydrogen_window_source_roundtrips_without_losing_events_or_nested_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Studio.hyui");
+        let source = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Window version="1" title="Studio" width="1120" height="900" theme="system">
+    <RowPanel gap="12">
+      <Button id="build" text="Create" onClick="Build" />
+      <Input id="name" text="Aurora" onChange="Preview" />
+    </RowPanel>
+</Window>"#;
+        fs::write(&path, source).unwrap();
+        let mut doc = LayoutDocument::open(&path).unwrap();
+        assert!(doc.native_window);
+        assert!(!doc.dirty());
+        assert_eq!(doc.source().unwrap(), source);
+        assert_eq!(doc.layout.title, "Studio");
+        assert_eq!(doc.layout.width, 1120.0);
+        assert!(doc.layout.controls.iter().any(|c| c.name == "build"));
+        assert!(doc.refresh_designer_xml().is_err());
+        doc.save().unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+        let edited = source.replace("Create", "Generate");
+        doc.edit_source(edited.clone()).unwrap();
+        assert!(doc.dirty());
+        doc.save().unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(), edited);
     }
 
     #[test]
