@@ -407,16 +407,33 @@ fn attach_pane_grip(
     );
     grip.on_draw(move |painter| {
         let (width, height) = (painter.width(), painter.height());
+        // Full-width hit target with an unmistakable Hydrogen / Quark grip.
+        painter.fill_rect(
+            Rect::new(0.0, 0.0, width, height),
+            Color::rgb(0x23, 0x2c, 0x40),
+        );
+        let (r, g, b) = native_shell::HYDROGEN_CYAN;
         let line = if vertical_divider {
-            Rect::new((width - 1.0) / 2.0, 0.0, 1.0, height)
+            Rect::new((width - 2.0) / 2.0, 0.0, 2.0, height)
         } else {
-            Rect::new(0.0, (height - 1.0) / 2.0, width, 1.0)
+            Rect::new(0.0, (height - 2.0) / 2.0, width, 2.0)
         };
-        painter.fill_rect(line, Color::rgb(0x77, 0x77, 0x77));
+        painter.fill_rect(line, Color::rgb(r, g, b));
+        let (r, g, b) = native_shell::QUARK_VIOLET;
+        let marker = if vertical_divider {
+            Rect::new((width - 4.0) / 2.0, (height - 38.0) / 2.0, 4.0, 38.0)
+        } else {
+            Rect::new((width - 38.0) / 2.0, (height - 4.0) / 2.0, 38.0, 4.0)
+        };
+        painter.fill_rect(marker, Color::rgb(r, g, b));
     });
-    let dragging = Rc::new(Cell::new(None::<(f64, native_layout::PaneSizes)>));
+    // Captured pointers are relative to the MOVING grip itself. Using the
+    // original pane size caused the divider to snap back after every reflow.
+    let dragging = Rc::new(Cell::new(None::<f64>));
+    let modified = Rc::new(Cell::new(false));
     grip.on_pointer({
         let dragging = dragging.clone();
+        let modified = modified.clone();
         move |event| {
             let coordinate = if vertical_divider {
                 event.point.x
@@ -424,16 +441,23 @@ fn attach_pane_grip(
                 event.point.y
             };
             match event.phase {
-                PointerPhase::Down => dragging.set(Some((coordinate, prefs.get()))),
+                PointerPhase::Down => {
+                    dragging.set(Some(coordinate));
+                    modified.set(false);
+                }
                 PointerPhase::Move => {
-                    if let Some((begin, original)) = dragging.get() {
-                        let next = original.resized(pane, coordinate - begin);
-                        prefs.set(next);
-                        apply(next);
+                    if let Some(begin) = dragging.get() {
+                        let original = prefs.get();
+                        let next = original.drag(pane, begin, coordinate);
+                        if next != original {
+                            prefs.set(next);
+                            modified.set(true);
+                            apply(next);
+                        }
                     }
                 }
                 PointerPhase::Up => {
-                    if dragging.replace(None).is_some() {
+                    if dragging.replace(None).is_some() && modified.replace(false) {
                         let _ = prefs.get().save(&save_path);
                     }
                 }
