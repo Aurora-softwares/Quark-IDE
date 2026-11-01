@@ -228,5 +228,16 @@ pub fn build_preview(xml: &str) -> Result<gtk::Widget, String> {
     content.append(&body);
     frame.set_child(Some(&content));
     frame.add_css_class("view");
+    // Position the preview at the top-left of the available design area,
+    // rather than centring it vertically or letting its frame touch the edge.
+    // The scrolling viewport owns overflow for larger Hydrogen windows.
+    frame.set_margin_top(14);
+    frame.set_margin_bottom(14);
+    frame.set_margin_start(14);
+    frame.set_margin_end(14);
+    frame.set_halign(gtk::Align::Start);
+    frame.set_valign(gtk::Align::Start);
+    frame.set_hexpand(false);
+    frame.set_vexpand(false);
     Ok(frame.upcast())
 }
