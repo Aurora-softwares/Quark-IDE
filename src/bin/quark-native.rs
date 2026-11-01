@@ -8,19 +8,19 @@
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
+#[path = "../native_commands.rs"]
+mod native_commands;
+#[path = "../native_launcher.rs"]
+mod native_launcher;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
-#[path = "../native_launcher.rs"]
-mod native_launcher;
-#[path = "../native_commands.rs"]
-mod native_commands;
 #[path = "../native_shell.rs"]
 mod native_shell;
-#[path = "../problems.rs"]
-mod problems;
 #[path = "../native_start_window.rs"]
 mod native_start_window;
+#[path = "../problems.rs"]
+mod problems;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../project.rs"]
 mod project;
@@ -235,7 +235,12 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
         let children = files
             .iter()
             .map(|path| {
-                TreeItem::new(path.file_name().unwrap_or_default().to_string_lossy().to_string())
+                TreeItem::new(
+                    path.file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                )
             })
             .collect();
         return (
@@ -295,10 +300,16 @@ fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>)
     let children = matching
         .iter()
         .map(|path| {
-            TreeItem::new(path.file_name().unwrap_or_default().to_string_lossy().to_string())
+            TreeItem::new(
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+            )
         })
         .collect();
-    let label = ide.project
+    let label = ide
+        .project
         .as_ref()
         .map(|p| format!("Solution '{}'", p.name))
         .unwrap_or_else(|| "Folder".to_owned());
@@ -326,40 +337,42 @@ fn run_task(
         .unwrap_or_else(|| PathBuf::from("."));
     status.set_text(&format!("{}…", task.label()));
     output.set_text(&format!("Running {}…", task.label()));
-    let sender = ui.tasks().channel(move |result: native_commands::ResultLog| {
-        let parsed = problems::parse(&result.text, &project_dir);
-        let errors = parsed
-            .iter()
-            .filter(|item| item.severity == problems::Severity::Error)
-            .count();
-        let warnings = parsed.len() - errors;
-        error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
-        error_list.set_items(
-            &parsed
+    let sender = ui
+        .tasks()
+        .channel(move |result: native_commands::ResultLog| {
+            let parsed = problems::parse(&result.text, &project_dir);
+            let errors = parsed
                 .iter()
-                .map(|item| {
-                    ListItem::new(format!(
-                        "{}: {}:{} — {}",
-                        if item.severity == problems::Severity::Error {
-                            "Error"
-                        } else {
-                            "Warning"
-                        },
-                        item.path.display(),
-                        item.line,
-                        item.message
-                    ))
-                })
-                .collect::<Vec<_>>(),
-        );
-        *current_errors.borrow_mut() = parsed;
-        output.set_text(&result.text);
-        status.set_text(if result.success {
-            "Operation completed successfully"
-        } else {
-            "Operation failed — review Output and Error List"
+                .filter(|item| item.severity == problems::Severity::Error)
+                .count();
+            let warnings = parsed.len() - errors;
+            error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
+            error_list.set_items(
+                &parsed
+                    .iter()
+                    .map(|item| {
+                        ListItem::new(format!(
+                            "{}: {}:{} — {}",
+                            if item.severity == problems::Severity::Error {
+                                "Error"
+                            } else {
+                                "Warning"
+                            },
+                            item.path.display(),
+                            item.line,
+                            item.message
+                        ))
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            *current_errors.borrow_mut() = parsed;
+            output.set_text(&result.text);
+            status.set_text(if result.success {
+                "Operation completed successfully"
+            } else {
+                "Operation failed — review Output and Error List"
+            });
         });
-    });
     std::thread::spawn(move || {
         let result = native_commands::run(task, &compiler, project.as_deref());
         let _ = sender.send(result);
@@ -628,9 +641,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let current_errors = Rc::new(RefCell::new(Vec::<problems::Problem>::new()));
     errors_view.append(&error_summary);
     errors_view.append(&error_list);
-    let debug_view = ui.label("Debugger not yet attached. Source-level Hydrogen debug support is planned.")?;
-    let tests_view = ui.label("Test Explorer integration is planned. Use the Hydrogen CLI in the meantime.")?;
-    let find_view = ui.label("Search results appear here after the solution search service is connected.")?;
+    let debug_view =
+        ui.label("Debugger not yet attached. Source-level Hydrogen debug support is planned.")?;
+    let tests_view =
+        ui.label("Test Explorer integration is planned. Use the Hydrogen CLI in the meantime.")?;
+    let find_view =
+        ui.label("Search results appear here after the solution search service is connected.")?;
     bottom_pages.append(&output_scroll);
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
@@ -1262,7 +1278,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             (0, 4) => save_action(),
             (0, 5) => {
                 if state.borrow().has_unsaved() {
-                    status.set_text("Save modified documents and layouts before closing the workspace.");
+                    status.set_text(
+                        "Save modified documents and layouts before closing the workspace.",
+                    );
                 } else {
                     state.borrow_mut().clear_workspace();
                     refresh_project();
@@ -1287,7 +1305,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             (3, 0) => status.set_text("Clone a repository from the Quark Start Window."),
             (3, 1) => status.set_text("Native Git Changes pane is not yet integrated."),
             (4, 0) => {
-                let base = state.borrow().workspace.selected
+                let base = state
+                    .borrow()
+                    .workspace
+                    .selected
                     .as_ref()
                     .and_then(|p| p.parent().map(Path::to_path_buf))
                     .or_else(|| state.borrow().workspace.folders.last().cloned());
@@ -1305,15 +1326,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         }
                     };
                     match serde_json::to_vec_pretty(&Layout::default()) {
-                        Ok(contents) => {
-                            match crate::storage::atomic_write(&target, &contents) {
-                                Ok(()) => {
-                                    open_layout(target);
-                                    refresh_project();
-                                }
-                                Err(error) => status.set_text(&format!("Cannot create design: {error}")),
+                        Ok(contents) => match crate::storage::atomic_write(&target, &contents) {
+                            Ok(()) => {
+                                open_layout(target);
+                                refresh_project();
                             }
-                        }
+                            Err(error) => {
+                                status.set_text(&format!("Cannot create design: {error}"))
+                            }
+                        },
                         Err(error) => status.set_text(&error.to_string()),
                     }
                 } else {
@@ -1335,7 +1356,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             (7, 1) => status.set_text("Test execution integration is planned."),
             (8, 0) => {
                 show_bottom(1);
-                status.set_text("Static analysis is available through Hydrogen check in the legacy IDE.");
+                status.set_text(
+                    "Static analysis is available through Hydrogen check in the legacy IDE.",
+                );
             }
             (9, 0) => status.set_text("Native Options panel is planned."),
             (10, 0) => status.set_text("Native extension management is planned."),
@@ -1349,7 +1372,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // "Continue without code" enters the full IDE with no selected project.
     let initial_document = {
         let ide = state.borrow();
-        (ide.document.as_ref().map(|doc| doc.text.clone()), ide.layout.is_some())
+        (
+            ide.document.as_ref().map(|doc| doc.text.clone()),
+            ide.layout.is_some(),
+        )
     };
     if let Some(text) = initial_document.0 {
         editor.set_text(&text);
