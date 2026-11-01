@@ -756,16 +756,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     });
     let destination = dock_file.clone();
     std::thread::spawn(move || {
-        use std::sync::mpsc::RecvTimeoutError;
         use std::time::Duration;
         while let Ok(mut latest) = dock_receiver.recv() {
-            loop {
-                match dock_receiver.recv_timeout(Duration::from_millis(180)) {
-                    Ok(update) => latest = update,
-                    Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
-                        break;
-                    }
-                }
+            while let Ok(update) = dock_receiver.recv_timeout(Duration::from_millis(180)) {
+                latest = update;
             }
             if let Err(error) = latest.save(&destination) {
                 let _ = save_error.send(format!("Could not save window layout: {error}"));
