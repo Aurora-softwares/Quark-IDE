@@ -4,7 +4,7 @@
 use crate::hydrogen::{self, BuildPlan, BuildScope};
 use std::{
     fs,
-    io::{self, Read, Write},
+    io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -191,6 +191,7 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
 
     fn sample_plan(dir: &Path) -> BuildPlan {
         BuildPlan {
