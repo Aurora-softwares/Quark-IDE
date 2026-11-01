@@ -1230,6 +1230,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let tab_mode = tab_mode.clone();
         let active_side_tab = active_side_tab.clone();
         let side_tabs = side_tabs.clone();
+        let left_rail = left_rail.clone();
         let left_panel = left_panel.clone();
         move |requested| {
             let (page, tabs, active_path) = {
@@ -1245,8 +1246,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             };
             tab_mode.set(page);
             active_side_tab.set(0);
+            left_rail.clear();
             for (index, tab) in side_tabs.iter().enumerate() {
-                tab.set_visible(page != Page::Code || index < 2);
+                if page != Page::Code || index < 2 {
+                    left_rail.append(tab);
+                }
                 tab.redraw();
             }
             left_panel(0);
