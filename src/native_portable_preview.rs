@@ -1,7 +1,7 @@
 //! Portable design-time rendering for Hydrogen <Window> files.
 //! naui creates real AppKit / WinUI 3 / GTK controls from the same tree.
 //! The preview never dispatches application handlers.
-use naui::{Length, Orientation, Sizing, Ui};
+use naui::{Length, Orientation, Padding, Sizing, Ui};
 use roxmltree::Node;
 use std::rc::Rc;
 
@@ -149,9 +149,15 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
     }
     let outer = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     outer.set_spacing(8.0);
-    outer.append(&ui.label(root.attribute("title").unwrap_or("Hydrogen Window")).map_err(|e| e.to_string())?);
+    outer.set_padding(Padding::all(14.0));
     let window = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     window.set_spacing(8.0);
+    window.set_padding(Padding::all(12.0));
+    let width = root.attribute("width").and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(720.0).clamp(320.0, 1400.0);
+    window.set_sizing(Sizing::new().width(Length::Fixed(width)));
+    outer.append(&ui.label(root.attribute("title").unwrap_or("Hydrogen Window"))
+        .map_err(|e| e.to_string())?);
     let choose_window = ui.button("Select window properties").map_err(|e| e.to_string())?;
     let selected = on_select.clone();
     choose_window.on_click(move || selected(Vec::new()));
