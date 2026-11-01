@@ -899,17 +899,41 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     // The first tab row selects documents; the second selects the editor
     // representation of a .hyui document. Both views use the full workspace.
+    let design_mode = Rc::new(Cell::new(true));
     let design_tabs = ui.stack(Orientation::Horizontal)?;
-    design_tabs.set_spacing(4.0);
-    let xml_visual_tab = ui.button("Design")?;
-    let xml_text_tab = ui.button("XML Source")?;
-    design_tabs.append(&xml_visual_tab);
-    design_tabs.append(&xml_text_tab);
+    design_tabs.set_spacing(0.0);
+    let xml_visual_tab = ui.canvas()?;
+    let xml_text_tab = ui.canvas()?;
+    for (tab, title, active_when_design, width) in [
+        (&xml_visual_tab, "Design", true, 85.0),
+        (&xml_text_tab, "XML Source", false, 118.0),
+    ] {
+        tab.set_sizing(
+            Sizing::new()
+                .width(Length::Fixed(width))
+                .height(Length::Fixed(30.0)),
+        );
+        let mode = design_mode.clone();
+        tab.on_draw(move |painter| {
+            painter.text(
+                title,
+                Point::new(12.0, 7.0),
+                12.0,
+                Color::rgb(0xd2, 0xd2, 0xd7),
+            );
+            if mode.get() == active_when_design {
+                painter.fill_rect(
+                    Rect::new(0.0, painter.height() - 2.0, painter.width(), 2.0),
+                    Color::rgb(0x8a, 0x81, 0xa4),
+                );
+            }
+        });
+        design_tabs.append(tab);
+    }
 
     let designer = ui.stack(Orientation::Vertical)?;
     designer.set_spacing(0.0);
     designer.set_sizing(Sizing::fill());
-    let design_mode = Rc::new(Cell::new(true));
 
     let design_surface = ui.stack(Orientation::Vertical)?;
     design_surface.set_sizing(Sizing::fill());
@@ -944,24 +968,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let sync_xml = Rc::new(Cell::new(false));
     designer.append(&design_surface);
 
-    xml_visual_tab.on_click({
+    xml_visual_tab.on_pointer({
         let designer = designer.clone();
         let design_surface = design_surface.clone();
         let design_mode = design_mode.clone();
-        move || {
-            design_mode.set(true);
-            designer.clear();
-            designer.append(&design_surface);
+        let visual_tab = xml_visual_tab.clone();
+        let source_tab = xml_text_tab.clone();
+        move |event| {
+            if event.phase == PointerPhase::Down && !design_mode.get() {
+                design_mode.set(true);
+                designer.clear();
+                designer.append(&design_surface);
+                visual_tab.redraw();
+                source_tab.redraw();
+            }
         }
     });
-    xml_text_tab.on_click({
+    xml_text_tab.on_pointer({
         let designer = designer.clone();
         let xml_editor = xml_editor.clone();
         let design_mode = design_mode.clone();
-        move || {
-            design_mode.set(false);
-            designer.clear();
-            designer.append(&xml_editor);
+        let visual_tab = xml_visual_tab.clone();
+        let source_tab = xml_text_tab.clone();
+        move |event| {
+            if event.phase == PointerPhase::Down && design_mode.get() {
+                design_mode.set(false);
+                designer.clear();
+                designer.append(&xml_editor);
+                visual_tab.redraw();
+                source_tab.redraw();
+            }
         }
     });
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
@@ -1376,6 +1412,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let design_tabs = design_tabs.clone();
         let design_mode = design_mode.clone();
         let design_surface = design_surface.clone();
+        let xml_visual_tab = xml_visual_tab.clone();
+        let xml_text_tab = xml_text_tab.clone();
         let tab_mode = tab_mode.clone();
         let active_side_tab = active_side_tab.clone();
         let side_tabs = side_tabs.clone();
@@ -1526,6 +1564,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 }
             }
             if page == Page::Design {
+                xml_visual_tab.redraw();
+                xml_text_tab.redraw();
                 centre.append(&design_tabs);
             }
             pages.clear();
