@@ -528,61 +528,43 @@ fn run_task(
     });
 }
 
-/// Resize a fixed grid track without tying pane sizes to window dimensions.
-fn attach_fixed_grip(
-    grip: &naui::Canvas,
-    pane: native_layout::Pane,
-    sizes: Rc<Cell<native_layout::PaneSizes>>,
-    save_path: PathBuf,
-    apply: Rc<dyn Fn(native_layout::PaneSizes)>,
-) {
-    let vertical = matches!(
-        pane,
-        native_layout::Pane::Inspector | native_layout::Pane::Toolbox
-    );
-    grip.on_draw(move |p| {
-        let marker = if vertical {
-            Rect::new((p.width() - 1.0) / 2.0, 0.0, 1.0, p.height())
-        } else {
-            Rect::new(0.0, (p.height() - 1.0) / 2.0, p.width(), 1.0)
-        };
-        p.fill_rect(marker, Color::rgb(0x48, 0x4a, 0x50));
-    });
-    let anchor = Rc::new(Cell::new(None::<f64>));
-    let changed = Rc::new(Cell::new(false));
-    grip.on_pointer({
-        let anchor = anchor.clone();
-        let changed = changed.clone();
-        move |event| {
-            let coord = if vertical {
-                event.point.x
+/// GTK's native paned widget can preserve its trailing child while the
+/// editor absorbs OS-window growth. The user can still drag its separator.
+#[cfg(target_os = "linux")]
+fn retain_trailing_size(split: &naui::SplitView) {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    if let Ok(paned) = split.native_widget().downcast::<gtk4::Paned>() {
+        paned.set_resize_start_child(true);
+        paned.set_resize_end_child(false);
+        paned.set_shrink_start_child(false);
+        paned.set_shrink_end_child(false);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn retain_trailing_size(_split: &naui::SplitView) {}
+
+/// Read the actual GtkPaned allocation rather than treating the initial
+/// window dimensions as permanent. The fallback handles pre-layout calls.
+fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        if let Ok(paned) = split.native_widget().downcast::<gtk4::Paned>() {
+            let size = if paned.orientation() == gtk4::Orientation::Horizontal {
+                paned.allocated_width()
             } else {
-                event.point.y
+                paned.allocated_height()
             };
-            match event.phase {
-                PointerPhase::Down => {
-                    anchor.set(Some(coord));
-                    changed.set(false);
-                }
-                PointerPhase::Move => {
-                    if let Some(start) = anchor.get() {
-                        let before = sizes.get();
-                        let after = before.drag(pane, start, coord);
-                        if before != after {
-                            sizes.set(after);
-                            apply(after);
-                            changed.set(true);
-                        }
-                    }
-                }
-                PointerPhase::Up => {
-                    if anchor.replace(None).is_some() && changed.replace(false) {
-                        let _ = sizes.get().save(&save_path);
-                    }
-                }
+            if size > 0 {
+                return f64::from(size);
             }
         }
-    });
+    }
+    let _ = split;
+    fallback
 }
 
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
@@ -942,21 +924,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&delete_control);
     properties_pane.set_sizing(Sizing::fill());
 
-    let inspector = ui.grid()?;
+    let inspector = ui.split_view(Orientation::Vertical)?;
     inspector.set_sizing(Sizing::fill());
-    inspector.set_column_track(0, Track::FILL);
-    inspector.set_row_track(0, Track::FILL);
-    inspector.set_row_track(1, Track::Fixed(native_layout::HANDLE));
-    inspector.set_row_track(2, Track::Fixed(preferred.properties));
-    let properties_grip = ui.canvas()?;
-    properties_grip.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(native_layout::HANDLE)),
-    );
-    inspector.attach(&solution_pane, GridCell::new(0, 0));
-    inspector.attach(&properties_grip, GridCell::new(0, 1));
-    inspector.attach(&properties_pane, GridCell::new(0, 2));
+    inspector.set_start(&solution_pane);
+    inspector.set_end(&properties_pane);
+    inspector.set_position(940.0 - preferred.properties - 145.0);
+    inspector.set_min_sizes(110.0, 150.0);
+    retain_trailing_size(&inspector);
 
     let bottom = ui.stack(Orientation::Vertical)?;
     let bottom_tabs = ui.stack(Orientation::Horizontal)?;
@@ -1003,81 +977,101 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
-    // The centre is the ONLY region that absorbs OS-window growth.
-    // Trailing tool windows have fixed grid tracks, with draggable canvas
-    // dividers that update explicit pane sizes (never viewport proportions).
-    let document_workspace = ui.grid()?;
+    // True native splitters provide pointer capture and keyboard resizing.
+    // GTK's trailing-pane policy preserves the output and right tool-window
+    // sizes as the main window grows. The editor receives the spare space.
+    let document_workspace = ui.split_view(Orientation::Vertical)?;
     document_workspace.set_sizing(Sizing::fill());
-    document_workspace.set_column_track(0, Track::FILL);
-    document_workspace.set_row_track(0, Track::FILL);
-    document_workspace.set_row_track(1, Track::Fixed(native_layout::HANDLE));
-    document_workspace.set_row_track(2, Track::Fixed(preferred.output));
-    let output_grip = ui.canvas()?;
-    output_grip.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(native_layout::HANDLE)),
-    );
-    document_workspace.attach(&centre, GridCell::new(0, 0));
-    document_workspace.attach(&output_grip, GridCell::new(0, 1));
-    document_workspace.attach(&bottom, GridCell::new(0, 2));
+    document_workspace.set_start(&centre);
+    document_workspace.set_end(&bottom);
+    document_workspace.set_position(940.0 - preferred.output - 80.0);
+    document_workspace.set_min_sizes(160.0, 100.0);
+    retain_trailing_size(&document_workspace);
 
-    let main_workspace = ui.grid()?;
+    let left_split = ui.split_view(Orientation::Horizontal)?;
+    left_split.set_sizing(Sizing::fill());
+    left_split.set_start(&left_side);
+    left_split.set_end(&document_workspace);
+    left_split.set_position(preferred.toolbox);
+    left_split.set_min_sizes(155.0, 200.0);
+
+    let main_workspace = ui.split_view(Orientation::Horizontal)?;
     main_workspace.set_sizing(Sizing::fill());
-    main_workspace.set_row_track(0, Track::FILL);
-    main_workspace.set_column_track(0, Track::Fixed(preferred.toolbox));
-    main_workspace.set_column_track(1, Track::Fixed(native_layout::HANDLE));
-    main_workspace.set_column_track(2, Track::FILL);
-    main_workspace.set_column_track(3, Track::Fixed(native_layout::HANDLE));
-    main_workspace.set_column_track(4, Track::Fixed(preferred.inspector));
-    let toolbox_grip = ui.canvas()?;
-    toolbox_grip.set_sizing(
-        Sizing::new()
-            .width(Length::Fixed(native_layout::HANDLE))
-            .height(Length::Fill),
-    );
-    let inspector_grip = ui.canvas()?;
-    inspector_grip.set_sizing(
-        Sizing::new()
-            .width(Length::Fixed(native_layout::HANDLE))
-            .height(Length::Fill),
-    );
-    main_workspace.attach(&left_side, GridCell::new(0, 0));
-    main_workspace.attach(&toolbox_grip, GridCell::new(1, 0));
-    main_workspace.attach(&document_workspace, GridCell::new(2, 0));
-    main_workspace.attach(&inspector_grip, GridCell::new(3, 0));
-    main_workspace.attach(&inspector, GridCell::new(4, 0));
+    main_workspace.set_start(&left_split);
+    main_workspace.set_end(&inspector);
+    main_workspace.set_position(1480.0 - preferred.inspector - 35.0);
+    main_workspace.set_min_sizes(300.0, 220.0);
+    retain_trailing_size(&main_workspace);
     root.attach(&main_workspace, GridCell::new(0, 1));
 
     let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
+        let left_split = left_split.clone();
         let main_workspace = main_workspace.clone();
         let document_workspace = document_workspace.clone();
         let inspector = inspector.clone();
         move |sizes| {
-            main_workspace.set_column_track(0, Track::Fixed(sizes.toolbox));
-            main_workspace.set_column_track(4, Track::Fixed(sizes.inspector));
-            document_workspace.set_row_track(2, Track::Fixed(sizes.output));
-            inspector.set_row_track(2, Track::Fixed(sizes.properties));
+            left_split.set_position(sizes.toolbox);
+            main_workspace.set_position(
+                (split_extent(&main_workspace, 1480.0) - sizes.inspector - 6.0).max(300.0),
+            );
+            document_workspace.set_position(
+                (split_extent(&document_workspace, 860.0) - sizes.output - 6.0).max(160.0),
+            );
+            inspector.set_position(
+                (split_extent(&inspector, 795.0) - sizes.properties - 6.0).max(110.0),
+            );
         }
     });
-    for (grip, pane) in [
-        (&toolbox_grip, native_layout::Pane::Toolbox),
-        (&inspector_grip, native_layout::Pane::Inspector),
-        (&output_grip, native_layout::Pane::Output),
-        (&properties_grip, native_layout::Pane::Properties),
-    ] {
-        attach_fixed_grip(
-            grip,
-            pane,
-            pane_sizes.clone(),
-            pane_path.clone(),
-            refresh_tracks.clone(),
-        );
-    }
+    left_split.on_resize({
+        let sizes = pane_sizes.clone();
+        let path = pane_path.clone();
+        move |position| {
+            let mut next = sizes.get();
+            next.toolbox = position;
+            next = next.sanitize();
+            sizes.set(next);
+            let _ = next.save(&path);
+        }
+    });
+    main_workspace.on_resize({
+        let sizes = pane_sizes.clone();
+        let path = pane_path.clone();
+        let main_workspace = main_workspace.clone();
+        move |position| {
+            let mut next = sizes.get();
+            next.inspector = (split_extent(&main_workspace, 1480.0) - position - 6.0).max(0.0);
+            next = next.sanitize();
+            sizes.set(next);
+            let _ = next.save(&path);
+        }
+    });
+    document_workspace.on_resize({
+        let sizes = pane_sizes.clone();
+        let path = pane_path.clone();
+        let document_workspace = document_workspace.clone();
+        move |position| {
+            let mut next = sizes.get();
+            next.output = (split_extent(&document_workspace, 860.0) - position - 6.0).max(0.0);
+            next = next.sanitize();
+            sizes.set(next);
+            let _ = next.save(&path);
+        }
+    });
+    inspector.on_resize({
+        let sizes = pane_sizes.clone();
+        let path = pane_path.clone();
+        let inspector = inspector.clone();
+        move |position| {
+            let mut next = sizes.get();
+            next.properties = (split_extent(&inspector, 795.0) - position - 6.0).max(0.0);
+            next = next.sanitize();
+            sizes.set(next);
+            let _ = next.save(&path);
+        }
+    });
 
     // Accessible native-button alternatives to fine pointer dragging.
-    // Both routes update exactly the same fixed Grid tracks and persisted
-    // dimensions; resizing the OS window still only expands the centre.
+    // These buttons adjust the same native splitters and persistent sizes.
     let adjust_pane: Rc<dyn Fn(native_layout::Pane, i32)> = Rc::new({
         let pane_sizes = pane_sizes.clone();
         let refresh_tracks = refresh_tracks.clone();
