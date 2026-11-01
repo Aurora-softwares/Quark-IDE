@@ -373,10 +373,7 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
                     if path.is_dir() && !path.is_symlink() && depth < 5 {
                         pending.push((path, depth + 1));
                     } else if path.is_file()
-                        && matches!(
-                            path.extension().and_then(|e| e.to_str()),
-                            Some("hyui")
-                        )
+                        && matches!(path.extension().and_then(|e| e.to_str()), Some("hyui"))
                     {
                         paths.push(path);
                     }
@@ -1617,7 +1614,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let result = state.borrow_mut().open_design(&path);
             match result {
                 Ok(()) => {
-                    if state.borrow().layout.as_ref().is_some_and(|d| d.native_window) {
+                    if state
+                        .borrow()
+                        .layout
+                        .as_ref()
+                        .is_some_and(|d| d.native_window)
+                    {
                         design_heading.set_text(
                             "Hydrogen <Window> preview · responsive source can be edited below",
                         );
@@ -1711,8 +1713,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
-                {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -2159,8 +2160,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
-                    {
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                         open_layout(path);
                     } else {
                         open_source(path);
