@@ -450,18 +450,38 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     toolbox.set_spacing(9.0);
     toolbox.append(&ui.label("TOOLBOX")?);
     toolbox.append(&ui.label("Common Controls")?);
+    let mut toolbox_buttons = Vec::new();
     for kind in ControlKind::ALL {
         let button = ui.button(kind.title())?;
-        let state = state.clone();
-        button.on_click(move || {
-            let mut ide = state.borrow_mut();
-            ide.armed = Some(kind);
-            ide.page = Page::Design;
-        });
         toolbox.append(&button);
+        toolbox_buttons.push((kind, button));
     }
     toolbox.append(&ui.label("Select a control, then click the designer surface to place it.")?);
     toolbox.set_sizing(Sizing::fill());
+
+    // Visual Studio's compact auto-hide rail lives to the left of Toolbox.
+    let left_rail = ui.stack(Orientation::Vertical)?;
+    left_rail.set_spacing(5.0);
+    left_rail.set_sizing(Sizing::new().width(Length::Fixed(85.0)));
+    let server_tab = ui.button("Server")?;
+    let toolbox_tab = ui.button("Toolbox")?;
+    let data_tab = ui.button("Data")?;
+    left_rail.append(&server_tab);
+    left_rail.append(&toolbox_tab);
+    left_rail.append(&data_tab);
+    let server_view = ui.stack(Orientation::Vertical)?;
+    server_view.append(&ui.label("SERVER EXPLORER")?);
+    server_view.append(&ui.label("Server connections can be added here in a future update.")?);
+    let data_view = ui.stack(Orientation::Vertical)?;
+    data_view.append(&ui.label("DATA SOURCES")?);
+    data_view.append(&ui.label("Data source integration is planned.")?);
+    let left_content = ui.stack(Orientation::Vertical)?;
+    left_content.append(&toolbox);
+    left_content.set_sizing(Sizing::fill());
+    let left_side = ui.stack(Orientation::Horizontal)?;
+    left_side.append(&left_rail);
+    left_side.append(&left_content);
+    left_side.set_sizing(Sizing::fill());
 
     let centre = ui.stack(Orientation::Vertical)?;
     centre.set_spacing(6.0);
@@ -544,38 +564,86 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     centre.append(&pages);
     centre.set_sizing(Sizing::fill());
 
-    let inspector = ui.stack(Orientation::Vertical)?;
-    inspector.set_spacing(9.0);
-    inspector.append(&ui.label("SOLUTION EXPLORER")?);
+    let solution_pane = ui.stack(Orientation::Vertical)?;
+    solution_pane.set_spacing(6.0);
+    let solution_heading = ui.stack(Orientation::Horizontal)?;
+    let heading = ui.label("SOLUTION EXPLORER")?;
+    heading.set_style(naui::TextStyle::Heading);
+    solution_heading.append(&heading);
+    let refresh_solution = ui.button("⟳")?;
+    let collapse_solution = ui.button("−")?;
+    solution_heading.append(&refresh_solution);
+    solution_heading.append(&collapse_solution);
+    solution_pane.append(&solution_heading);
+    let solution_search = ui.search_input()?;
+    solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
+    solution_pane.append(&solution_search);
     let tree = ui.tree()?;
-    tree.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(310.0)),
-    );
-    let (initial_tree, _) = file_items(&state.borrow());
+    tree.set_sizing(Sizing::fill());
+    let (initial_tree, initial_paths) = file_items(&state.borrow());
+    let displayed_paths = Rc::new(RefCell::new(initial_paths));
+    let solution_query = Rc::new(RefCell::new(String::new()));
     tree.set_items(&initial_tree);
-    inspector.append(&tree);
-    inspector.append(&ui.label("PROPERTIES")?);
+    solution_pane.append(&tree);
+    solution_pane.set_sizing(Sizing::fill());
+
+    let properties_pane = ui.stack(Orientation::Vertical)?;
+    properties_pane.set_spacing(7.0);
+    let properties_heading = ui.label("PROPERTIES")?;
+    properties_heading.set_style(naui::TextStyle::Heading);
+    properties_pane.append(&properties_heading);
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
     selected_text.set_placeholder("Text");
-    inspector.append(&ui.label("Control name")?);
-    inspector.append(&selected_name);
-    inspector.append(&ui.label("Text")?);
-    inspector.append(&selected_text);
+    properties_pane.append(&ui.label("Control name")?);
+    properties_pane.append(&selected_name);
+    properties_pane.append(&ui.label("Text")?);
+    properties_pane.append(&selected_text);
     let delete_control = ui.button("Delete Selected Control")?;
-    inspector.append(&delete_control);
+    properties_pane.append(&delete_control);
+    properties_pane.set_sizing(Sizing::fill());
+
+    let inspector = ui.split_view(Orientation::Vertical)?;
+    inspector.set_start(&solution_pane);
+    inspector.set_end(&properties_pane);
+    inspector.set_position(430.0);
+    inspector.set_min_sizes(190.0, 160.0);
     inspector.set_sizing(Sizing::fill());
 
     let bottom = ui.stack(Orientation::Vertical)?;
-    bottom.append(&ui.label("OUTPUT  |  ERROR LIST  |  BUILD")?);
-    let output = ui.label("Ready — choose a project from the Start Window.")?;
+    let bottom_tabs = ui.stack(Orientation::Horizontal)?;
+    bottom_tabs.set_spacing(8.0);
+    let output_tab = ui.button("Output")?;
+    let errors_tab = ui.button("Error List")?;
+    let debug_tab = ui.button("Debug")?;
+    let test_tab = ui.button("Test Results")?;
+    let find_tab = ui.button("Find Results")?;
+    bottom_tabs.append(&output_tab);
+    bottom_tabs.append(&errors_tab);
+    bottom_tabs.append(&debug_tab);
+    bottom_tabs.append(&test_tab);
+    bottom_tabs.append(&find_tab);
+    bottom.append(&bottom_tabs);
+
+    let bottom_pages = ui.stack(Orientation::Vertical)?;
+    bottom_pages.set_sizing(Sizing::fill());
+    let output = ui.label("Ready. Open a Hydrogen project to build, run or publish.")?;
     let output_scroll = ui.scroll()?;
     output_scroll.set_sizing(Sizing::fill());
     output_scroll.set_child(&output);
-    bottom.append(&output_scroll);
+    let errors_view = ui.stack(Orientation::Vertical)?;
+    let error_summary = ui.label("0 errors, 0 warnings")?;
+    let error_list = ui.list()?;
+    error_list.set_sizing(Sizing::fill());
+    let current_errors = Rc::new(RefCell::new(Vec::<problems::Problem>::new()));
+    errors_view.append(&error_summary);
+    errors_view.append(&error_list);
+    let debug_view = ui.label("Debugger not yet attached. Source-level Hydrogen debug support is planned.")?;
+    let tests_view = ui.label("Test Explorer integration is planned. Use the Hydrogen CLI in the meantime.")?;
+    let find_view = ui.label("Search results appear here after the solution search service is connected.")?;
+    bottom_pages.append(&output_scroll);
+    bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
 
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
@@ -598,7 +666,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     project_and_editor.set_sizing(Sizing::fill());
 
     let main_workspace = ui.split_view(Orientation::Horizontal)?;
-    main_workspace.set_start(&toolbox);
+    main_workspace.set_start(&left_side);
     main_workspace.set_end(&project_and_editor);
     main_workspace.set_position(210.0);
     main_workspace.set_min_sizes(160.0, 500.0);
