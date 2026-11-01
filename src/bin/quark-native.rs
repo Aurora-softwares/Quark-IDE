@@ -543,7 +543,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(7.0);
-    toolbox.append(&ui.label("TOOLBOX")?);
+    let toolbox_heading = ui.stack(Orientation::Horizontal)?;
+    toolbox_heading.append(&ui.label("TOOLBOX")?);
+    let toolbox_narrow = ui.button("◂")?;
+    let toolbox_wide = ui.button("▸")?;
+    toolbox_heading.append(&toolbox_narrow);
+    toolbox_heading.append(&toolbox_wide);
+    toolbox.append(&toolbox_heading);
     let toolbox_search = ui.search_input()?;
     toolbox_search.set_placeholder("Search controls");
     toolbox.append(&toolbox_search);
@@ -693,6 +699,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let collapse_solution = ui.button("−")?;
     solution_heading.append(&refresh_solution);
     solution_heading.append(&collapse_solution);
+    let inspector_wide = ui.button("◂")?;
+    let inspector_narrow = ui.button("▸")?;
+    solution_heading.append(&inspector_wide);
+    solution_heading.append(&inspector_narrow);
     solution_pane.append(&solution_heading);
     let solution_search = ui.search_input()?;
     solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
@@ -710,7 +720,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.set_spacing(7.0);
     let properties_heading = ui.label("PROPERTIES")?;
     properties_heading.set_style(naui::TextStyle::Heading);
-    properties_pane.append(&properties_heading);
+    let properties_toolbar = ui.stack(Orientation::Horizontal)?;
+    properties_toolbar.append(&properties_heading);
+    let properties_grow = ui.button("▲")?;
+    let properties_shrink = ui.button("▼")?;
+    properties_toolbar.append(&properties_grow);
+    properties_toolbar.append(&properties_shrink);
+    properties_pane.append(&properties_toolbar);
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
@@ -765,6 +781,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     bottom_tabs.append(&debug_tab);
     bottom_tabs.append(&test_tab);
     bottom_tabs.append(&find_tab);
+    let output_grow = ui.button("▲")?;
+    let output_shrink = ui.button("▼")?;
+    bottom_tabs.append(&output_grow);
+    bottom_tabs.append(&output_shrink);
     bottom.append(&bottom_tabs);
 
     let bottom_pages = ui.stack(Orientation::Vertical)?;
@@ -863,6 +883,41 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             pane_path.clone(),
             refresh_tracks.clone(),
         );
+    }
+
+    // Accessible native-button alternatives to fine pointer dragging.
+    // Both routes update exactly the same fixed Grid tracks and persisted
+    // dimensions; resizing the OS window still only expands the centre.
+    let adjust_pane: Rc<dyn Fn(native_layout::Pane, i32)> = Rc::new({
+        let pane_sizes = pane_sizes.clone();
+        let refresh_tracks = refresh_tracks.clone();
+        let pane_path = pane_path.clone();
+        let status = status.clone();
+        move |pane, steps| {
+            let original = pane_sizes.get();
+            let next = original.adjust(pane, steps);
+            if next == original {
+                return;
+            }
+            pane_sizes.set(next);
+            refresh_tracks(next);
+            if let Err(error) = next.save(&pane_path) {
+                status.set_text(&format!("Could not save tool window sizes: {error}"));
+            }
+        }
+    });
+    for (button, pane, steps) in [
+        (&toolbox_narrow, native_layout::Pane::Toolbox, -1),
+        (&toolbox_wide, native_layout::Pane::Toolbox, 1),
+        (&inspector_wide, native_layout::Pane::Inspector, -1),
+        (&inspector_narrow, native_layout::Pane::Inspector, 1),
+        (&properties_grow, native_layout::Pane::Properties, -1),
+        (&properties_shrink, native_layout::Pane::Properties, 1),
+        (&output_grow, native_layout::Pane::Output, -1),
+        (&output_shrink, native_layout::Pane::Output, 1),
+    ] {
+        let adjust_pane = adjust_pane.clone();
+        button.on_click(move || adjust_pane(pane, steps));
     }
 
     let status_bar = ui.stack(Orientation::Horizontal)?;
