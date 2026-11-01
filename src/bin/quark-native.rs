@@ -15,6 +15,7 @@ mod native_launcher;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
+#[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
 #[path = "../native_start_window.rs"]
@@ -32,8 +33,8 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
-    Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
+    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings, Sizing,
+    Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
 };
 use std::{
     cell::RefCell,
@@ -108,22 +109,23 @@ impl Ide {
         if !folder.is_dir() {
             return Err("Choose an existing folder".into());
         }
-        self.workspace.remember(folder, false);
+        let canonical = folder.canonicalize().unwrap_or(folder);
+        self.workspace.remember(canonical.clone(), false);
         self.workspace.selected = None;
         self.workspace.save(&workspace_file())?;
         self.project = None;
         self.document = None;
         self.layout = None;
         self.page = Page::Code;
-        if let Some(path) = self.workspace.folders.last() {
-            record_recent(path.clone());
-        }
+        record_recent(canonical);
         Ok(())
     }
 
     fn clear_workspace(&mut self) {
         self.project = None;
         self.workspace.selected = None;
+        self.workspace.projects.clear();
+        self.workspace.folders.clear();
         self.document = None;
         self.layout = None;
         self.page = Page::Start;
@@ -319,6 +321,7 @@ fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>)
     )
 }
 
+#[allow(clippy::too_many_arguments)] // UI control handles are intentionally passed together.
 fn run_task(
     task: native_commands::Task,
     state: Rc<RefCell<Ide>>,
@@ -1249,7 +1252,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let show_bottom = show_bottom.clone();
         let left_panel = left_panel.clone();
         let status = status.clone();
-        let tree = tree.clone();
         let window = window.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
@@ -1472,6 +1474,19 @@ mod tests {
         assert!(files
             .iter()
             .any(|path| path.file_name().unwrap() == "Main.quarkui"));
+    }
+
+    #[test]
+    fn continue_without_code_does_not_reopen_an_old_workspace() {
+        let mut workspace = Workspace::default();
+        workspace.folders.push(PathBuf::from("/unused/old-project"));
+        workspace.projects.push(PathBuf::from("/unused/app.hyproj"));
+        let mut ide = Ide::from_workspace(workspace);
+        ide.clear_workspace();
+        assert!(ide.project.is_none());
+        assert!(ide.workspace.selected.is_none());
+        assert!(ide.workspace.folders.is_empty());
+        assert!(ide.workspace.projects.is_empty());
     }
 
     #[test]

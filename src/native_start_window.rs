@@ -7,9 +7,7 @@ use crate::{
     native_model::Layout,
     startup,
 };
-use naui::{
-    Length, ListItem, Orientation, Padding, Sizing, TextColor, TextStyle, Ui, Window,
-};
+use naui::{Length, ListItem, Orientation, Padding, Sizing, TextColor, TextStyle, Ui, Window};
 use std::{
     cell::RefCell,
     path::{Path, PathBuf},
@@ -155,7 +153,9 @@ pub fn show(
     search.on_change({
         let filter = filter.clone();
         let refresh = refresh.clone();
+        let selected = selected.clone();
         move |value| {
+            *selected.borrow_mut() = None;
             *filter.borrow_mut() = value.to_owned();
             refresh();
         }
