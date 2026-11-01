@@ -16,6 +16,9 @@ mod native_launcher;
 #[cfg(test)]
 #[allow(dead_code)]
 mod native_commands;
+#[cfg(test)]
+#[allow(dead_code)]
+mod native_shell;
 mod navigation;
 mod panels;
 mod plugins;
