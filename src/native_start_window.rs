@@ -29,7 +29,7 @@ pub fn show(
     previously_opened: &[PathBuf],
     launch: Launch,
 ) -> naui::Result<()> {
-    let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;
+    let window = ui.window("Quark IDE — Start Window", 1080.0, 740.0)?;
     let history = Rc::new(RefCell::new(
         History::open(&history_path).unwrap_or_default(),
     ));
@@ -45,7 +45,7 @@ pub fn show(
 
     let root = ui.stack(Orientation::Vertical)?;
     root.set_padding(Padding::all(24.0));
-    root.set_spacing(18.0);
+    root.set_spacing(12.0);
     let title = ui.label("Quark IDE")?;
     title.set_style(TextStyle::LargeTitle);
     root.append(&title);
@@ -68,7 +68,7 @@ pub fn show(
     recent.set_sizing(
         Sizing::new()
             .width(Length::Fill)
-            .height(Length::Fixed(330.0)),
+            .height(Length::Fixed(245.0)),
     );
     left.append(&recent);
 
