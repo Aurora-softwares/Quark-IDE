@@ -1841,13 +1841,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 PointerPhase::Move => {
                     if let Some((id, dx, dy)) = ide.drag {
                         if let Some(layout) = ide.layout.as_mut() {
-                            layout.layout.position(
-                                id,
-                                (event.point.x
-                                    - ((canvas_width.get() - f64::from(layout.layout.width)) / 2.0)
-                                        .max(20.0)) as f32 - dx,
-                                (event.point.y - 60.0) as f32 - dy,
-                            );
+                            let left = ((canvas_width.get() - f64::from(layout.layout.width)) / 2.0)
+                                .max(20.0);
+                            let x = (event.point.x - left) as f32 - dx;
+                            let y = (event.point.y - 60.0) as f32 - dy;
+                            layout.layout.position(id, x, y);
                         }
                     }
                 }
@@ -1878,8 +1876,31 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
+    let sync_design_source: Rc<dyn Fn()> = Rc::new({
+        let state = state.clone();
+        let xml_editor = xml_editor.clone();
+        let sync_xml = sync_xml.clone();
+        let status = status.clone();
+        move || {
+            let result = state.borrow_mut().layout.as_mut()
+                .map(|doc| doc.refresh_designer_xml());
+            match result {
+                Some(Ok(xml)) => {
+                    sync_xml.set(true);
+                    xml_editor.set_text(&xml);
+                    sync_xml.set(false);
+                }
+                Some(Err(error)) => status.set_text(&format!(
+                    "Fix XML source before visual edits: {error}"
+                )),
+                None => {}
+            }
+        }
+    });
+
     selected_name.on_change({
         let state = state.clone();
+        let sync_design_source = sync_design_source.clone();
         move |text| {
             let mut ide = state.borrow_mut();
             let id = ide.selected_id;
@@ -1890,10 +1911,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             {
                 control.name = text.to_owned();
             }
+            drop(ide);
+            sync_design_source();
         }
     });
     selected_text.on_change({
         let state = state.clone();
+        let sync_design_source = sync_design_source.clone();
         let canvas = canvas.clone();
         move |text| {
             let mut ide = state.borrow_mut();
@@ -1906,6 +1930,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 control.text = text.to_owned();
             }
             drop(ide);
+            sync_design_source();
             canvas.redraw();
         }
     });
@@ -1921,6 +1946,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let state = state.clone();
         let canvas = canvas.clone();
         let status = status.clone();
+        let sync_design_source = sync_design_source.clone();
         widget.on_change(move |text| {
             let Ok(value) = text.trim().parse::<f32>() else {
                 return;
@@ -1934,12 +1960,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             drop(ide);
             if let Err(error) = result {
                 status.set_text(&format!("Invalid control geometry: {error}"));
+            } else {
+                sync_design_source();
             }
             canvas.redraw();
         });
     }
     delete_control.on_click({
         let state = state.clone();
+        let sync_design_source = sync_design_source.clone();
         let canvas = canvas.clone();
         move || {
             let mut ide = state.borrow_mut();
@@ -1949,6 +1978,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 }
             }
             drop(ide);
+            sync_design_source();
             canvas.redraw();
         }
     });
