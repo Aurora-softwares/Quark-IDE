@@ -371,10 +371,7 @@ mod tests {
     fn actual_hydrogen_studio_sample_loads_without_converting_its_xml() {
         let xml = include_str!("../tests/fixtures/Studio.hyui");
         assert!(is_native_window(xml));
-        let layout: SharedLayout = load(
-            std::path::Path::new("Studio.hyui"),
-            xml,
-        ).unwrap();
+        let layout: SharedLayout = load(std::path::Path::new("Studio.hyui"), xml).unwrap();
         assert_eq!(layout.title, "Hydrogen Studio");
         assert_eq!((layout.width, layout.height), (1120.0, 900.0));
         assert!(layout.controls.iter().any(|c| c.name == "build"));
