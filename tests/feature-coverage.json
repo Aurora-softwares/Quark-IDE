@@ -1827,6 +1827,34 @@
         "native_commands::tests::clean_removes_generated_files_not_source_documents",
         "native_commands::tests::commands_refuse_to_run_with_no_project_or_compiler"
       ]
+    },
+    {
+      "id": "native-launcher-collapsible-recent-groups",
+      "category": "Native Start Window",
+      "feature": "Collapsible pinned/today/week/month/older groups with search showing matching projects",
+      "tests": [
+        "native_launcher::tests::age_groups_can_collapse_without_hiding_search_results",
+        "native_launcher::tests::expanded_age_groups_have_headers_and_selectable_entries"
+      ]
+    },
+    {
+      "id": "native-designer-properties-geometry",
+      "category": "Native Interface Designer",
+      "feature": "Properties grid edits X/Y/width/height safely and preserves layout geometry",
+      "tests": [
+        "native_model::tests::property_grid_edits_control_position_and_dimensions",
+        "native_model::tests::invalid_geometry_edits_preserve_the_original_control"
+      ]
+    },
+    {
+      "id": "native-bundle-build-safety",
+      "category": "Native Build and Publish",
+      "feature": "Bundle/publish requires a successful fresh build and does not publish stale binaries",
+      "tests": [
+        "native_commands::tests::publish_requires_a_successful_fresh_build_not_a_stale_binary",
+        "native_commands::tests::publish_without_project_does_not_create_any_artifacts",
+        "native_commands::tests::publishes_actual_binary_as_zip_with_original_filename"
+      ]
     }
   ]
 }
