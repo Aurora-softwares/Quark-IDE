@@ -153,11 +153,10 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
     let window = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     window.set_spacing(8.0);
     let choose_window = ui.button("Select window properties").map_err(|e| e.to_string())?;
-    choose_window.on_click(move || on_select(Vec::new()));
+    let selected = on_select.clone();
+    choose_window.on_click(move || selected(Vec::new()));
     window.append(&choose_window);
-    // Copy selector before moving it into the root selection callback.
-    Ok({
-        outer.append(&window);
-        outer
-    })
+    render_children(ui, &window, root, &[], &on_select)?;
+    outer.append(&window);
+    Ok(outer)
 }
