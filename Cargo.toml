@@ -22,6 +22,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk4 = { version = "0.9", optional = true }
+
 [profile.release]
 lto = "thin"
 strip = true
@@ -29,7 +32,7 @@ strip = true
 
 [features]
 default = []
-native-ui = ["dep:naui"]
+native-ui = ["dep:naui", "dep:gtk4"]
 
 [[bin]]
 name = "quark-ide"
