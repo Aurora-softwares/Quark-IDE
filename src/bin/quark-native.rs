@@ -8,6 +8,10 @@
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
+#[path = "../editor.rs"]
+mod editor;
+#[path = "../symbols.rs"]
+mod symbols;
 #[path = "../native_commands.rs"]
 mod native_commands;
 #[path = "../native_launcher.rs"]
@@ -372,6 +376,43 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     )
 }
 
+fn flatten_symbols(node: &symbols::SymbolNode, parent: &str, output: &mut Vec<ListItem>) {
+    for item in &node.items {
+        output.push(ListItem::new(format!("{}{} ({})", parent, item.name, item.kind)));
+    }
+    for (name, child) in &node.branches {
+        flatten_symbols(child, &format!("{parent}{name}."), output);
+    }
+}
+
+fn project_symbols(ide: &Ide) -> Vec<ListItem> {
+    let mut tree = symbols::SymbolNode::default();
+    if let Some(project) = &ide.project {
+        for path in &project.sources {
+            if path.extension().and_then(|e| e.to_str()) != Some("hy") {
+                continue;
+            }
+            let source = ide
+                .document
+                .as_ref()
+                .filter(|doc| doc.path == *path)
+                .map(|doc| doc.text.clone())
+                .or_else(|| fs::read_to_string(path).ok());
+            if let Some(source) = source {
+                symbols::add_source(&mut tree, path, &source);
+            }
+        }
+    } else if let Some(doc) = &ide.document {
+        symbols::add_source(&mut tree, &doc.path, &doc.text);
+    }
+    let mut output = Vec::new();
+    flatten_symbols(&tree, "", &mut output);
+    if output.is_empty() {
+        output.push(ListItem::new("No symbols found"));
+    }
+    output
+}
+
 fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>) {
     let (original, files) = file_items(ide);
     let pattern = search.trim().to_lowercase();
@@ -692,7 +733,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 } else {
                     native_shell::DESIGN_SIDE_TABS
                 };
-                let title = names[index];
+                let Some(title) = names.get(index) else { return; };
                 let y_start = 4.0;
                 let line_height = 10.0;
                 if active.get() == index {
@@ -722,13 +763,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     data_view.append(&ui.label("Data source integration is planned.")?);
     let symbols_view = ui.stack(Orientation::Vertical)?;
     symbols_view.append(&ui.label("SYMBOLS")?);
-    symbols_view.append(&ui.label("Code symbols will appear here when indexed.")?);
+    let symbols_list = ui.list()?;
+    symbols_list.set_sizing(Sizing::fill());
+    symbols_list.set_items(&project_symbols(&state.borrow()));
+    symbols_view.append(&symbols_list);
     let code_search_view = ui.stack(Orientation::Vertical)?;
     code_search_view.append(&ui.label("SEARCH")?);
     code_search_view.append(&ui.label("Use Search Solution to find project files.")?);
-    let files_view = ui.stack(Orientation::Vertical)?;
-    files_view.append(&ui.label("FILES")?);
-    files_view.append(&ui.label("Use Solution Explorer for project files.")?);
     let left_content = ui.stack(Orientation::Vertical)?;
     left_content.append(&toolbox);
     left_content.set_sizing(Sizing::fill());
@@ -1079,14 +1120,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let data_view = data_view.clone();
         let symbols_view = symbols_view.clone();
         let code_search_view = code_search_view.clone();
-        let files_view = files_view.clone();
         let tab_mode = tab_mode.clone();
         move |index| {
             left_content.clear();
             if tab_mode.get() == Page::Code {
                 match index {
                     1 => left_content.append(&code_search_view),
-                    2 => left_content.append(&files_view),
                     _ => left_content.append(&symbols_view),
                 }
             } else {
@@ -1102,8 +1141,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let left_panel = left_panel.clone();
         let active = active_side_tab.clone();
         let tabs = side_tabs.clone();
+        let tab_mode = tab_mode.clone();
         tab.on_pointer(move |event| {
             if event.phase == PointerPhase::Down {
+                if tab_mode.get() == Page::Code && index > 1 { return; }
                 active.set(index);
                 for tab in &tabs {
                     tab.redraw();
@@ -1196,10 +1237,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     editor.on_change({
         let state = state.clone();
+        let symbols_list = symbols_list.clone();
         move |text| {
-            if let Some(document) = state.borrow_mut().document.as_mut() {
+            let mut ide = state.borrow_mut();
+            if let Some(document) = ide.document.as_mut() {
                 document.text = text.to_owned();
             }
+            symbols_list.set_items(&project_symbols(&ide));
         }
     });
 
@@ -1210,9 +1254,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let startup_project = startup_project.clone();
         let solution_query = solution_query.clone();
         let displayed_paths = displayed_paths.clone();
+        let symbols_list = symbols_list.clone();
         move || {
             let ide = state.borrow();
             let (items, paths) = filtered_file_items(&ide, &solution_query.borrow());
+            symbols_list.set_items(&project_symbols(&ide));
             tree.set_items(&items);
             *displayed_paths.borrow_mut() = paths;
             let project_name = display_project_name(&ide);
@@ -1239,12 +1285,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let editor = editor.clone();
         let show_page = show_page.clone();
         let status = status.clone();
+        let symbols_list = symbols_list.clone();
         move |path| {
             let result = state.borrow_mut().open_source(&path);
             match result {
                 Ok(()) => {
                     let text = state.borrow().document.as_ref().unwrap().text.clone();
                     editor.set_text(&text);
+                    symbols_list.set_items(&project_symbols(&state.borrow()));
                     show_page(Page::Code);
                     status.set_text(&format!("Editing {}", path.display()));
                 }
