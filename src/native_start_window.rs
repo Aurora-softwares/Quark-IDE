@@ -8,8 +8,7 @@ use crate::{
     startup,
 };
 use naui::{
-    Length, ListItem, Orientation, Padding, Settings as _, Sizing, TextColor, TextStyle, Ui,
-    Window,
+    Length, ListItem, Orientation, Padding, Settings as _, Sizing, TextColor, TextStyle, Ui, Window,
 };
 use std::{
     cell::RefCell,
@@ -37,7 +36,9 @@ pub fn show(
     let history = Rc::new(RefCell::new(
         History::open(&history_path).unwrap_or_default(),
     ));
-    history.borrow_mut().migrate_paths(previously_opened, native_launcher::now_epoch());
+    history
+        .borrow_mut()
+        .migrate_paths(previously_opened, native_launcher::now_epoch());
     let _ = history.borrow().save(&history_path);
 
     let selected: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
@@ -465,8 +466,9 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
             let wizard = wizard.clone();
             let launcher = launcher.clone();
             let status = status.clone();
-            let sender = ui.tasks().channel(move |result: Result<(), String>| {
-                match result {
+            let sender = ui
+                .tasks()
+                .channel(move |result: Result<(), String>| match result {
                     Ok(()) => {
                         let action = native_launcher::first_project(&destination)
                             .map(Action::Project)
@@ -480,8 +482,7 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
                         }
                     }
                     Err(error) => status.set_text(&error),
-                }
-            });
+                });
             std::thread::spawn(move || {
                 let output = std::process::Command::new("git")
                     .arg("clone")
