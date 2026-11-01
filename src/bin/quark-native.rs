@@ -958,7 +958,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     portable_scroll.set_sizing(Sizing::fill());
     portable_scroll.set_child(&portable_preview);
     let selected_xml_path = Rc::new(RefCell::new(Vec::<usize>::new()));
-    let reload_preview: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    type PreviewRefresh = Rc<dyn Fn()>;
+    let reload_preview: Rc<RefCell<Option<PreviewRefresh>>> = Rc::new(RefCell::new(None));
 
     let xml_editor = ui.text_area("")?;
     xml_editor.set_sizing(Sizing::fill());
