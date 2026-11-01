@@ -1108,7 +1108,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
 
-
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
     // True native splitters provide pointer capture and keyboard resizing.
