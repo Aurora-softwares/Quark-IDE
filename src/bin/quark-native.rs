@@ -13,9 +13,6 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
-#[cfg(target_os = "linux")]
-#[path = "../native_hydrogen_preview.rs"]
-mod native_hydrogen_preview;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
