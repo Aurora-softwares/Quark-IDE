@@ -1865,6 +1865,15 @@
         "native_model::tests::native_dock_positions_reject_non_finite_values_and_clip_outliers",
         "native_model::tests::native_dock_preferences_read_legacy_partial_files_and_reject_invalid_data"
       ]
+    },
+    {
+      "id": "native-designer-extended-palette",
+      "category": "Native Interface Designer",
+      "feature": "Native searchable toolbox has thirteen grouped design-time controls that round-trip in .quarkui layouts",
+      "tests": [
+        "native_model::tests::all_designer_toolbox_controls_serialize_without_breaking_existing_layouts",
+        "native_model::tests::toolbox_metadata_groups_containers_separately_from_regular_controls"
+      ]
     }
   ]
 }
