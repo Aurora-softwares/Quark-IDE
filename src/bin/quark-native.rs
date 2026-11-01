@@ -1470,6 +1470,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let open_layout: Rc<dyn Fn(PathBuf)> = Rc::new({
         let state = state.clone();
         let show_page = show_page.clone();
+        let tab_offset = tab_offset.clone();
         let status = status.clone();
         let canvas = canvas.clone();
         move |path| {
