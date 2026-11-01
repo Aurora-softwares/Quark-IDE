@@ -1874,6 +1874,15 @@
         "native_model::tests::all_designer_toolbox_controls_serialize_without_breaking_existing_layouts",
         "native_model::tests::toolbox_metadata_groups_containers_separately_from_regular_controls"
       ]
+    },
+    {
+      "id": "native-legacy-designer-json-compat",
+      "category": "Native Interface Designer",
+      "feature": "Existing Quark designer and native UI designer can round-trip all thirteen .quarkui control kinds without data loss",
+      "tests": [
+        "designer::tests::legacy_and_native_designers_can_open_each_others_extended_controls",
+        "native_model::tests::all_designer_toolbox_controls_serialize_without_breaking_existing_layouts"
+      ]
     }
   ]
 }
