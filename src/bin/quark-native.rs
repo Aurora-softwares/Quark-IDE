@@ -1121,7 +1121,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                             selected_y.set_text(&control.y.to_string());
                         }
                     }
-                },
+                }
             }
             drop(ide);
             canvas.redraw();
