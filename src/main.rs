@@ -8,6 +8,7 @@ mod editor;
 mod feature_tests;
 mod hydrogen;
 #[cfg(test)]
+#[allow(dead_code)] // Native frontend uses the remaining API; this binary exercises its tests.
 mod native_model;
 mod navigation;
 mod panels;
