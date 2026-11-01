@@ -1,5 +1,5 @@
 //! Quark's design-time Hydrogen UI layout editor.
-//! Layouts are JSON documents (.quarkui). They are deliberately not represented
+//! Layouts are Hydrogen UI XML documents (.hyyui). They are deliberately not represented
 //! as runnable native widgets until Hydrogen.UI has a supported runtime binding.
 
 use crate::storage;
@@ -203,7 +203,7 @@ impl Designer {
         if saved.len() > 1024 * 1024 {
             return Err("Layout exceeds the 1 MiB size limit".into());
         }
-        let layout: Layout = serde_json::from_str(&saved).map_err(|e| e.to_string())?;
+        let layout: Layout = crate::ui_xml::load(&path, &saved)?;
         layout.validate()?;
         Ok(Self {
             path,
@@ -217,7 +217,7 @@ impl Designer {
 
     pub fn create(path: PathBuf) -> Result<Self, String> {
         let layout = Layout::default();
-        let saved = serde_json::to_string_pretty(&layout).map_err(|e| e.to_string())?;
+        let saved = crate::ui_xml::save(&path, &layout)?;
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -230,7 +230,7 @@ impl Designer {
 
     pub fn save(&mut self) -> Result<(), String> {
         self.layout.validate()?;
-        let content = serde_json::to_string_pretty(&self.layout).map_err(|e| e.to_string())?;
+        let content = crate::ui_xml::save(&self.path, &self.layout)?;
         storage::save_checked(&self.path, &content, &self.saved).map_err(|error| {
             format!("Layout save failed: {error:?}. File may have changed on disk.")
         })?;
@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn layout_roundtrip_create_edit_save_reopen() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Form.quarkui");
+        let path = dir.path().join("Form.hyyui");
         let mut editor = Designer::create(path.clone()).unwrap();
         assert!(Designer::create(path.clone()).is_err());
         editor.add(Kind::Label, 50.0, 80.0).unwrap();
@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn refuses_invalid_and_untrusted_layout_files() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Bad.quarkui");
+        let path = dir.path().join("Bad.hyyui");
         fs::write(
             &path,
             r#"{"version":999,"title":"bad","width":720,"height":480,"controls":[]}"#,
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn detects_external_modification_on_save() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Form.quarkui");
+        let path = dir.path().join("Form.hyyui");
         let mut editor = Designer::create(path.clone()).unwrap();
         editor.add(Kind::TextField, 50.0, 60.0).unwrap();
         fs::write(&path, "external edit").unwrap();
