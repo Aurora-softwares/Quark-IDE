@@ -10,7 +10,10 @@ fn attr<'a, 'input>(node: Node<'a, 'input>, key: &str) -> &'a str {
 }
 
 fn gap(node: Node<'_, '_>, default: i32) -> i32 {
-    attr(node, "gap").parse::<i32>().unwrap_or(default).clamp(0, 48)
+    attr(node, "gap")
+        .parse::<i32>()
+        .unwrap_or(default)
+        .clamp(0, 48)
 }
 
 fn build_children(node: Node<'_, '_>, direction: Orientation) -> gtk::Box {
@@ -47,7 +50,10 @@ fn build_widget(node: Node<'_, '_>) -> Option<gtk::Widget> {
         }
         "GridPanel" => {
             let grid = gtk::Grid::new();
-            let columns = attr(node, "columns").parse::<i32>().unwrap_or(2).clamp(1, 12);
+            let columns = attr(node, "columns")
+                .parse::<i32>()
+                .unwrap_or(2)
+                .clamp(1, 12);
             grid.set_column_spacing(gap(node, 8) as u32);
             grid.set_row_spacing(gap(node, 8) as u32);
             grid.set_column_homogeneous(true);
@@ -62,7 +68,10 @@ fn build_widget(node: Node<'_, '_>) -> Option<gtk::Widget> {
         "Panel" => {
             let frame = gtk::Frame::new(node.attribute("title"));
             let content = build_children(node, Orientation::Vertical);
-            let padding = attr(node, "padding").parse::<i32>().unwrap_or(12).clamp(0, 40);
+            let padding = attr(node, "padding")
+                .parse::<i32>()
+                .unwrap_or(12)
+                .clamp(0, 40);
             content.set_margin_start(padding);
             content.set_margin_end(padding);
             content.set_margin_top(padding);
@@ -73,7 +82,10 @@ fn build_widget(node: Node<'_, '_>) -> Option<gtk::Widget> {
         }
         "Tabs" => {
             let tabs = gtk::Notebook::new();
-            for tab in node.children().filter(|n| n.is_element() && n.tag_name().name() == "Tab") {
+            for tab in node
+                .children()
+                .filter(|n| n.is_element() && n.tag_name().name() == "Tab")
+            {
                 let child = build_children(tab, Orientation::Vertical);
                 child.set_margin_start(10);
                 child.set_margin_end(10);
@@ -153,7 +165,9 @@ fn build_widget(node: Node<'_, '_>) -> Option<gtk::Widget> {
         "Separator" => gtk::Separator::new(Orientation::Horizontal).upcast(),
         "Spinner" => {
             let spinner = gtk::Spinner::new();
-            if attr(node, "running") == "true" { spinner.start(); }
+            if attr(node, "running") == "true" {
+                spinner.start();
+            }
             spinner.upcast()
         }
         "Image" => {
@@ -194,8 +208,14 @@ pub fn build_preview(xml: &str) -> Result<gtk::Widget, String> {
     let frame = gtk::Frame::new(None);
     let content = gtk::Box::new(Orientation::Vertical, 0);
     content.set_size_request(
-        attr(root, "width").parse::<i32>().unwrap_or(720).clamp(320, 1400),
-        attr(root, "height").parse::<i32>().unwrap_or(480).clamp(240, 1600),
+        attr(root, "width")
+            .parse::<i32>()
+            .unwrap_or(720)
+            .clamp(320, 1400),
+        attr(root, "height")
+            .parse::<i32>()
+            .unwrap_or(480)
+            .clamp(240, 1600),
     );
     let title = gtk::HeaderBar::new();
     title.set_title_widget(Some(&gtk::Label::new(Some(
