@@ -462,7 +462,7 @@ pub(crate) fn create_project_wizard(
     Ok(())
 }
 
-fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
+fn clone_wizard(ui: &Ui, _launcher: Window, launch: Launch) -> naui::Result<()> {
     let wizard = ui.window("Clone a repository", 650.0, 420.0)?;
     let root = ui.stack(Orientation::Vertical)?;
     root.set_padding(Padding::all(22.0));
@@ -513,7 +513,6 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
         let name = name.clone();
         let status = status.clone();
         let wizard = wizard.clone();
-        let launcher = launcher.clone();
         let ui = ui.clone();
         move || {
             let origin = url.text();
@@ -528,7 +527,6 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
             status.set_text("Cloning repository…");
             let launch = launch.clone();
             let wizard = wizard.clone();
-            let launcher = launcher.clone();
             let status = status.clone();
             let destination_for_worker = destination.clone();
             let sender = ui
@@ -539,10 +537,7 @@ fn clone_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
                             .map(Action::Project)
                             .unwrap_or_else(|| Action::Folder(destination.clone()));
                         match launch(action) {
-                            Ok(()) => {
-                                wizard.close();
-                                launcher.close();
-                            }
+                            Ok(()) => wizard.close(),
                             Err(error) => status.set_text(&error),
                         }
                     }
