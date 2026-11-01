@@ -2,7 +2,7 @@
 //! GTK 4/libadwaita on Linux. This does not draw egui controls.
 //!
 //! The existing full-featured egui IDE remains available during the migration.
-//! This native frontend deliberately shares .hyproj, .hy and .hyyui files
+//! This native frontend deliberately shares .hyproj, .hy and .hyui files
 //! instead of silently converting or rewriting them.
 
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
@@ -311,7 +311,7 @@ fn discover_hydrogen_files(root: &Path, result: &mut Vec<PathBuf>, depth: usize)
         } else if kind.is_file()
             && matches!(
                 path.extension().and_then(|s| s.to_str()),
-                Some("hy" | "hyproj" | "hyyui" | "hyui")
+                Some("hy" | "hyproj" | "hyui")
             )
         {
             result.push(path);
@@ -375,7 +375,7 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
                     } else if path.is_file()
                         && matches!(
                             path.extension().and_then(|e| e.to_str()),
-                            Some("hyyui" | "hyui")
+                            Some("hyui")
                         )
                     {
                         paths.push(path);
@@ -1703,8 +1703,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui")
-                    || path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
                 {
                     open_layout(path);
                 } else {
@@ -1727,7 +1726,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let ide = state.borrow();
             let Some(layout) = ide.layout.as_ref().map(|doc| &doc.layout) else {
                 painter.text(
-                    "Open a Hydrogen .hyui or .hyyui layout",
+                    "Open a Hydrogen .hyui or .hyui layout",
                     Point::new(24.0, 36.0),
                     13.0,
                     Color::rgb(0xd0, 0xd0, 0xd4),
@@ -2129,8 +2128,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui")
-                        || path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
                     {
                         open_layout(path);
                     } else {
@@ -2178,7 +2176,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 if let Some(folder) = base {
                     let mut number = 1_u32;
                     let target = loop {
-                        let path = folder.join(format!("Window{number}.hyyui"));
+                        let path = folder.join(format!("Window{number}.hyui"));
                         if !path.exists() {
                             break path;
                         }
@@ -2363,7 +2361,7 @@ mod tests {
         let manifest = dir.path().join("Sample.hyproj");
         fs::write(&manifest, "name = 'Sample'\nsources = ['Program.hy']").unwrap();
         fs::write(dir.path().join("Program.hy"), "class Program {}").unwrap();
-        let layout = dir.path().join("Main.hyyui");
+        let layout = dir.path().join("Main.hyui");
         fs::write(
             &layout,
             ui_xml::encode(&Layout::default()).unwrap().into_bytes(),
@@ -2378,7 +2376,7 @@ mod tests {
         assert!(files.contains(&manifest.canonicalize().unwrap()));
         assert!(files
             .iter()
-            .any(|path| path.file_name().unwrap() == "Main.hyyui"));
+            .any(|path| path.file_name().unwrap() == "Main.hyui"));
     }
 
     #[test]
@@ -2387,7 +2385,7 @@ mod tests {
         let manifest = dir.path().join("Studio.hyproj");
         fs::write(&manifest, "name = 'Studio'\nsources = []").unwrap();
         fs::create_dir_all(dir.path().join("views/dialogs")).unwrap();
-        let layout = dir.path().join("views/dialogs/Main.hyyui");
+        let layout = dir.path().join("views/dialogs/Main.hyui");
         fs::write(&layout, ui_xml::encode(&Layout::default()).unwrap()).unwrap();
         let mut workspace = Workspace::default();
         workspace.selected = Some(manifest);
