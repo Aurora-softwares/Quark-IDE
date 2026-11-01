@@ -385,6 +385,56 @@ fn run_task(
     });
 }
 
+/// Resize a fixed grid track without tying pane sizes to window dimensions.
+fn attach_fixed_grip(
+    grip: &naui::Canvas,
+    pane: native_layout::Pane,
+    sizes: Rc<Cell<native_layout::PaneSizes>>,
+    save_path: PathBuf,
+    apply: Rc<dyn Fn(native_layout::PaneSizes)>,
+) {
+    let vertical = matches!(pane, native_layout::Pane::Inspector | native_layout::Pane::Toolbox);
+    grip.on_draw(move |p| {
+        let marker = if vertical {
+            Rect::new((p.width() - 1.0) / 2.0, 0.0, 1.0, p.height())
+        } else {
+            Rect::new(0.0, (p.height() - 1.0) / 2.0, p.width(), 1.0)
+        };
+        p.fill_rect(marker, Color::rgb(0x48, 0x4a, 0x50));
+    });
+    let anchor = Rc::new(Cell::new(None::<f64>));
+    let changed = Rc::new(Cell::new(false));
+    grip.on_pointer({
+        let anchor = anchor.clone();
+        let changed = changed.clone();
+        move |event| {
+            let coord = if vertical { event.point.x } else { event.point.y };
+            match event.phase {
+                PointerPhase::Down => {
+                    anchor.set(Some(coord));
+                    changed.set(false);
+                }
+                PointerPhase::Move => {
+                    if let Some(start) = anchor.get() {
+                        let before = sizes.get();
+                        let after = before.drag(pane, start, coord);
+                        if before != after {
+                            sizes.set(after);
+                            apply(after);
+                            changed.set(true);
+                        }
+                    }
+                }
+                PointerPhase::Up => {
+                    if anchor.replace(None).is_some() && changed.replace(false) {
+                        let _ = sizes.get().save(&save_path);
+                    }
+                }
+            }
+        }
+    });
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let window = ui.window(
         "Quark IDE — Hydrogen Development Environment",
@@ -531,53 +581,51 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
-    // Compact, keyboard-focusable tool tabs anchored at the top-left.
+    // Text-only vertical rail; each full label is drawn as upright glyphs
+    // with no native button background or padding.
     let left_rail = ui.stack(Orientation::Vertical)?;
     left_rail.set_spacing(0.0);
     left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
-    let toolbox_tab = ui.button(native_shell::SIDE_TABS[0].1)?;
-    let server_tab = ui.button(native_shell::SIDE_TABS[1].1)?;
-    let data_tab = ui.button(native_shell::SIDE_TABS[2].1)?;
+    let tab_mode = Rc::new(Cell::new(Page::Design));
     let active_side_tab = Rc::new(Cell::new(0_usize));
-    let mut side_indicators = Vec::new();
-    for (index, (button, tab)) in [
-        (&toolbox_tab, native_shell::SIDE_TABS[0]),
-        (&server_tab, native_shell::SIDE_TABS[1]),
-        (&data_tab, native_shell::SIDE_TABS[2]),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        button.set_sizing(
+    let mut side_tabs = Vec::new();
+    for index in 0..3 {
+        let tab = ui.canvas()?;
+        tab.set_sizing(
             Sizing::new()
-                .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH - 3.0))
-                .height(Length::Fixed(tab.2)),
+                .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
+                .height(Length::Fixed(native_shell::SIDE_TAB_HEIGHT)),
         );
-        // Each row holds its own side indicator. No wasted top inset.
-        let tab_row = ui.stack(Orientation::Horizontal)?;
-        tab_row.set_spacing(0.0);
-        let indicator = ui.canvas()?;
-        indicator.set_sizing(
-            Sizing::new()
-                .width(Length::Fixed(3.0))
-                .height(Length::Fixed(tab.2)),
-        );
-        let active = active_side_tab.clone();
-        indicator.on_draw(move |painter| {
-            let (r, g, b) = if active.get() == index {
-                (0x84, 0x78, 0xa1)
-            } else {
-                (0x39, 0x3b, 0x42)
-            };
-            painter.fill_rect(
-                Rect::new(0.0, 0.0, painter.width(), painter.height()),
-                Color::rgb(r, g, b),
-            );
+        tab.on_draw({
+            let mode = tab_mode.clone();
+            let active = active_side_tab.clone();
+            move |p| {
+                let names = if mode.get() == Page::Code {
+                    native_shell::CODE_SIDE_TABS
+                } else {
+                    native_shell::DESIGN_SIDE_TABS
+                };
+                let title = names[index];
+                let y_start = 4.0;
+                let line_height = 10.0;
+                if active.get() == index {
+                    p.fill_rect(
+                        Rect::new(0.0, 0.0, 2.0, p.height()),
+                        Color::rgb(0x8a, 0x81, 0xa4),
+                    );
+                }
+                for (i, letter) in title.chars().enumerate() {
+                    p.text(
+                        &letter.to_string(),
+                        Point::new(5.0, y_start + i as f64 * line_height),
+                        9.0,
+                        Color::rgb(0xc5, 0xc5, 0xc9),
+                    );
+                }
+            }
         });
-        tab_row.append(&indicator);
-        side_indicators.push(indicator);
-        tab_row.append(button);
-        left_rail.append(&tab_row);
+        left_rail.append(&tab);
+        side_tabs.push(tab);
     }
     let server_view = ui.stack(Orientation::Vertical)?;
     server_view.append(&ui.label("SERVER EXPLORER")?);
@@ -585,6 +633,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let data_view = ui.stack(Orientation::Vertical)?;
     data_view.append(&ui.label("DATA SOURCES")?);
     data_view.append(&ui.label("Data source integration is planned.")?);
+    let symbols_view = ui.stack(Orientation::Vertical)?;
+    symbols_view.append(&ui.label("SYMBOLS")?);
+    symbols_view.append(&ui.label("Code symbols will appear here when indexed.")?);
+    let code_search_view = ui.stack(Orientation::Vertical)?;
+    code_search_view.append(&ui.label("SEARCH")?);
+    code_search_view.append(&ui.label("Use Search Solution to find project files.")?);
+    let files_view = ui.stack(Orientation::Vertical)?;
+    files_view.append(&ui.label("FILES")?);
+    files_view.append(&ui.label("Use Solution Explorer for project files.")?);
     let left_content = ui.stack(Orientation::Vertical)?;
     left_content.append(&toolbox);
     left_content.set_sizing(Sizing::fill());
@@ -625,17 +682,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         );
     });
 
-    let code = ui.stack(Orientation::Vertical)?;
-    code.append(&ui.label("CODE EDITOR  |  Native multiline text control")?);
+    let code = ui.grid()?;
+    code.set_sizing(Sizing::fill());
+    code.set_column_track(0, Track::FILL);
+    code.set_row_track(0, Track::FILL);
     let editor = ui.text_area("")?;
     editor.set_sizing(Sizing::fill());
-    code.append(&editor);
+    code.attach(&editor, GridCell::new(0, 0));
 
     let canvas = ui.canvas()?;
     canvas.set_sizing(Sizing::fill());
-    let designer = ui.stack(Orientation::Vertical)?;
-    designer.append(&ui.label("WINDOW DESIGNER  |  Native canvas with movable controls")?);
-    designer.append(&canvas);
+    let designer = ui.grid()?;
+    designer.set_sizing(Sizing::fill());
+    designer.set_column_track(0, Track::FILL);
+    designer.set_row_track(0, Track::FILL);
+    designer.attach(&canvas, GridCell::new(0, 0));
 
     pages.append(&empty_workspace);
     centre.append(&pages);
@@ -704,12 +765,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&delete_control);
     properties_pane.set_sizing(Sizing::fill());
 
-    let inspector = ui.split_view(Orientation::Vertical)?;
+    let inspector = ui.grid()?;
     inspector.set_sizing(Sizing::fill());
-    inspector.set_start(&solution_pane);
-    inspector.set_end(&properties_pane);
-    inspector.set_position(940.0 - preferred.properties - 145.0);
-    inspector.set_min_sizes(110.0, 150.0);
+    inspector.set_column_track(0, Track::FILL);
+    inspector.set_row_track(0, Track::FILL);
+    inspector.set_row_track(1, Track::Fixed(native_layout::HANDLE));
+    inspector.set_row_track(2, Track::Fixed(preferred.properties));
+    let properties_grip = ui.canvas()?;
+    properties_grip.set_sizing(
+        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+    );
+    inspector.attach(&solution_pane, GridCell::new(0, 0));
+    inspector.attach(&properties_grip, GridCell::new(0, 1));
+    inspector.attach(&properties_pane, GridCell::new(0, 2));
 
     let bottom = ui.stack(Orientation::Vertical)?;
     let bottom_tabs = ui.stack(Orientation::Horizontal)?;
@@ -756,86 +824,67 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
-    // Native paned splitters receive pointer drags from GTK/AppKit/WinUI.
-    // Unlike canvas grips in fixed grid cells, these are real resize handles.
-    let document_workspace = ui.split_view(Orientation::Vertical)?;
+    // The centre is the ONLY region that absorbs OS-window growth.
+    // Trailing tool windows have fixed grid tracks, with draggable canvas
+    // dividers that update explicit pane sizes (never viewport proportions).
+    let document_workspace = ui.grid()?;
     document_workspace.set_sizing(Sizing::fill());
-    document_workspace.set_start(&centre);
-    document_workspace.set_end(&bottom);
-    document_workspace.set_position(940.0 - preferred.output - 80.0);
-    document_workspace.set_min_sizes(160.0, 100.0);
+    document_workspace.set_column_track(0, Track::FILL);
+    document_workspace.set_row_track(0, Track::FILL);
+    document_workspace.set_row_track(1, Track::Fixed(native_layout::HANDLE));
+    document_workspace.set_row_track(2, Track::Fixed(preferred.output));
+    let output_grip = ui.canvas()?;
+    output_grip.set_sizing(
+        Sizing::new().width(Length::Fill).height(Length::Fixed(native_layout::HANDLE)),
+    );
+    document_workspace.attach(&centre, GridCell::new(0, 0));
+    document_workspace.attach(&output_grip, GridCell::new(0, 1));
+    document_workspace.attach(&bottom, GridCell::new(0, 2));
 
-    let left_split = ui.split_view(Orientation::Horizontal)?;
-    left_split.set_sizing(Sizing::fill());
-    left_split.set_start(&left_side);
-    left_split.set_end(&document_workspace);
-    left_split.set_position(preferred.toolbox);
-    left_split.set_min_sizes(155.0, 200.0);
-
-    let main_workspace = ui.split_view(Orientation::Horizontal)?;
+    let main_workspace = ui.grid()?;
     main_workspace.set_sizing(Sizing::fill());
-    main_workspace.set_start(&left_split);
-    main_workspace.set_end(&inspector);
-    main_workspace.set_position(1480.0 - preferred.inspector - 35.0);
-    main_workspace.set_min_sizes(300.0, 220.0);
+    main_workspace.set_row_track(0, Track::FILL);
+    main_workspace.set_column_track(0, Track::Fixed(preferred.toolbox));
+    main_workspace.set_column_track(1, Track::Fixed(native_layout::HANDLE));
+    main_workspace.set_column_track(2, Track::FILL);
+    main_workspace.set_column_track(3, Track::Fixed(native_layout::HANDLE));
+    main_workspace.set_column_track(4, Track::Fixed(preferred.inspector));
+    let toolbox_grip = ui.canvas()?;
+    toolbox_grip.set_sizing(
+        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+    );
+    let inspector_grip = ui.canvas()?;
+    inspector_grip.set_sizing(
+        Sizing::new().width(Length::Fixed(native_layout::HANDLE)).height(Length::Fill),
+    );
+    main_workspace.attach(&left_side, GridCell::new(0, 0));
+    main_workspace.attach(&toolbox_grip, GridCell::new(1, 0));
+    main_workspace.attach(&document_workspace, GridCell::new(2, 0));
+    main_workspace.attach(&inspector_grip, GridCell::new(3, 0));
+    main_workspace.attach(&inspector, GridCell::new(4, 0));
     root.attach(&main_workspace, GridCell::new(0, 1));
 
     let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
-        let left_split = left_split.clone();
         let main_workspace = main_workspace.clone();
         let document_workspace = document_workspace.clone();
         let inspector = inspector.clone();
         move |sizes| {
-            left_split.set_position(sizes.toolbox);
-            main_workspace.set_position(1480.0 - sizes.inspector - 35.0);
-            document_workspace.set_position(940.0 - sizes.output - 80.0);
-            inspector.set_position(940.0 - sizes.properties - 145.0);
+            main_workspace.set_column_track(0, Track::Fixed(sizes.toolbox));
+            main_workspace.set_column_track(4, Track::Fixed(sizes.inspector));
+            document_workspace.set_row_track(2, Track::Fixed(sizes.output));
+            inspector.set_row_track(2, Track::Fixed(sizes.properties));
         }
     });
-    left_split.on_resize({
-        let sizes = pane_sizes.clone();
-        let path = pane_path.clone();
-        move |position| {
-            let mut next = sizes.get();
-            next.toolbox = position;
-            next = next.sanitize();
-            sizes.set(next);
-            let _ = next.save(&path);
-        }
-    });
-    main_workspace.on_resize({
-        let sizes = pane_sizes.clone();
-        let path = pane_path.clone();
-        move |position| {
-            let mut next = sizes.get();
-            next.inspector = (1480.0 - position - 35.0).max(0.0);
-            next = next.sanitize();
-            sizes.set(next);
-            let _ = next.save(&path);
-        }
-    });
-    document_workspace.on_resize({
-        let sizes = pane_sizes.clone();
-        let path = pane_path.clone();
-        move |position| {
-            let mut next = sizes.get();
-            next.output = (940.0 - position - 80.0).max(0.0);
-            next = next.sanitize();
-            sizes.set(next);
-            let _ = next.save(&path);
-        }
-    });
-    inspector.on_resize({
-        let sizes = pane_sizes.clone();
-        let path = pane_path.clone();
-        move |position| {
-            let mut next = sizes.get();
-            next.properties = (940.0 - position - 145.0).max(0.0);
-            next = next.sanitize();
-            sizes.set(next);
-            let _ = next.save(&path);
-        }
-    });
+    for (grip, pane) in [
+        (&toolbox_grip, native_layout::Pane::Toolbox),
+        (&inspector_grip, native_layout::Pane::Inspector),
+        (&output_grip, native_layout::Pane::Output),
+        (&properties_grip, native_layout::Pane::Properties),
+    ] {
+        attach_fixed_grip(
+            grip, pane, pane_sizes.clone(), pane_path.clone(), refresh_tracks.clone(),
+        );
+    }
 
     // Accessible native-button alternatives to fine pointer dragging.
     // Both routes update exactly the same fixed Grid tracks and persisted
@@ -929,25 +978,39 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let toolbox = toolbox.clone();
         let server_view = server_view.clone();
         let data_view = data_view.clone();
+        let symbols_view = symbols_view.clone();
+        let code_search_view = code_search_view.clone();
+        let files_view = files_view.clone();
+        let tab_mode = tab_mode.clone();
         move |index| {
             left_content.clear();
-            match index {
-                1 => left_content.append(&server_view),
-                2 => left_content.append(&data_view),
-                _ => left_content.append(&toolbox),
+            if tab_mode.get() == Page::Code {
+                match index {
+                    1 => left_content.append(&code_search_view),
+                    2 => left_content.append(&files_view),
+                    _ => left_content.append(&symbols_view),
+                }
+            } else {
+                match index {
+                    1 => left_content.append(&server_view),
+                    2 => left_content.append(&data_view),
+                    _ => left_content.append(&toolbox),
+                }
             }
         }
     });
-    for (button, index) in [(&toolbox_tab, 0), (&server_tab, 1), (&data_tab, 2)] {
+    for (index, tab) in side_tabs.iter().enumerate() {
         let left_panel = left_panel.clone();
         let active = active_side_tab.clone();
-        let indicators = side_indicators.clone();
-        button.on_click(move || {
-            active.set(index);
-            for indicator in &indicators {
-                indicator.redraw();
+        let tabs = side_tabs.clone();
+        tab.on_pointer(move |event| {
+            if event.phase == PointerPhase::Down {
+                active.set(index);
+                for tab in &tabs {
+                    tab.redraw();
+                }
+                left_panel(index);
             }
-            left_panel(index);
         });
     }
 
@@ -964,6 +1027,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let design_button = design_button.clone();
         let code = code.clone();
         let designer = designer.clone();
+        let tab_mode = tab_mode.clone();
+        let active_side_tab = active_side_tab.clone();
+        let side_tabs = side_tabs.clone();
+        let left_panel = left_panel.clone();
         move |requested| {
             let (page, has_code, has_design) = {
                 let mut ide = state.borrow_mut();
@@ -971,6 +1038,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 ide.page = page;
                 (page, ide.document.is_some(), ide.layout.is_some())
             };
+            tab_mode.set(page);
+            active_side_tab.set(0);
+            for tab in &side_tabs {
+                tab.redraw();
+            }
+            left_panel(0);
             centre.clear();
             document_tabs.clear();
             if has_code {
