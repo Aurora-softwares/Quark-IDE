@@ -1111,8 +1111,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.set_sizing(Sizing::fill());
 
     type PropertyRefresh = Rc<dyn Fn()>;
-    let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> =
-        Rc::new(RefCell::new(None));
+    let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
     let apply_xml_property: Rc<dyn Fn(String, String)> = Rc::new({
         let state = state.clone();
         let selected_xml_path = selected_xml_path.clone();
@@ -1132,7 +1131,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let updated = native_ui_properties::set_attribute(&source, &path, &name, &value);
             match updated {
                 Ok(updated) => {
-                    let change = state.borrow_mut().layout.as_mut()
+                    let change = state
+                        .borrow_mut()
+                        .layout
+                        .as_mut()
                         .map(|doc| doc.edit_source(updated.clone()));
                     match change {
                         Some(Ok(())) => {
@@ -1164,7 +1166,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let apply_xml_property = apply_xml_property.clone();
         move || {
             native_property_content.clear();
-            let Some(xml) = state.borrow().layout.as_ref().and_then(|doc| doc.source().ok()) else {
+            let Some(xml) = state
+                .borrow()
+                .layout
+                .as_ref()
+                .and_then(|doc| doc.source().ok())
+            else {
                 return;
             };
             let path = selected_xml_path.borrow().clone();
@@ -1175,7 +1182,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 native_property_content.append(&title);
             }
             for (name, current) in fields {
-                let Ok(row) = ui.stack(Orientation::Vertical) else { continue };
+                let Ok(row) = ui.stack(Orientation::Vertical) else {
+                    continue;
+                };
                 row.set_spacing(2.0);
                 if let Ok(caption) = ui.label(&name) {
                     row.append(&caption);
@@ -1249,7 +1258,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let status = status.clone();
         move || {
             let doc = state.borrow();
-            let Some(layout) = doc.layout.as_ref() else { return };
+            let Some(layout) = doc.layout.as_ref() else {
+                return;
+            };
             let is_native = layout.native_window;
             let xml = layout.source().ok();
             drop(doc);
@@ -1260,9 +1271,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 property_editor.append(&native_property_scroll);
                 portable_preview.clear();
                 if let Some(xml) = xml {
-                    match native_portable_preview::render(&ui, &xml, select_native_element.clone()) {
+                    match native_portable_preview::render(&ui, &xml, select_native_element.clone())
+                    {
                         Ok(view) => portable_preview.append(&view),
-                        Err(error) => status.set_text(&format!("Cannot render Hydrogen UI: {error}")),
+                        Err(error) => {
+                            status.set_text(&format!("Cannot render Hydrogen UI: {error}"))
+                        }
                     }
                 }
                 design_surface.attach(&portable_scroll, GridCell::new(0, 1));
