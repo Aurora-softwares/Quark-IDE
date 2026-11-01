@@ -322,6 +322,8 @@ pub struct LayoutDocument {
     pub path: PathBuf,
     pub layout: Layout,
     saved: String,
+    /// Retains partially edited XML without discarding text on parse errors.
+    source_draft: Option<String>,
 }
 
 impl LayoutDocument {
@@ -329,28 +331,62 @@ impl LayoutDocument {
         let path = path.canonicalize().map_err(|e| e.to_string())?;
         let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
         if !metadata.is_file() || metadata.len() > MAX_LAYOUT_BYTES {
-            return Err("Not a valid .hyyui file or exceeds 1 MiB".into());
+            return Err("Not a valid Hydrogen UI layout or exceeds 1 MiB".into());
         }
         let saved = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let layout: Layout = crate::ui_xml::load(&path, &saved)?;
         layout.validate()?;
-        Ok(Self {
-            path,
-            layout,
-            saved,
-        })
+        Ok(Self { path, layout, saved, source_draft: None })
+    }
+
+    /// Return the exact user's source draft, if one exists, otherwise current
+    /// designer XML. This avoids losing partial edits on view switches.
+    pub fn source(&self) -> Result<String, String> {
+        if let Some(draft) = &self.source_draft {
+            Ok(draft.clone())
+        } else {
+            crate::ui_xml::save(&self.path, &self.layout)
+        }
+    }
+
+    /// Preserve partial XML and update the visual model only on valid input.
+    pub fn edit_source(&mut self, text: String) -> Result<(), String> {
+        if text.len() > MAX_LAYOUT_BYTES as usize {
+            return Err("Hydrogen UI XML exceeds the 1 MiB size limit".into());
+        }
+        self.source_draft = Some(text.clone());
+        let parsed: Layout = crate::ui_xml::load(&self.path, &text)?;
+        parsed.validate()?;
+        self.layout = parsed;
+        Ok(())
+    }
+
+    /// A designer mutation invalidates an older XML draft only when the
+    /// draft is valid; invalid text must be resolved before visual edits.
+    pub fn refresh_designer_xml(&mut self) -> Result<String, String> {
+        if self.source_draft.is_some() {
+            let current = self.source()?;
+            let parsed: Layout = crate::ui_xml::load(&self.path, &current)?;
+            parsed.validate()?;
+        }
+        let xml = crate::ui_xml::save(&self.path, &self.layout)?;
+        self.source_draft = Some(xml.clone());
+        Ok(xml)
     }
 
     pub fn dirty(&self) -> bool {
-        crate::ui_xml::save(&self.path, &self.layout).is_ok_and(|current| current != self.saved)
+        self.source().is_ok_and(|current| current != self.saved)
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        self.layout.validate()?;
-        let next = crate::ui_xml::save(&self.path, &self.layout)?;
-        crate::storage::save_checked(&self.path, &next, &self.saved)
+        let text = self.source()?;
+        let parsed: Layout = crate::ui_xml::load(&self.path, &text)?;
+        parsed.validate()?;
+        crate::storage::save_checked(&self.path, &text, &self.saved)
             .map_err(|e| format!("Layout was modified externally or cannot be saved: {e:?}"))?;
-        self.saved = next;
+        self.layout = parsed;
+        self.saved = text;
+        self.source_draft = None;
         Ok(())
     }
 }
