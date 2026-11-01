@@ -79,7 +79,10 @@ pub fn position(menu: &str, action: &str) -> Option<(usize, usize)> {
         if *name != menu {
             return None;
         }
-        items.iter().position(|item| *item == action).map(|item| (index, item))
+        items
+            .iter()
+            .position(|item| *item == action)
+            .map(|item| (index, item))
     })
 }
 
@@ -93,8 +96,19 @@ mod tests {
         assert_eq!(
             names,
             [
-                "File", "Edit", "View", "Git", "Project", "Build", "Debug", "Test",
-                "Analyze", "Tools", "Extensions", "Window", "Help",
+                "File",
+                "Edit",
+                "View",
+                "Git",
+                "Project",
+                "Build",
+                "Debug",
+                "Test",
+                "Analyze",
+                "Tools",
+                "Extensions",
+                "Window",
+                "Help",
             ]
         );
         assert_eq!(position("Build", "Build Solution"), Some((5, 0)));
