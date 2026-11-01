@@ -8,7 +8,8 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 
-/// Wide enough to grab reliably with a mouse or touchpad.\npub const HANDLE: f64 = 12.0;
+/// Wide enough to grab reliably with a mouse or touchpad.
+pub const HANDLE: f64 = 12.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
