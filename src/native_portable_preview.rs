@@ -175,6 +175,8 @@ fn render_node(
                 .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
             input.set_sizing(Sizing::new().width(Length::Fixed(190.0)));
+            let selected = on_select.clone();
+            input.on_change(move |_| selected(path.clone()));
             row.append(&input);
         }
         "TextArea" => {
@@ -186,6 +188,8 @@ fn render_node(
                     .width(Length::Fixed(240.0))
                     .height(Length::Fixed(88.0)),
             );
+            let selected = on_select.clone();
+            input.on_change(move |_| selected(path.clone()));
             row.append(&input);
         }
         "CheckBox" | "Switch" => {
@@ -193,12 +197,16 @@ fn render_node(
                 .checkbox(node.attribute("text").unwrap_or("Check box"))
                 .map_err(|e| e.to_string())?;
             input.set_checked(node.attribute("checked") == Some("true"));
+            let selected = on_select.clone();
+            input.on_toggle(move |_| selected(path.clone()));
             row.append(&input);
         }
         "Select" | "ListBox" | "RadioGroup" => {
             let input = ui.combo_box().map_err(|e| e.to_string())?;
             let choices = node.attribute("items").unwrap_or("Choice");
             input.set_items(&choices.split('|').collect::<Vec<_>>());
+            let selected = on_select.clone();
+            input.on_select(move |_| selected(path.clone()));
             row.append(&input);
         }
         "Slider" | "ProgressBar" | "Image" | "Spinner" | "Separator" | "Table" => {
