@@ -57,7 +57,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
 
 /// Text-only vertical rail; upright glyphs fit in a narrow 18px gutter.
 pub const SIDE_RAIL_WIDTH: f64 = 18.0;
-pub const SIDE_TAB_HEIGHT: f64 = 106.0;
+pub const SIDE_TAB_HEIGHTS: [f64; 3] = [76.0, 66.0, 56.0];
 pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
 pub const CODE_SIDE_TABS: [&str; 3] = ["SYMBOLS", "SEARCH", "FILES"];
 
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn side_rail_presets_are_compact_and_context_sensitive() {
         assert_eq!(SIDE_RAIL_WIDTH, 18.0);
-        assert!(SIDE_TAB_HEIGHT <= 110.0);
+        assert_eq!(SIDE_TAB_HEIGHTS, [76.0, 66.0, 56.0]);
         assert_eq!(DESIGN_SIDE_TABS, ["TOOLBOX", "SERVER", "DATA"]);
         assert_eq!(CODE_SIDE_TABS, ["SYMBOLS", "SEARCH", "FILES"]);
         assert!(!CODE_SIDE_TABS.contains(&"TOOLBOX"));
