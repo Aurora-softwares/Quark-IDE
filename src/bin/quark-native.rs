@@ -1176,10 +1176,66 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
+    // Build/Run/Publish execute off the main thread and keep the IDE responsive.
+    let task_action: Rc<dyn Fn(native_commands::Task)> = Rc::new({
+        let state = state.clone();
+        let output = output.clone();
+        let status = status.clone();
+        let error_list = error_list.clone();
+        let error_summary = error_summary.clone();
+        let current_errors = current_errors.clone();
+        let ui = ui.clone();
+        let show_bottom = show_bottom.clone();
+        move |task| {
+            show_bottom(0);
+            run_task(
+                task,
+                state.clone(),
+                output.clone(),
+                status.clone(),
+                error_list.clone(),
+                error_summary.clone(),
+                current_errors.clone(),
+                ui.clone(),
+            );
+        }
+    });
+    for (button, task) in [
+        (&build_button, native_commands::Task::Build),
+        (&run_button, native_commands::Task::RunWithoutDebugging),
+        (&publish_button, native_commands::Task::Publish),
+    ] {
+        let task_action = task_action.clone();
+        button.on_click(move || task_action(task));
+    }
+
+    error_list.on_select({
+        let errors = current_errors.clone();
+        let open_source = open_source.clone();
+        let status = status.clone();
+        move |indices| {
+            let problem = indices
+                .first()
+                .and_then(|&index| errors.borrow().get(index).cloned());
+            if let Some(problem) = problem {
+                open_source(problem.path.clone());
+                status.set_text(&format!(
+                    "{}:{} — {}",
+                    problem.path.display(),
+                    problem.line,
+                    problem.message
+                ));
+            }
+        }
+    });
+
     toolbar.on_activate({
         let save_action = save_action.clone();
         let open_project = open_project.clone();
         let show_page = show_page.clone();
+        let task_action = task_action.clone();
+        let status = status.clone();
+        let solution_search = solution_search.clone();
         move |index| match index {
             0 => show_page(Page::Start),
             1 => {
@@ -1190,7 +1246,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     open_project(path);
                 }
             }
-            3 => save_action(),
+            2 => save_action(),
+            4 | 5 => status.set_text("Undo/Redo integration is pending for the native editor."),
+            7 => task_action(native_commands::Task::Build),
+            8 => task_action(native_commands::Task::RunWithoutDebugging),
+            9 => task_action(native_commands::Task::Publish),
+            10 => {
+                solution_search.set_text("");
+                status.set_text("Use the Solution Explorer search field to find project files.");
+            }
             _ => {}
         }
     });
@@ -1202,10 +1266,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let open_project = open_project.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
+        let refresh_project = refresh_project.clone();
+        let task_action = task_action.clone();
+        let show_bottom = show_bottom.clone();
+        let left_panel = left_panel.clone();
         let status = status.clone();
         let tree = tree.clone();
-        let output = output.clone();
-        let ui = ui.clone();
+        let window = window.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
             (0, 1) => {
@@ -1217,6 +1284,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 }
             }
             (0, 2) => {
+                if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                    match state.borrow_mut().remember_folder(path) {
+                        Ok(()) => {
+                            refresh_project();
+                            show_page(Page::Start);
+                        }
+                        Err(error) => status.set_text(&error),
+                    }
+                }
+            }
+            (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
                     if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
                         open_layout(path);
@@ -1225,38 +1303,88 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     }
                 }
             }
-            (0, 3) => save_action(),
+            (0, 4) => save_action(),
+            (0, 5) => {
+                if state.borrow().has_unsaved() {
+                    status.set_text("Save modified documents and layouts before closing the workspace.");
+                } else {
+                    state.borrow_mut().clear_workspace();
+                    refresh_project();
+                    show_page(Page::Start);
+                }
+            }
+            (0, 6) => {
+                if state.borrow().has_unsaved() {
+                    status.set_text("Save modified documents and layouts before quitting.");
+                } else {
+                    window.close();
+                }
+            }
+            (1, _) => status.set_text("Native editor editing commands are being integrated."),
             (2, 0) => show_page(Page::Start),
             (2, 1) => show_page(Page::Code),
             (2, 2) => show_page(Page::Design),
-            (3, 0) => {
-                let path = state
-                    .borrow()
-                    .workspace
-                    .selected
+            (2, 3) => refresh_project(),
+            (2, 4) => left_panel(0),
+            (2, 5) => show_bottom(0),
+            (2, 6) => show_bottom(1),
+            (3, 0) => status.set_text("Clone a repository from the Quark Start Window."),
+            (3, 1) => status.set_text("Native Git Changes pane is not yet integrated."),
+            (4, 0) => {
+                let base = state.borrow().workspace.selected
                     .as_ref()
-                    .and_then(|p| p.parent().map(|p| p.join("NewWindow.quarkui")));
-                if let Some(path) = path {
-                    if !path.exists() {
-                        let data =
-                            serde_json::to_vec_pretty(&Layout::default()).unwrap_or_default();
-                        if let Err(err) = fs::write(&path, data) {
-                            status.set_text(&format!("Unable to create design: {err}"));
+                    .and_then(|p| p.parent().map(Path::to_path_buf))
+                    .or_else(|| state.borrow().workspace.folders.last().cloned());
+                if let Some(folder) = base {
+                    let mut number = 1_u32;
+                    let target = loop {
+                        let path = folder.join(format!("Window{number}.quarkui"));
+                        if !path.exists() {
+                            break path;
+                        }
+                        number += 1;
+                        if number > 200 {
+                            status.set_text("Cannot create more UI layouts in this folder.");
                             return;
                         }
+                    };
+                    match serde_json::to_vec_pretty(&Layout::default()) {
+                        Ok(contents) => {
+                            match crate::storage::atomic_write(&target, &contents) {
+                                Ok(()) => {
+                                    open_layout(target);
+                                    refresh_project();
+                                }
+                                Err(error) => status.set_text(&format!("Cannot create design: {error}")),
+                            }
+                        }
+                        Err(error) => status.set_text(&error.to_string()),
                     }
-                    open_layout(path);
-                    let (items, _) = file_items(&state.borrow());
-                    tree.set_items(&items);
+                } else {
+                    status.set_text("Open a project or folder to add a UI layout.");
                 }
             }
-            (4, 0) => run_build(state.clone(), output.clone(), status.clone(), ui.clone()),
-            (5, 0) => status
-                .set_text("Run without debugging uses Hydrogen CLI; select Build Solution first."),
-            (5, 1) => {
-                status.set_text("Source-level debugger not integrated in this native frontend yet.")
+            (4, 1) => status.set_text("Project Properties integration is planned."),
+            (5, 0) => task_action(native_commands::Task::Build),
+            (5, 1) => task_action(native_commands::Task::Rebuild),
+            (5, 2) => task_action(native_commands::Task::Clean),
+            (5, 3) => task_action(native_commands::Task::Publish),
+            (6, 0) => {
+                show_bottom(2);
+                status.set_text("Native source-level Hydrogen debugging is not implemented yet.");
             }
-            (8, 0) => status.set_text("Quark native frontend: WinUI 3, AppKit and GTK 4 controls."),
+            (6, 1) => task_action(native_commands::Task::RunWithoutDebugging),
+            (6, 2) => status.set_text("No native debug session is running."),
+            (7, 0) => show_bottom(3),
+            (7, 1) => status.set_text("Test execution integration is planned."),
+            (8, 0) => {
+                show_bottom(1);
+                status.set_text("Static analysis is available through Hydrogen check in the legacy IDE.");
+            }
+            (9, 0) => status.set_text("Native Options panel is planned."),
+            (10, 0) => status.set_text("Native extension management is planned."),
+            (11, 0) => status.set_text("Window panes can be resized by dragging their separators."),
+            (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
             _ => {}
         }
     });
