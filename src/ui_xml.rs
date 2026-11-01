@@ -119,6 +119,113 @@ pub fn encode<T: Serialize>(layout: &T) -> Result<String, String> {
     ))
 }
 
+/// Hydrogen's real runtime UI format is a nested <Window> tree, not the
+/// former flat Quark designer schema. Read it without removing any nodes,
+/// events, attributes or layout containers from the source document.
+/// This converts only a *preview projection* into editable Layout metadata.
+pub fn is_native_window(text: &str) -> bool {
+    roxmltree::Document::parse(text)
+        .ok()
+        .is_some_and(|doc| doc.root_element().tag_name().name() == "Window")
+}
+
+fn hydrogen_window_projection(text: &str) -> Result<SharedLayout, String> {
+    let document = roxmltree::Document::parse(text).map_err(|e| e.to_string())?;
+    let window = document.root_element();
+    if window.tag_name().name() != "Window" {
+        return Err("Expected Hydrogen <Window> UI XML".into());
+    }
+    let attr_float = |key: &str, fallback: f32| -> f32 {
+        window.attribute(key)
+            .and_then(|s| s.parse::<f32>().ok())
+            .filter(|n| n.is_finite())
+            .unwrap_or(fallback)
+    };
+    let width = attr_float("width", 720.0);
+    let height = attr_float("height", 480.0);
+    if !(320.0..=4096.0).contains(&width) || !(240.0..=4096.0).contains(&height) {
+        return Err("Hydrogen window dimensions are outside designer limits".into());
+    }
+
+    let mut controls = Vec::new();
+    let kinds: &[(&str, &str)] = &[
+        ("Label", "label"), ("Button", "button"),
+        ("Input", "text_field"), ("SearchInput", "text_field"),
+        ("NumberInput", "text_field"), ("CheckBox", "checkbox"),
+        ("Switch", "checkbox"), ("TextArea", "text_area"),
+        ("RadioGroup", "radio_button"), ("Select", "combo_box"),
+        ("ListBox", "list_box"), ("Table", "list_box"),
+        ("Slider", "slider"), ("ProgressBar", "progress_bar"),
+        ("Image", "image"), ("Tabs", "tab_control"),
+        ("Panel", "panel"),
+    ];
+
+    for node in window.descendants().filter(|n| n.is_element()) {
+        if node == window || controls.len() >= 500 {
+            continue;
+        }
+        // A tab control has multiple pages in the document but only one is
+        // visible at runtime. The preview defaults to its selected page.
+        let hidden_tab = node.ancestors()
+            .find(|ancestor| ancestor.is_element() && ancestor.tag_name().name() == "Tab")
+            .and_then(|tab| {
+                let tabs = tab.parent_element()?;
+                if tabs.tag_name().name() != "Tabs" { return None; }
+                let selected = tabs.attribute("value")
+                    .and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+                let index = tabs.children().filter(|n| n.is_element() && n.tag_name().name() == "Tab")
+                    .position(|candidate| candidate == tab)?;
+                Some(index != selected)
+            })
+            .unwrap_or(false);
+        if hidden_tab || node.attribute("visible") == Some("false") {
+            continue;
+        }
+        let Some((_, kind)) = kinds.iter().find(|(tag, _)| *tag == node.tag_name().name()) else {
+            continue;
+        };
+        let number = controls.len();
+        let cols = 3_usize;
+        let col_width = ((width - 36.0) / cols as f32).max(80.0);
+        let x = 12.0 + (number % cols) as f32 * col_width;
+        let y = 12.0 + (number / cols) as f32 * 43.0;
+        let available_width = (width - x - 10.0).max(20.0);
+        let available_height = (height - y - 5.0).max(20.0);
+        // Long responsive forms may extend beyond the first viewport.
+        // Do not corrupt the source; preview rows wrap in the designer.
+        let y = y.min((height - 40.0).max(0.0));
+        let suggested_width: f32 = match *kind {
+            "label" | "checkbox" | "radio_button" => 170.0,
+            "slider" | "progress_bar" | "text_field" => 210.0,
+            _ => 150.0,
+        };
+        let w = suggested_width.min(col_width - 8.0).min(available_width).max(20.0);
+        let h = if *kind == "progress_bar" { 24.0 } else { 32.0_f32.min(available_height) };
+        let name = node.attribute("id").unwrap_or(node.tag_name().name());
+        let text = node.attribute("text")
+            .or_else(|| node.attribute("title"))
+            .or_else(|| node.attribute("placeholder"))
+            .unwrap_or(name);
+        controls.push(SharedControl {
+            id: (number + 1) as u64,
+            kind: (*kind).to_owned(),
+            name: name.chars().take(128).collect(),
+            text: text.chars().take(4096).collect(),
+            x,
+            y,
+            width: w,
+            height: h.max(20.0),
+        });
+    }
+    Ok(SharedLayout {
+        version: window.attribute("version").and_then(|s| s.parse().ok()).unwrap_or(1),
+        title: window.attribute("title").unwrap_or("Hydrogen Window").to_owned(),
+        width,
+        height,
+        controls,
+    })
+}
+
 pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
     let document = text.trim_start();
     let root = if document.starts_with("<?xml") {
@@ -127,8 +234,14 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
     } else {
         document
     };
+    if root.starts_with("<Window ") || root.starts_with("<Window>") {
+        let projected = hydrogen_window_projection(text)?;
+        return serde_json::from_value(
+            serde_json::to_value(projected).map_err(|e| e.to_string())?,
+        ).map_err(|e| e.to_string());
+    }
     if !root.starts_with("<HydrogenUI ") && !root.starts_with("<HydrogenUI>") {
-        return Err("Expected a <HydrogenUI> XML root".into());
+        return Err("Expected Hydrogen <Window> or Quark <HydrogenUI> XML root".into());
     }
     let xml: XmlLayout = quick_xml::de::from_str(text).map_err(|e| e.to_string())?;
     let shared = SharedLayout::from(xml);
@@ -200,6 +313,32 @@ mod tests {
         assert!(save(Path::new("Form.hyyui"), &layout).is_err());
         assert!(load::<SharedLayout>(Path::new("Form.layout"), &xml).is_err());
         assert!(save(Path::new("Form.layout"), &layout).is_err());
+    }
+
+    #[test]
+    fn native_hydrogen_window_with_nested_tabs_events_and_responsive_panels_opens() {
+        let source = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Window version="1" id="studio" title="Hydrogen Studio" width="1120" height="900" theme="system">
+    <MenuBar><Menu text="Studio"><MenuItem onClick="ShowWorkspace" /></Menu></MenuBar>
+    <Tabs id="pages" value="0" onChange="PageChanged">
+      <Tab id="workspace" title="Workspace">
+        <ColumnPanel gap="6">
+          <Label text="Build something native." />
+          <Panel title="Settings"><Input id="name" text="Aurora &amp; Hydrogen" onChange="Preview" />
+          <Button id="build" text="Build" onClick="Build" /></Panel>
+        </ColumnPanel>
+      </Tab>
+      <Tab title="Gallery"><Button id="hidden" text="Second page" /></Tab>
+    </Tabs>
+    <Dialog id="confirm" text="Continue?" onClose="Confirmed"/>
+</Window>"#;
+        assert!(is_native_window(source));
+        let parsed: SharedLayout = decode(source).unwrap();
+        assert_eq!(parsed.title, "Hydrogen Studio");
+        assert_eq!(parsed.width, 1120.0);
+        assert!(parsed.controls.iter().any(|c| c.name == "build"));
+        assert!(parsed.controls.iter().any(|c| c.text == "Aurora & Hydrogen"));
+        assert!(!parsed.controls.iter().any(|c| c.name == "hidden"));
     }
 
     #[test]
