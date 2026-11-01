@@ -1,5 +1,5 @@
 //! Hydrogen UI XML interchange for both Quark frontends.
-//! .hyyui is XML; legacy .quarkui JSON is only read through explicit paths.
+//! .hyyui is the sole supported UI layout format; its contents are XML.
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -105,21 +105,17 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
 }
 
 pub fn load<T: DeserializeOwned>(path: &std::path::Path, text: &str) -> Result<T, String> {
-    // Existing JSON layouts remain readable under the legacy extension; never
-    // relabel them as XML without an explicit conversion.
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("quarkui") => serde_json::from_str(text).map_err(|e| e.to_string()),
-        Some("hyyui") => decode(text),
-        _ => Err("Expected a Hydrogen .hyyui UI layout".into()),
+    if path.extension().and_then(|e| e.to_str()) != Some("hyyui") {
+        return Err("Expected a Hydrogen .hyyui UI layout".into());
     }
+    decode(text)
 }
 
 pub fn save<T: Serialize>(path: &std::path::Path, layout: &T) -> Result<String, String> {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("quarkui") => serde_json::to_string_pretty(layout).map_err(|e| e.to_string()),
-        Some("hyyui") => encode(layout),
-        _ => Err("Expected a Hydrogen .hyyui UI layout".into()),
+    if path.extension().and_then(|e| e.to_str()) != Some("hyyui") {
+        return Err("Expected a Hydrogen .hyyui UI layout".into());
     }
+    encode(layout)
 }
 
 #[cfg(test)]
