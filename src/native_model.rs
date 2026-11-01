@@ -543,17 +543,38 @@ mod tests {
 
     #[test]
     fn blank_workspace_never_displays_fake_code_or_designer_tabs() {
-        assert_eq!(DocumentPage::Code.available(false, false), DocumentPage::Empty);
-        assert_eq!(DocumentPage::Design.available(false, false), DocumentPage::Empty);
-        assert_eq!(DocumentPage::Empty.available(true, true), DocumentPage::Empty);
+        assert_eq!(
+            DocumentPage::Code.available(false, false),
+            DocumentPage::Empty
+        );
+        assert_eq!(
+            DocumentPage::Design.available(false, false),
+            DocumentPage::Empty
+        );
+        assert_eq!(
+            DocumentPage::Empty.available(true, true),
+            DocumentPage::Empty
+        );
     }
 
     #[test]
     fn document_tabs_require_their_matching_open_document() {
-        assert_eq!(DocumentPage::Code.available(true, false), DocumentPage::Code);
-        assert_eq!(DocumentPage::Design.available(false, true), DocumentPage::Design);
-        assert_eq!(DocumentPage::Code.available(false, true), DocumentPage::Empty);
-        assert_eq!(DocumentPage::Design.available(true, false), DocumentPage::Empty);
+        assert_eq!(
+            DocumentPage::Code.available(true, false),
+            DocumentPage::Code
+        );
+        assert_eq!(
+            DocumentPage::Design.available(false, true),
+            DocumentPage::Design
+        );
+        assert_eq!(
+            DocumentPage::Code.available(false, true),
+            DocumentPage::Empty
+        );
+        assert_eq!(
+            DocumentPage::Design.available(true, false),
+            DocumentPage::Empty
+        );
     }
 
     #[test]
