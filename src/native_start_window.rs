@@ -29,7 +29,7 @@ pub fn show(
     previously_opened: &[PathBuf],
     launch: Launch,
 ) -> naui::Result<()> {
-    let window = ui.window("Quark IDE — Start Window", 1080.0, 740.0)?;
+    let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;
     let history = Rc::new(RefCell::new(
         History::open(&history_path).unwrap_or_default(),
     ));
