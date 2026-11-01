@@ -293,25 +293,51 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         MenuSpec::new(
             "File",
             [
-                MenuItem::new("New Project"),
-                MenuItem::new("Open Project"),
-                MenuItem::new("Open File"),
-                MenuItem::new("Save"),
-                MenuItem::new("Exit"),
+                "New Project…",
+                "Open Project or Solution…",
+                "Open Local Folder…",
+                "Open File…",
+                "Save",
+                "Close Workspace",
+                "Exit",
             ],
         ),
-        MenuSpec::new("Edit", ["Undo", "Redo", "Find"]),
-        MenuSpec::new("View", ["Start Window", "Code Editor", "UI Designer"]),
-        MenuSpec::new("Project", ["New UI Layout", "Solution Explorer"]),
-        MenuSpec::new("Build", ["Build Solution"]),
+        MenuSpec::new("Edit", ["Undo", "Redo", "Cut", "Copy", "Paste", "Find"]),
+        MenuSpec::new(
+            "View",
+            [
+                "Start Page",
+                "Code Editor",
+                "UI Designer",
+                "Solution Explorer",
+                "Toolbox",
+                "Output",
+                "Error List",
+            ],
+        ),
+        MenuSpec::new("Git", ["Clone Repository…", "Git Changes"]),
+        MenuSpec::new("Project", ["Add New UI Layout", "Project Properties"]),
+        MenuSpec::new(
+            "Build",
+            [
+                "Build Solution",
+                "Rebuild Solution",
+                "Clean Solution",
+                "Bundle / Publish Binaries",
+            ],
+        ),
         MenuSpec::new(
             "Debug",
             [
+                "Start Debugging (coming soon)",
                 "Start Without Debugging",
-                "Start Debugging (not yet implemented)",
+                "Stop Debugging (coming soon)",
             ],
         ),
+        MenuSpec::new("Test", ["Test Explorer", "Run Tests (coming soon)"]),
+        MenuSpec::new("Analyze", ["Run Code Analysis (coming soon)"]),
         MenuSpec::new("Tools", ["Options"]),
+        MenuSpec::new("Extensions", ["Manage Extensions"]),
         MenuSpec::new("Window", ["Reset Window Layout"]),
         MenuSpec::new("Help", ["About Quark"]),
     ]);
@@ -321,8 +347,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     toolbar.set_items(&[
         ToolbarItem::new(ToolbarIcon::New, "New Project"),
         ToolbarItem::new(ToolbarIcon::Open, "Open Project"),
-        ToolbarItem::separator(),
         ToolbarItem::new(ToolbarIcon::Save, "Save"),
+        ToolbarItem::separator(),
+        ToolbarItem::new(ToolbarIcon::Undo, "Undo"),
+        ToolbarItem::new(ToolbarIcon::Redo, "Redo"),
+        ToolbarItem::separator(),
+        ToolbarItem::new(ToolbarIcon::Refresh, "Build Solution"),
+        ToolbarItem::new(ToolbarIcon::Forward, "Start Without Debugging"),
+        ToolbarItem::new(ToolbarIcon::Share, "Publish Binaries"),
+        ToolbarItem::new(ToolbarIcon::Search, "Search Solution"),
     ]);
     window.set_toolbar(&toolbar);
 
@@ -331,6 +364,35 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // live in persistent surrounding panes.
     let root = ui.stack(Orientation::Vertical)?;
     root.set_sizing(Sizing::fill());
+
+    // The familiar Visual Studio command strip lives below the native menu.
+    // Configuration and architecture are visible now; native compiler flag
+    // support is a separate milestone, so no selection is silently invented.
+    let command_strip = ui.stack(Orientation::Horizontal)?;
+    command_strip.set_spacing(8.0);
+    let configuration = ui.combo_box()?;
+    configuration.set_items(&["Debug", "Release"]);
+    configuration.set_selected(0);
+    let architecture = ui.combo_box()?;
+    architecture.set_items(&["Any CPU", "x64", "arm64"]);
+    architecture.set_selected(0);
+    let startup_project = ui.combo_box()?;
+    startup_project.set_items(&[&display_project_name(&state.borrow())]);
+    startup_project.set_selected(0);
+    let build_button = ui.button("Build")?;
+    let run_button = ui.button("▶ Run without debugging")?;
+    let debug_button = ui.button("▶ Start debugging")?;
+    debug_button.set_enabled(false); // Requires a verified native debugger adapter.
+    let publish_button = ui.button("Publish binaries")?;
+    command_strip.append(&ui.label("Configuration:")?);
+    command_strip.append(&configuration);
+    command_strip.append(&architecture);
+    command_strip.append(&startup_project);
+    command_strip.append(&build_button);
+    command_strip.append(&run_button);
+    command_strip.append(&debug_button);
+    command_strip.append(&publish_button);
+    root.append(&command_strip);
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(9.0);
