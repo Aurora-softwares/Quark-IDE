@@ -17,8 +17,8 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, GridCell, Length, ListItem, MenuItem, MenuSpec, Orientation, Point,
-    PointerPhase, Rect, Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
+    Color, GridCell, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect,
+    Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
 };
 use std::{
     cell::RefCell,
@@ -64,9 +64,7 @@ impl Ide {
     }
 
     fn remember_project(&mut self, manifest: PathBuf) -> Result<(), String> {
-        if manifest.extension().and_then(|s| s.to_str()) != Some("hyproj")
-            || !manifest.is_file()
-        {
+        if manifest.extension().and_then(|s| s.to_str()) != Some("hyproj") || !manifest.is_file() {
             return Err("Choose an existing Hydrogen .hyproj file".into());
         }
         self.workspace.remember(manifest, true);
@@ -147,7 +145,10 @@ fn display_project_name(ide: &Ide) -> String {
 
 fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     let Some(project) = &ide.project else {
-        return (vec![TreeItem::new("Open or create a Hydrogen project")], vec![]);
+        return (
+            vec![TreeItem::new("Open or create a Hydrogen project")],
+            vec![],
+        );
     };
     let mut paths = Vec::new();
     paths.push(project.path.clone());
@@ -244,24 +245,37 @@ fn run_build(state: Rc<RefCell<Ide>>, output: naui::Label, status: naui::Label, 
 
 fn build(ui: &Ui) -> naui::Result<()> {
     let state = Rc::new(RefCell::new(Ide::load()));
-    let window = ui.window("Quark IDE — Hydrogen Development Environment", 1480.0, 940.0)?;
+    let window = ui.window(
+        "Quark IDE — Hydrogen Development Environment",
+        1480.0,
+        940.0,
+    )?;
 
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
     let menu = ui.menu_bar()?;
     menu.set_menus(&[
-        MenuSpec::new("File", [
-            MenuItem::new("New Project"),
-            MenuItem::new("Open Project"),
-            MenuItem::new("Open File"),
-            MenuItem::new("Save"),
-            MenuItem::new("Exit"),
-        ]),
+        MenuSpec::new(
+            "File",
+            [
+                MenuItem::new("New Project"),
+                MenuItem::new("Open Project"),
+                MenuItem::new("Open File"),
+                MenuItem::new("Save"),
+                MenuItem::new("Exit"),
+            ],
+        ),
         MenuSpec::new("Edit", ["Undo", "Redo", "Find"]),
         MenuSpec::new("View", ["Start Window", "Code Editor", "UI Designer"]),
         MenuSpec::new("Project", ["New UI Layout", "Solution Explorer"]),
         MenuSpec::new("Build", ["Build Solution"]),
-        MenuSpec::new("Debug", ["Start Without Debugging", "Start Debugging (not yet implemented)"]),
+        MenuSpec::new(
+            "Debug",
+            [
+                "Start Without Debugging",
+                "Start Debugging (not yet implemented)",
+            ],
+        ),
         MenuSpec::new("Tools", ["Options"]),
         MenuSpec::new("Window", ["Reset Window Layout"]),
         MenuSpec::new("Help", ["About Quark"]),
@@ -363,7 +377,11 @@ fn build(ui: &Ui) -> naui::Result<()> {
             .map(|path| ListItem::new(path.display().to_string()))
             .collect::<Vec<_>>(),
     );
-    recent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(210.0)));
+    recent.set_sizing(
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(210.0)),
+    );
     start.append(&recent);
 
     let code = ui.stack(Orientation::Vertical)?;
@@ -386,7 +404,11 @@ fn build(ui: &Ui) -> naui::Result<()> {
     inspector.set_spacing(9.0);
     inspector.append(&ui.label("SOLUTION EXPLORER")?);
     let tree = ui.tree()?;
-    tree.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(310.0)));
+    tree.set_sizing(
+        Sizing::new()
+            .width(Length::Fill)
+            .height(Length::Fixed(310.0)),
+    );
     let (initial_tree, _) = file_items(&state.borrow());
     tree.set_items(&initial_tree);
     inspector.append(&tree);
@@ -412,10 +434,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
     bottom.append(&output_scroll);
     root.attach(&bottom, GridCell::new(1, 1));
 
-    let status = ui.label(&format!(
-        "Ready  |  {}  |  Hydrogen  |  UTF-8",
-        backend()
-    ))?;
+    let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     root.attach(&status, GridCell::new(0, 2));
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
     root.attach(&workspace_name, GridCell::new(1, 2));
@@ -551,7 +570,10 @@ fn build(ui: &Ui) -> naui::Result<()> {
             let parent = PathBuf::from(parent_field.text());
             let templates = startup::Template::ALL;
             let selected = template_box.selected().unwrap_or(0);
-            let template = templates.get(selected).copied().unwrap_or(startup::Template::Linux);
+            let template = templates
+                .get(selected)
+                .copied()
+                .unwrap_or(startup::Template::Linux);
             match startup::create_project(&parent, &name, template) {
                 Ok(manifest) => {
                     let layout_path = manifest.parent().unwrap().join("Main.quarkui");
@@ -587,7 +609,10 @@ fn build(ui: &Ui) -> naui::Result<()> {
     open_file_button.on_click({
         let open_source = open_source.clone();
         move || {
-            if let Some(path) = rfd::FileDialog::new().add_filter("Hydrogen source", &["hy"]).pick_file() {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("Hydrogen source", &["hy"])
+                .pick_file()
+            {
                 open_source(path);
             }
         }
@@ -598,7 +623,9 @@ fn build(ui: &Ui) -> naui::Result<()> {
         let open_project = open_project.clone();
         let status = status.clone();
         move |indices| {
-            let Some(&index) = indices.first() else { return };
+            let Some(&index) = indices.first() else {
+                return;
+            };
             let path = state.borrow().workspace.recent.get(index).cloned();
             if let Some(path) = path {
                 if path.extension().and_then(|s| s.to_str()) == Some("hyproj") {
@@ -681,7 +708,8 @@ fn build(ui: &Ui) -> naui::Result<()> {
                         if let Some(layout) = ide.layout.as_mut() {
                             if let Ok(id) = layout.layout.add(kind, x, y) {
                                 ide.selected_id = Some(id);
-                                status.set_text(&format!("Placed {} in the designer", kind.title()));
+                                status
+                                    .set_text(&format!("Placed {} in the designer", kind.title()));
                             }
                         }
                     } else {
@@ -711,7 +739,9 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 PointerPhase::Move => {
                     if let Some((id, dx, dy)) = ide.drag {
                         if let Some(layout) = ide.layout.as_mut() {
-                            layout.layout.position(id, event.point.x - dx, event.point.y - dy);
+                            layout
+                                .layout
+                                .position(id, event.point.x - dx, event.point.y - dy);
                         }
                     }
                 }
@@ -813,7 +843,10 @@ fn build(ui: &Ui) -> naui::Result<()> {
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
             (0, 1) => {
-                if let Some(path) = rfd::FileDialog::new().add_filter("Hydrogen", &["hyproj"]).pick_file() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .add_filter("Hydrogen", &["hyproj"])
+                    .pick_file()
+                {
                     open_project(path);
                 }
             }
@@ -831,10 +864,16 @@ fn build(ui: &Ui) -> naui::Result<()> {
             (2, 1) => show_page(Page::Code),
             (2, 2) => show_page(Page::Design),
             (3, 0) => {
-                let path = state.borrow().workspace.selected.as_ref().and_then(|p| p.parent().map(|p| p.join("NewWindow.quarkui")));
+                let path = state
+                    .borrow()
+                    .workspace
+                    .selected
+                    .as_ref()
+                    .and_then(|p| p.parent().map(|p| p.join("NewWindow.quarkui")));
                 if let Some(path) = path {
                     if !path.exists() {
-                        let data = serde_json::to_vec_pretty(&Layout::default()).unwrap_or_default();
+                        let data =
+                            serde_json::to_vec_pretty(&Layout::default()).unwrap_or_default();
                         if let Err(err) = fs::write(&path, data) {
                             status.set_text(&format!("Unable to create design: {err}"));
                             return;
@@ -846,8 +885,11 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 }
             }
             (4, 0) => run_build(state.clone(), output.clone(), status.clone(), ui.clone()),
-            (5, 0) => status.set_text("Run without debugging uses Hydrogen CLI; select Build Solution first."),
-            (5, 1) => status.set_text("Source-level debugger not integrated in this native frontend yet."),
+            (5, 0) => status
+                .set_text("Run without debugging uses Hydrogen CLI; select Build Solution first."),
+            (5, 1) => {
+                status.set_text("Source-level debugger not integrated in this native frontend yet.")
+            }
             (8, 0) => status.set_text("Quark native frontend: WinUI 3, AppKit and GTK 4 controls."),
             _ => {}
         }
@@ -890,7 +932,9 @@ mod tests {
         assert!(ide.project.is_some());
         let (_, files) = file_items(&ide);
         assert!(files.contains(&manifest.canonicalize().unwrap()));
-        assert!(files.iter().any(|path| path.file_name().unwrap() == "Main.quarkui"));
+        assert!(files
+            .iter()
+            .any(|path| path.file_name().unwrap() == "Main.quarkui"));
     }
 
     #[test]
