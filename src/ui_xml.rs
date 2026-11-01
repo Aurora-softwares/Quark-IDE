@@ -178,6 +178,22 @@ mod tests {
         assert_eq!(decoded.controls[0].text, input.controls[0].text);
     }
     #[test]
+    fn only_hydrogen_ui_extension_is_accepted() {
+        use std::path::Path;
+        let layout = SharedLayout {
+            version: 1,
+            title: "Test".into(),
+            width: 720.0,
+            height: 480.0,
+            controls: Vec::new(),
+        };
+        let xml = encode(&layout).unwrap();
+        assert!(load::<SharedLayout>(Path::new("Form.hyyui"), &xml).is_ok());
+        assert!(load::<SharedLayout>(Path::new("Form.layout"), &xml).is_err());
+        assert!(save(Path::new("Form.layout"), &layout).is_err());
+    }
+
+    #[test]
     fn wrong_xml_and_json_under_hyyui_are_rejected() {
         assert!(decode::<SharedLayout>(r#"{\"version\":1}"#).is_err());
         assert!(decode::<SharedLayout>("<Unexpected />").is_err());
