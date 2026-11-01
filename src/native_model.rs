@@ -287,6 +287,83 @@ impl LayoutDocument {
     }
 }
 
+/// Resizable professional IDE tool-window positions, separate from projects.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DockLayout {
+    pub toolbox_width: f64,
+    pub editor_width: f64,
+    pub editor_height: f64,
+    pub solution_height: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DockPane {
+    Toolbox,
+    Editor,
+    Output,
+    Solution,
+}
+
+impl Default for DockLayout {
+    fn default() -> Self {
+        Self {
+            toolbox_width: 210.0,
+            editor_width: 930.0,
+            editor_height: 640.0,
+            solution_height: 430.0,
+        }
+    }
+}
+
+impl DockLayout {
+    pub fn set_position(&mut self, pane: DockPane, value: f64) -> bool {
+        let (slot, min, max) = match pane {
+            DockPane::Toolbox => (&mut self.toolbox_width, 160.0, 850.0),
+            DockPane::Editor => (&mut self.editor_width, 350.0, 2800.0),
+            DockPane::Output => (&mut self.editor_height, 260.0, 1900.0),
+            DockPane::Solution => (&mut self.solution_height, 190.0, 1700.0),
+        };
+        if !value.is_finite() {
+            return false;
+        }
+        let updated = value.clamp(min, max);
+        if *slot == updated {
+            return false;
+        }
+        *slot = updated;
+        true
+    }
+
+    pub fn open(path: &Path) -> Result<Self, String> {
+        match fs::read_to_string(path) {
+            Ok(contents) => {
+                let parsed: Self = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+                let mut validated = Self::default();
+                for (pane, value) in [
+                    (DockPane::Toolbox, parsed.toolbox_width),
+                    (DockPane::Editor, parsed.editor_width),
+                    (DockPane::Output, parsed.editor_height),
+                    (DockPane::Solution, parsed.solution_height),
+                ] {
+                    if !value.is_finite() {
+                        return Err("Invalid native dock position in preferences".into());
+                    }
+                    validated.set_position(pane, value);
+                }
+                Ok(validated)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
+        crate::storage::atomic_write(path, &bytes).map_err(|e| e.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Workspace {
@@ -332,6 +409,44 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_dock_positions_round_trip_across_restarts() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("docks.json");
+        let mut layout = DockLayout::default();
+        assert!(layout.set_position(DockPane::Toolbox, 315.0));
+        assert!(layout.set_position(DockPane::Output, 520.0));
+        layout.save(&path).unwrap();
+        let restored = DockLayout::open(&path).unwrap();
+        assert_eq!(restored, layout);
+        assert_eq!(restored.toolbox_width, 315.0);
+        assert_eq!(restored.editor_height, 520.0);
+    }
+
+    #[test]
+    fn native_dock_positions_reject_non_finite_values_and_clip_outliers() {
+        let mut layout = DockLayout::default();
+        assert!(!layout.set_position(DockPane::Editor, f64::NAN));
+        assert!(!layout.set_position(DockPane::Solution, f64::INFINITY));
+        assert_eq!(layout, DockLayout::default());
+        assert!(layout.set_position(DockPane::Toolbox, 50.0));
+        assert_eq!(layout.toolbox_width, 160.0);
+        assert!(layout.set_position(DockPane::Editor, 99999.0));
+        assert_eq!(layout.editor_width, 2800.0);
+    }
+
+    #[test]
+    fn native_dock_preferences_read_legacy_partial_files_and_reject_invalid_data() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("docks.json");
+        fs::write(&path, r#"{ "toolbox_width": 245.0 }"#).unwrap();
+        let read = DockLayout::open(&path).unwrap();
+        assert_eq!(read.toolbox_width, 245.0);
+        assert_eq!(read.solution_height, DockLayout::default().solution_height);
+        fs::write(&path, "corrupt").unwrap();
+        assert!(DockLayout::open(&path).is_err());
+    }
 
     #[test]
     fn source_save_rejects_concurrent_modification_and_keeps_text() {
