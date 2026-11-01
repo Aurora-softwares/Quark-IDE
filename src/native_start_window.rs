@@ -138,9 +138,11 @@ pub fn show(
         let recent = recent.clone();
         let collapsed = collapsed.clone();
         move || {
-            let rendered = history
-                .borrow()
-                .rows_collapsed(&filter.borrow(), native_launcher::now_epoch(), &collapsed.borrow());
+            let rendered = history.borrow().rows_collapsed(
+                &filter.borrow(),
+                native_launcher::now_epoch(),
+                &collapsed.borrow(),
+            );
             recent.set_items(
                 &rendered
                     .iter()
@@ -168,7 +170,9 @@ pub fn show(
         let collapsed = collapsed.clone();
         let refresh = refresh.clone();
         move |indices| {
-            let entry = indices.first().and_then(|&index| rows.borrow().get(index).cloned());
+            let entry = indices
+                .first()
+                .and_then(|&index| rows.borrow().get(index).cloned());
             let Some(row) = entry else {
                 *selected.borrow_mut() = None;
                 return;
