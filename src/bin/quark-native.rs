@@ -706,8 +706,32 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     status_bar.append(&workspace_name);
     root.append(&status_bar);
 
-    // Record native splitter movements so the professional pane layout
-    // survives closing and reopening Quark on each operating system.
+    // Native resize callbacks run for every pointer movement. Coalesce
+    // disk writes on a worker thread so fsync does not block the GTK/AppKit/
+    // WinUI event loop while the user drags a splitter.
+    let (dock_updates, dock_receiver) = std::sync::mpsc::channel::<DockLayout>();
+    let save_error = ui.tasks().channel({
+        let status = status.clone();
+        move |message: String| status.set_text(&message)
+    });
+    let destination = dock_file.clone();
+    std::thread::spawn(move || {
+        use std::sync::mpsc::RecvTimeoutError;
+        use std::time::Duration;
+        while let Ok(mut latest) = dock_receiver.recv() {
+            loop {
+                match dock_receiver.recv_timeout(Duration::from_millis(180)) {
+                    Ok(update) => latest = update,
+                    Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
+                        break;
+                    }
+                }
+            }
+            if let Err(error) = latest.save(&destination) {
+                let _ = save_error.send(format!("Could not save window layout: {error}"));
+            }
+        }
+    });
     for (splitter, pane) in [
         (&main_workspace, DockPane::Toolbox),
         (&project_and_editor, DockPane::Editor),
@@ -715,21 +739,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         (&inspector, DockPane::Solution),
     ] {
         let dock = dock.clone();
-        let file = dock_file.clone();
-        let status = status.clone();
+        let updates = dock_updates.clone();
         splitter.on_resize(move |position| {
             let mut current = dock.borrow_mut();
             if current.set_position(pane, position) {
-                if let Err(error) = current.save(&file) {
-                    status.set_text(&format!("Could not save window layout: {error}"));
-                }
+                let _ = updates.send(*current);
             }
         });
     }
 
     let reset_window_layout: Rc<dyn Fn()> = Rc::new({
         let dock = dock.clone();
-        let file = dock_file.clone();
+        let updates = dock_updates.clone();
         let status = status.clone();
         let main_workspace = main_workspace.clone();
         let project_and_editor = project_and_editor.clone();
@@ -742,9 +763,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             project_and_editor.set_position(restored.editor_width);
             edit_and_output.set_position(restored.editor_height);
             inspector.set_position(restored.solution_height);
-            match restored.save(&file) {
-                Ok(()) => status.set_text("Window layout reset to defaults."),
-                Err(error) => status.set_text(&format!("Could not save window layout: {error}")),
+            if updates.send(restored).is_ok() {
+                status.set_text("Window layout reset to defaults.");
+            } else {
+                status.set_text("Could not queue window layout preferences for saving.");
             }
         }
     });
