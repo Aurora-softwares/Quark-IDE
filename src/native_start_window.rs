@@ -21,7 +21,7 @@ pub enum Action {
     Empty,
 }
 
-type Launch = Rc<dyn Fn(Action) -> Result<(), String>>;
+pub(crate) type Launch = Rc<dyn Fn(Action) -> Result<(), String>>;
 
 pub fn show(
     ui: &Ui,
@@ -285,7 +285,7 @@ pub fn show(
         let launch = launch.clone();
         let status = status.clone();
         move || {
-            if let Err(error) = create_project_wizard(&ui, window.clone(), launch.clone()) {
+            if let Err(error) = create_project_wizard(&ui, window.clone(), launch.clone(), true) {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
@@ -330,7 +330,12 @@ fn transition(action: Action, launch: &Launch, launcher: &Window, status: &naui:
     }
 }
 
-fn create_project_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Result<()> {
+pub(crate) fn create_project_wizard(
+    ui: &Ui,
+    launcher: Window,
+    launch: Launch,
+    close_parent: bool,
+) -> naui::Result<()> {
     let wizard = ui.window("Create a Hydrogen project", 640.0, 450.0)?;
     let root = ui.stack(Orientation::Vertical)?;
     root.set_padding(Padding::all(22.0));
@@ -408,7 +413,9 @@ fn create_project_wizard(ui: &Ui, launcher: Window, launch: Launch) -> naui::Res
                     match launch(Action::Project(manifest)) {
                         Ok(()) => {
                             wizard.close();
-                            launcher.close();
+                            if close_parent {
+                                launcher.close();
+                            }
                         }
                         Err(error) => status.set_text(&error),
                     }
