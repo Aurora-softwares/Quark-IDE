@@ -15,6 +15,7 @@ mod native_launcher;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
+#[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
 #[path = "../native_start_window.rs"]
@@ -319,6 +320,7 @@ fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>)
     )
 }
 
+#[allow(clippy::too_many_arguments)] // UI control handles are intentionally passed together.
 fn run_task(
     task: native_commands::Task,
     state: Rc<RefCell<Ide>>,
@@ -1249,7 +1251,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let show_bottom = show_bottom.clone();
         let left_panel = left_panel.clone();
         let status = status.clone();
-        let tree = tree.clone();
         let window = window.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
