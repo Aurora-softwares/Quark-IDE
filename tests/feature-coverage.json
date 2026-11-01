@@ -1855,6 +1855,16 @@
         "native_commands::tests::publish_without_project_does_not_create_any_artifacts",
         "native_commands::tests::publishes_actual_binary_as_zip_with_original_filename"
       ]
+    },
+    {
+      "id": "native-docking-persistence",
+      "category": "Native Platform",
+      "feature": "Visual Studio-style native pane divider positions persist and reset safely between sessions",
+      "tests": [
+        "native_model::tests::native_dock_positions_round_trip_across_restarts",
+        "native_model::tests::native_dock_positions_reject_non_finite_values_and_clip_outliers",
+        "native_model::tests::native_dock_preferences_read_legacy_partial_files_and_reject_invalid_data"
+      ]
     }
   ]
 }
