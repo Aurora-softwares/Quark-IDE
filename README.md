@@ -6,23 +6,33 @@ Current development status, next target and release gates are tracked in [Hydrog
 
 ![Quark IDE themes and welcome controls](assets/quark-catalogues.png)
 
-## Native UI migration — experimental preview
+## Native UI migration — Visual Studio Professional-style preview
 
-The main `quark-ide` executable currently remains the fully featured **egui/eframe** application. Development is underway on a **separate optional native frontend** so that moving to OS-native controls does not sacrifice the working editor, project system and visual designer.
+The production `quark-ide` executable remains the mature **egui/eframe** implementation. The optional `quark-native` executable is being rebuilt using real platform UI controls: **WinUI 3 / Fluent on Windows**, **AppKit on macOS**, and **GTK 4 / libadwaita on Linux**. It uses normal native window frames, menus, text controls and resizable pane splitters. The two applications share Hydrogen `.hyproj`, `.hy` and Quark `.quarkui` formats.
 
-Native target toolkit selection:
+### Native startup window
 
-- **Windows:** WinUI 3 (Windows App SDK; Fluent controls and native window frame).
-- **macOS:** AppKit (native menus, controls and standard macOS window).
-- **Linux:** GTK 4 with libadwaita (native GTK controls and host-managed windows).
+Unlike the legacy welcome tab, the new native frontend starts with a **separate small Start Window**. The heavyweight editor and IDE shell are created only after a workspace is selected. Its Visual Studio-inspired layout has searchable **Open recent** on the left, with pinned, today, this week, this month and older groups. Choose an entry and click **Open selected**; pin/unpin and remove buttons update persistent history without deleting project files.
 
-The experimental `quark-native` app uses the `naui` native widget abstraction to present a **Visual Studio Professional-inspired layout**: Toolbox on the left, documents and design canvas in the centre, Solution Explorer and Properties on the right, Output below and native menus/toolbars. Its state model reads existing Hydrogen `.hyproj`, source `.hy` and Quark `.quarkui` documents. New-project templates and basic source editing, building and UI control placement are initially available.
+**Get started** on the right includes **Clone a repository**, **Open a project or solution**, **Open a local folder**, **Create a new project**, and **Continue without code**. New projects use a separate native wizard for location, name and target. Cloning uses a separate wizard with GitHub HTTPS/SSH URL, destination and directory name; Git runs asynchronously, and successful clones open an available `.hyproj` or the cloned folder. Git must already be installed.
 
-To build this **preview** from source, use `cargo run --release --features native-ui --bin quark-native`. Linux requires GTK 4 and libadwaita development libraries; Windows needs a supported Windows App SDK environment. CI checks compile, lint and unit-test this separate frontend on all three host operating systems. The default `quark-ide` executable remains unchanged during the migration.
+### Native IDE shell
 
-**Not yet ready for general use:** native dock/float layout management, sophisticated code editor (syntax/semantic tooling, completion), native toolbox drag-and-drop, full property grid and multi-form editing, a real debugger, session recovery and complete tool parity. The native frontend is not a finished replacement for Quark, and a passing CI build does not establish GUI behaviour on every desktop environment. Migration must preserve source and layout safety before making it the default binary.
+The full IDE follows the **Visual Studio Professional workspace structure**, not VS Code's activity-bar model:
 
-**Development checkpoint:** native prototype on a draft feature branch. **Next target:** finish the three-platform native build/test matrix, then implement accessible, resizable/dockable native panes, drag/drop control authoring and full editor/build/debug integration. **Release gates:** native smoke tests, editor/designer recovery, OS integration and accessibility tests, runtime packaging, feature parity with existing Quark, and real application builds.
+- Native menus: File, Edit, View, Git, Project, Build, Debug, Test, Analyze, Tools, Extensions, Window, Help
+- A native icon toolbar plus a dense command strip with Debug/Release, architecture, startup project, Build, Run Without Debugging, pending debugger action and Publish
+- Compact left tool-window selector for Toolbox / Server Explorer / Data Sources; centre source/designer tabs; right searchable Solution Explorer and independently resizable Properties inspector
+- Resizable Output / Error List / Debug / Test Results / Find Results panes below the editor and a status bar
+- Separate visual designer canvas with selectable/movable Label, Button, Text Box and Check Box controls; `.quarkui` layout changes remain protected by conflict-aware saving
+
+**Implemented commands:** Build Solution, Rebuild Solution, Clean Solution, Start Without Debugging, and Bundle / Publish Binaries. They invoke the configured Hydrogen CLI on background threads. Set `QUARK_HYDROGEN_COMPILER` to the compiler executable or use `hy` on `PATH`. Build artifacts follow Hydrogen's current output planner under the project `.quark/build` directory. The Publish command requires an existing built binary and creates a ZIP in `.quark/publish`. It currently supports single-file executables, not directory-style Australis OS images.
+
+The **Debug/Release and CPU target selectors are UI groundwork only** until the Hydrogen compiler provides verified configuration flags. The Start Debugging command is intentionally marked as not yet implemented. Do not confuse Run Without Debugging with source-level debugging.
+
+Build this preview with `cargo run --release --features native-ui --bin quark-native`. On Ubuntu/Debian install `pkg-config libgtk-4-dev libadwaita-1-dev libpango1.0-dev libgdk-pixbuf-2.0-dev`. Windows needs a compatible Windows App SDK runtime. The existing `quark-ide` binary remains unchanged during migration.
+
+**Current development checkpoint:** version `0.6.0`, native launcher + professional shell on a feature branch. **Next targets:** native screenshot/interaction acceptance, native editor parity, real toolbox drag/drop, persistent dock/float layouts, advanced Properties, test/Git integrations, and a Hydrogen debugger adapter. **Release gates:** all Linux/macOS/Windows formatting, Clippy, unit/coverage and release-build jobs green; manual system UI smoke tests; unsaved-buffer recovery and safe close; accessibility, theme and native packaging; source-level build/debug and interface-designer completeness. A passing build alone cannot certify native GUI behaviour.
 
 ## Start Window and visual application designer
 
