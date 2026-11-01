@@ -2,6 +2,7 @@ mod catalog;
 mod catalog_ui;
 mod command;
 mod designer;
+mod ui_xml;
 mod diagnostics;
 mod editor;
 #[cfg(test)]
@@ -383,7 +384,7 @@ impl Quark {
                         }
                     });
                 ui.label("Quark creates a Hydrogen .hyproj and Program.hy.");
-                ui.label("The visual designer saves .quarkui layouts separately from executable source code.");
+                ui.label("The visual designer saves .hyyui layouts separately from executable source code.");
                 create = ui.button("Create project").clicked();
             });
         if create {
@@ -394,7 +395,7 @@ impl Quark {
                     self.show_new_project = false;
                     self.add_project(path.clone());
                     self.status = format!("Created project {}", path.display());
-                    let layout_path = path.parent().unwrap_or(Path::new(".")).join("Main.quarkui");
+                    let layout_path = path.parent().unwrap_or(Path::new(".")).join("Main.hyyui");
                     match designer::Designer::create(layout_path) {
                         Ok(document) => {
                             self.designer = Some(document);
@@ -447,7 +448,7 @@ impl Quark {
             } else if self.designer.as_ref().is_some_and(|d| d.dirty) {
                 self.status = "Save the current UI layout before creating another".into();
             } else if let Some(parent) = parent {
-                let path = parent.join(format!("{}.quarkui", self.new_layout_name));
+                let path = parent.join(format!("{}.hyyui", self.new_layout_name));
                 match designer::Designer::create(path) {
                     Ok(document) => {
                         self.designer = Some(document);
@@ -855,7 +856,7 @@ impl Quark {
         self.request_diagnostic_scan();
     }
     fn open(&mut self, path: PathBuf) {
-        if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
+        if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
             self.open_designer(path);
             return;
         }
