@@ -59,7 +59,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
 pub const SIDE_RAIL_WIDTH: f64 = 18.0;
 pub const SIDE_TAB_HEIGHTS: [f64; 3] = [76.0, 66.0, 56.0];
 pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
-pub const CODE_SIDE_TABS: [&str; 3] = ["SYMBOLS", "SEARCH", "FILES"];
+pub const CODE_SIDE_TABS: [&str; 2] = ["SYMBOLS", "SEARCH"];
 
 /// Quark's palette: Hydrogen electron cyan, orbital blue, quark violet.
 pub const HYDROGEN_CYAN: (u8, u8, u8) = (50, 212, 226);
@@ -107,7 +107,7 @@ mod tests {
         assert_eq!(SIDE_RAIL_WIDTH, 18.0);
         assert_eq!(SIDE_TAB_HEIGHTS, [76.0, 66.0, 56.0]);
         assert_eq!(DESIGN_SIDE_TABS, ["TOOLBOX", "SERVER", "DATA"]);
-        assert_eq!(CODE_SIDE_TABS, ["SYMBOLS", "SEARCH", "FILES"]);
+        assert_eq!(CODE_SIDE_TABS, ["SYMBOLS", "SEARCH"]);
         assert!(!CODE_SIDE_TABS.contains(&"TOOLBOX"));
         assert!(!DESIGN_SIDE_TABS.contains(&"SYMBOLS"));
     }
