@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn professional_side_rail_is_compact_and_uses_native_focusable_tabs() {
-        assert!(SIDE_RAIL_WIDTH <= 48.0);
+        assert_eq!(SIDE_RAIL_WIDTH, 46.0);
         assert_eq!(SIDE_TABS.len(), 3);
         assert_eq!(SIDE_TABS[0].0, "Toolbox");
         for &(name, caption, height) in SIDE_TABS {
