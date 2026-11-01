@@ -286,7 +286,7 @@ fn discover_hydrogen_files(root: &Path, result: &mut Vec<PathBuf>, depth: usize)
             }
         } else if kind.is_file() && matches!(
             path.extension().and_then(|s| s.to_str()),
-            Some("hy" | "hyproj" | "hyyui")
+            Some("hy" | "hyproj" | "hyyui" | "hyui")
         ) {
             result.push(path);
         }
@@ -327,6 +327,29 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     }
     if let Some(folder) = project.path.parent() {
         discover_hydrogen_files(folder, &mut paths, 0);
+    }
+    // Hydrogen UI files can live in nested project folders.
+    // Bound the traversal to avoid following symlink loops and huge trees.
+    if let Some(folder) = project.path.parent() {
+        let mut pending = vec![(folder.to_path_buf(), 0_u8)];
+        let mut visited = 0_usize;
+        while let Some((directory, depth)) = pending.pop() {
+            if visited >= 4096 { break; }
+            if let Ok(entries) = fs::read_dir(directory) {
+                for entry in entries.flatten() {
+                    visited += 1;
+                    if visited > 4096 { break; }
+                    let path = entry.path();
+                    if path.is_dir() && !path.is_symlink() && depth < 5 {
+                        pending.push((path, depth + 1));
+                    } else if path.is_file()
+                        && matches!(path.extension().and_then(|e| e.to_str()), Some("hyyui" | "hyui"))
+                    {
+                        paths.push(path);
+                    }
+                }
+            }
+        }
     }
     paths.sort();
     paths.dedup();
@@ -1310,7 +1333,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui" | "hyui") {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -1646,7 +1669,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui" | "hyui") {
                         open_layout(path);
                     } else {
                         open_source(path);
