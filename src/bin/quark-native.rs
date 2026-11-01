@@ -1444,6 +1444,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let state = state.clone();
         let editor = editor.clone();
         let show_page = show_page.clone();
+        let tab_offset = tab_offset.clone();
         let status = status.clone();
         let symbols_list = symbols_list.clone();
         move |path| {
@@ -1451,6 +1452,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             match result {
                 Ok(()) => {
                     let text = state.borrow().document.as_ref().unwrap().text.clone();
+                    let tabs = state.borrow().open_tabs();
+                    let index = tabs.iter().position(|(kind, candidate)| {
+                        *kind == Page::Code && candidate == &path
+                    }).unwrap_or(0);
+                    tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
                     editor.set_text(&text);
                     symbols_list.set_items(&project_symbols(&state.borrow()));
                     show_page(Page::Code);
@@ -1470,6 +1476,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let result = state.borrow_mut().open_design(&path);
             match result {
                 Ok(()) => {
+                    let tabs = state.borrow().open_tabs();
+                    let index = tabs.iter().position(|(kind, candidate)| {
+                        *kind == Page::Design && candidate == &path
+                    }).unwrap_or(0);
+                    tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
                     show_page(Page::Design);
                     canvas.redraw();
                     status.set_text(&format!("Designing {}", path.display()));
