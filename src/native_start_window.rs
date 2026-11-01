@@ -25,11 +25,11 @@ pub(crate) type Launch = Rc<dyn Fn(Action) -> Result<(), String>>;
 
 pub fn show(
     ui: &Ui,
+    window: Window,
     history_path: PathBuf,
     previously_opened: &[PathBuf],
     launch: Launch,
 ) -> naui::Result<()> {
-    let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;
     let history = Rc::new(RefCell::new(
         History::open(&history_path).unwrap_or_default(),
     ));
@@ -323,18 +323,19 @@ fn start_card(
     Ok(button)
 }
 
-fn transition(action: Action, launch: &Launch, launcher: &Window, status: &naui::Label) {
-    match launch(action) {
-        Ok(()) => launcher.close(),
-        Err(error) => status.set_text(&error),
+fn transition(action: Action, launch: &Launch, _launcher: &Window, status: &naui::Label) {
+    // The launcher and IDE are the same native window. Its contents are
+    // replaced by the launch callback; closing here would close the IDE too.
+    if let Err(error) = launch(action) {
+        status.set_text(&error);
     }
 }
 
 pub(crate) fn create_project_wizard(
     ui: &Ui,
-    launcher: Window,
+    _launcher: Window,
     launch: Launch,
-    close_parent: bool,
+    _close_parent: bool,
 ) -> naui::Result<()> {
     let wizard = ui.window("Create a Hydrogen project", 640.0, 450.0)?;
     let root = ui.stack(Orientation::Vertical)?;
@@ -393,7 +394,6 @@ pub(crate) fn create_project_wizard(
         let template = template.clone();
         let status = status.clone();
         let wizard = wizard.clone();
-        let launcher = launcher.clone();
         move || {
             let selected = template.selected().unwrap_or(0);
             let kind = startup::Template::ALL
@@ -412,10 +412,8 @@ pub(crate) fn create_project_wizard(
                     }
                     match launch(Action::Project(manifest)) {
                         Ok(()) => {
+                            // The parent is now the IDE window; never close it.
                             wizard.close();
-                            if close_parent {
-                                launcher.close();
-                            }
                         }
                         Err(error) => status.set_text(&error),
                     }
