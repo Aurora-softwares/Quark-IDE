@@ -3,8 +3,7 @@
 
 use crate::hydrogen::{self, BuildPlan, BuildScope};
 use std::{
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -38,11 +37,17 @@ pub struct ResultLog {
 
 impl ResultLog {
     fn ok(message: impl Into<String>) -> Self {
-        Self { success: true, text: message.into() }
+        Self {
+            success: true,
+            text: message.into(),
+        }
     }
 
     fn error(message: impl Into<String>) -> Self {
-        Self { success: false, text: message.into() }
+        Self {
+            success: false,
+            text: message.into(),
+        }
     }
 }
 
@@ -120,27 +125,19 @@ pub fn clean_generated(plan: &BuildPlan) -> Result<(), String> {
     fs::remove_dir_all(generated).map_err(|e| e.to_string())
 }
 
-pub fn run(
-    task: Task,
-    compiler: &str,
-    project: Option<&Path>,
-) -> ResultLog {
+pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     let Some(project) = project else {
         return ResultLog::error("Open a Hydrogen project before building or running.");
     };
-    let plan = match hydrogen::build_plan(
-        compiler,
-        Some(project),
-        None,
-        BuildScope::Project,
-    ) {
+    let plan = match hydrogen::build_plan(compiler, Some(project), None, BuildScope::Project) {
         Ok(plan) => plan,
         Err(error) => return ResultLog::error(error),
     };
     let result = match task {
         Task::Clean => clean_generated(&plan).map(|()| "Generated build files removed".to_owned()),
-        Task::Publish => publish_binary(&plan)
-            .map(|path| format!("Binary archive created: {}", path.display())),
+        Task::Publish => {
+            publish_binary(&plan).map(|path| format!("Binary archive created: {}", path.display()))
+        }
         Task::Build | Task::Rebuild | Task::RunWithoutDebugging => {
             if task == Task::Rebuild {
                 if let Err(error) = clean_generated(&plan) {
@@ -170,13 +167,21 @@ pub fn run(
                 Ok(process) => {
                     let message = format!(
                         "Hydrogen {} {}\n{}\n{}\nProcess exit code: {}",
-                        if task == Task::RunWithoutDebugging { "run" } else { "build" },
+                        if task == Task::RunWithoutDebugging {
+                            "run"
+                        } else {
+                            "build"
+                        },
                         project.display(),
                         String::from_utf8_lossy(&process.stdout),
                         String::from_utf8_lossy(&process.stderr),
                         process.status.code().unwrap_or(-1),
                     );
-                    if process.status.success() { Ok(message) } else { Err(message) }
+                    if process.status.success() {
+                        Ok(message)
+                    } else {
+                        Err(message)
+                    }
                 }
                 Err(error) => Err(format!("Could not execute Hydrogen compiler: {error}")),
             }
@@ -214,7 +219,10 @@ mod tests {
         let file = fs::File::open(archive).unwrap();
         let mut zip = zip::ZipArchive::new(file).unwrap();
         let mut output = Vec::new();
-        zip.by_name("Sample").unwrap().read_to_end(&mut output).unwrap();
+        zip.by_name("Sample")
+            .unwrap()
+            .read_to_end(&mut output)
+            .unwrap();
         assert_eq!(output, b"binary bytes");
     }
 
@@ -227,14 +235,19 @@ mod tests {
         fs::write(dir.path().join("Program.hy"), "keep").unwrap();
         clean_generated(&plan).unwrap();
         assert!(!plan.output.exists());
-        assert_eq!(fs::read_to_string(dir.path().join("Program.hy")).unwrap(), "keep");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("Program.hy")).unwrap(),
+            "keep"
+        );
     }
 
     #[test]
     fn publish_refuses_missing_output_instead_of_claiming_success() {
         let dir = tempfile::tempdir().unwrap();
         let plan = sample_plan(dir.path());
-        assert!(publish_binary(&plan).unwrap_err().contains("Build the application first"));
+        assert!(publish_binary(&plan)
+            .unwrap_err()
+            .contains("Build the application first"));
         assert!(!dir.path().join(".quark/publish").exists());
     }
 
