@@ -154,12 +154,7 @@ impl History {
 
     /// Visible launcher rows with Visual Studio-style collapsible age groups.
     /// Search always expands matching results, even if their group is folded.
-    pub fn rows_collapsed(
-        &self,
-        query: &str,
-        now: u64,
-        collapsed: &[AgeGroup],
-    ) -> Vec<Row> {
+    pub fn rows_collapsed(&self, query: &str, now: u64, collapsed: &[AgeGroup]) -> Vec<Row> {
         let query = query.trim().to_lowercase();
         let mut result = Vec::new();
         for group in AgeGroup::ALL {
@@ -248,7 +243,11 @@ mod tests {
     #[test]
     fn age_groups_can_collapse_without_hiding_search_results() {
         let mut history = History::default();
-        history.recent = vec![Recent { path: PathBuf::from("/tmp/QuarkDemo.hyproj"), opened_at: 200_000, pinned: true }];
+        history.recent = vec![Recent {
+            path: PathBuf::from("/tmp/QuarkDemo.hyproj"),
+            opened_at: 200_000,
+            pinned: true,
+        }];
         let collapsed = history.rows_collapsed("", 200_100, &[AgeGroup::Pinned]);
         assert_eq!(collapsed.len(), 1);
         assert!(collapsed[0].title.contains("Pinned"));
@@ -261,10 +260,17 @@ mod tests {
     #[test]
     fn expanded_age_groups_have_headers_and_selectable_entries() {
         let mut history = History::default();
-        history.recent = vec![Recent { path: PathBuf::from("/tmp/Recent.hyproj"), opened_at: 200_000, pinned: false }];
+        history.recent = vec![Recent {
+            path: PathBuf::from("/tmp/Recent.hyproj"),
+            opened_at: 200_000,
+            pinned: false,
+        }];
         let expanded = history.rows_collapsed("", 200_100, &[]);
         assert!(expanded[0].title.contains("Today"));
-        assert_eq!(expanded[1].path.as_ref().unwrap(), &PathBuf::from("/tmp/Recent.hyproj"));
+        assert_eq!(
+            expanded[1].path.as_ref().unwrap(),
+            &PathBuf::from("/tmp/Recent.hyproj")
+        );
     }
 
     #[test]
