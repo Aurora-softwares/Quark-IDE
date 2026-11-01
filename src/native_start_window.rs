@@ -131,6 +131,37 @@ pub fn show(
     status.set_color(TextColor::Secondary);
     root.append(&status);
 
+    // Never replace the AppKit NSWindow content while its NSButton handler
+    // is still on the stack. Defer every launch action to the next UI tick.
+    // A single pending flag also prevents double-clicks opening twice.
+    let pending = Rc::new(std::cell::Cell::new(false));
+    let sender = ui.tasks().channel({
+        let launch = launch.clone();
+        let status = status.clone();
+        let pending = pending.clone();
+        move |action: Action| {
+            if let Err(error) = launch(action) {
+                pending.set(false);
+                status.set_text(&format!("Cannot open workspace: {error}"));
+            }
+        }
+    });
+    let launch: Launch = Rc::new({
+        let pending = pending.clone();
+        let status = status.clone();
+        move |action| {
+            if pending.replace(true) {
+                return Ok(());
+            }
+            status.set_text("Opening workspace…");
+            if let Err(error) = sender.send(action) {
+                pending.set(false);
+                return Err(error.to_string());
+            }
+            Ok(())
+        }
+    });
+
     let refresh: Rc<dyn Fn()> = Rc::new({
         let history = history.clone();
         let filter = filter.clone();
