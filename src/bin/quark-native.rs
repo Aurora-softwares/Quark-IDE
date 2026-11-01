@@ -600,12 +600,10 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
     fallback
 }
 
-fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
-    let window = ui.window(
-        "Quark IDE — Hydrogen Development Environment",
-        1480.0,
-        940.0,
-    )?;
+fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
+    // Reuse the launcher window. Creating an AppKit window from a button
+    // callback and immediately closing the old one can lose activation.
+    // Replacing the content also makes this transition atomic on every OS.
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
     let menu = ui.menu_bar()?;
@@ -2533,6 +2531,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     // The native shell provides the actual OS frame and follows the system's
     // appearance; unlike the legacy renderer, none of these widgets is egui.
+    window.set_title("Quark IDE — Hydrogen Development Environment");
+    window.set_size(1480.0, 940.0);
     window.set_child(&root);
     window.show();
     Ok(())
@@ -2541,8 +2541,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 fn build(ui: &Ui) -> naui::Result<()> {
     let state = Rc::new(RefCell::new(Ide::load()));
     let existing = state.borrow().workspace.recent.clone();
+    let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;
     let handle = ui.clone();
     let launch_state = state.clone();
+    let ide_window = window.clone();
     let launch: Rc<dyn Fn(native_start_window::Action) -> Result<(), String>> =
         Rc::new(move |action| {
             {
@@ -2566,10 +2568,12 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     }
                 }
             }
-            build_ide(&handle, launch_state.clone()).map_err(|error| error.to_string())
+            build_ide(&handle, launch_state.clone(), ide_window.clone())
+                .map_err(|error| error.to_string())
         });
     native_start_window::show(
         ui,
+        window,
         workspace_file().with_file_name("native-launcher.json"),
         &existing,
         launch,
