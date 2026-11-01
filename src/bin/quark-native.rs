@@ -1257,7 +1257,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             centre.clear();
             document_tabs.clear();
 
-            const VISIBLE_TABS: usize = 4;
+            const VISIBLE_TABS: usize = 3;
             let maximum_offset = tabs.len().saturating_sub(VISIBLE_TABS);
             let offset = tab_offset.get().min(maximum_offset);
             tab_offset.set(offset);
@@ -1266,21 +1266,43 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.display().to_string());
-                let label = if active_path.as_ref() == Some(path) {
-                    format!("▏{filename}")
-                } else {
-                    filename
-                };
-                if let Ok(button) = ui.button(&label) {
+                let selected = active_path.as_ref() == Some(path);
+                if let Ok(tab) = ui.canvas() {
+                    let tab_width = (filename.chars().count() as f64 * 7.0 + 20.0)
+                        .clamp(70.0, 144.0);
+                    tab.set_sizing(
+                        Sizing::new()
+                            .width(Length::Fixed(tab_width))
+                            .height(Length::Fixed(27.0)),
+                    );
+                    tab.on_draw({
+                        let filename = filename.clone();
+                        move |painter| {
+                            painter.text(
+                                &filename,
+                                Point::new(8.0, 6.0),
+                                11.0,
+                                Color::rgb(0xd4, 0xd4, 0xd7),
+                            );
+                            if selected {
+                                painter.fill_rect(
+                                    Rect::new(0.0, painter.height() - 2.0, painter.width(), 2.0),
+                                    Color::rgb(0x8a, 0x81, 0xa4),
+                                );
+                            }
+                        }
+                    });
                     let kind = *kind;
                     let path = path.clone();
                     let selector = tab_selector.clone();
-                    button.on_click(move || {
-                        if let Some(open) = selector.borrow().as_ref() {
-                            open(kind, path.clone());
+                    tab.on_pointer(move |event| {
+                        if event.phase == PointerPhase::Down {
+                            if let Some(open) = selector.borrow().as_ref() {
+                                open(kind, path.clone());
+                            }
                         }
                     });
-                    document_tabs.append(&button);
+                    document_tabs.append(&tab);
                 }
             }
             if tabs.len() > VISIBLE_TABS {
@@ -1315,7 +1337,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             if !tabs.is_empty() {
                 if let Ok(all) = ui.combo_box() {
-                    let mut labels = vec!["▾ All tabs".to_owned()];
+                    let mut labels = vec!["∨".to_owned()];
                     labels.extend(tabs.iter().map(|(_, path)| {
                         path.file_name()
                             .map(|name| name.to_string_lossy().into_owned())
