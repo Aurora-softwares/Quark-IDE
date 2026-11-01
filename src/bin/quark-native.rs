@@ -564,11 +564,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let tab_row = ui.stack(Orientation::Horizontal)?;
         tab_row.set_spacing(0.0);
         let indicator = ui.canvas()?;
-        indicator.set_sizing(Sizing::new().width(Length::Fixed(3.0)).height(Length::Fixed(tab.2)));
+        indicator.set_sizing(
+            Sizing::new()
+                .width(Length::Fixed(3.0))
+                .height(Length::Fixed(tab.2)),
+        );
         let selected = tab.0 == "Toolbox";
         indicator.on_draw(move |painter| {
-            let (r, g, b) = if selected { native_shell::QUARK_VIOLET } else { native_shell::QUIET_SURFACE };
-            painter.fill_rect(Rect::new(0.0, 0.0, painter.width(), painter.height()), Color::rgb(r, g, b));
+            let (r, g, b) = if selected {
+                native_shell::QUARK_VIOLET
+            } else {
+                native_shell::QUIET_SURFACE
+            };
+            painter.fill_rect(
+                Rect::new(0.0, 0.0, painter.width(), painter.height()),
+                Color::rgb(r, g, b),
+            );
         });
         tab_row.append(&indicator);
         tab_row.append(button);
