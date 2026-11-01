@@ -2582,8 +2582,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
             let window = ide_window
                 .upgrade()
                 .ok_or("The Start Window has already closed")?;
-            build_ide(&handle, launch_state.clone(), window)
-                .map_err(|error| error.to_string())
+            build_ide(&handle, launch_state.clone(), window).map_err(|error| error.to_string())
         });
     native_start_window::show(
         ui,
