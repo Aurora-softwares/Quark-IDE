@@ -1067,14 +1067,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_toolbar.append(&properties_grow);
     properties_toolbar.append(&properties_shrink);
     properties_pane.append(&properties_toolbar);
+    let flat_properties = ui.stack(Orientation::Vertical)?;
+    flat_properties.set_spacing(7.0);
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
     selected_text.set_placeholder("Text");
-    properties_pane.append(&ui.label("Control name")?);
-    properties_pane.append(&selected_name);
-    properties_pane.append(&ui.label("Text")?);
-    properties_pane.append(&selected_text);
+    flat_properties.append(&ui.label("Control name")?);
+    flat_properties.append(&selected_name);
+    flat_properties.append(&ui.label("Text")?);
+    flat_properties.append(&selected_text);
     let selected_x = ui.text_input("")?;
     let selected_y = ui.text_input("")?;
     let selected_width = ui.text_input("")?;
@@ -1085,11 +1087,25 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         ("Width", &selected_width),
         ("Height", &selected_height),
     ] {
-        properties_pane.append(&ui.label(title)?);
-        properties_pane.append(field);
+        flat_properties.append(&ui.label(title)?);
+        flat_properties.append(field);
     }
     let delete_control = ui.button("Delete Selected Control")?;
-    properties_pane.append(&delete_control);
+    flat_properties.append(&delete_control);
+    properties_pane.append(&flat_properties);
+    let native_property_content = ui.stack(Orientation::Vertical)?;
+    native_property_content.set_spacing(4.0);
+    let native_property_scroll = ui.scroll()?;
+    native_property_scroll.set_sizing(Sizing::fill());
+    native_property_scroll.set_child(&native_property_content);
+    // The preview refresh callback switches between native and legacy
+    // property groups without losing the widget edit state.
+    let property_editor = ui.stack(Orientation::Vertical)?;
+    property_editor.set_sizing(Sizing::fill());
+    property_editor.append(&flat_properties);
+    properties_pane.clear();
+    properties_pane.append(&properties_toolbar);
+    properties_pane.append(&property_editor);
     properties_pane.set_sizing(Sizing::fill());
 
     let inspector = ui.split_view(Orientation::Vertical)?;
