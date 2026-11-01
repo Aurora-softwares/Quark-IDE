@@ -32,7 +32,7 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
+    Color, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
     Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
 };
 use std::{
@@ -232,7 +232,7 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
             })
             .collect::<Vec<_>>();
         files.sort();
-        let children = files
+        let children: Vec<TreeItem> = files
             .iter()
             .map(|path| {
                 TreeItem::new(
@@ -297,7 +297,7 @@ fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>)
         .into_iter()
         .filter(|path| path.to_string_lossy().to_lowercase().contains(&pattern))
         .collect();
-    let children = matching
+    let children: Vec<TreeItem> = matching
         .iter()
         .map(|path| {
             TreeItem::new(
@@ -766,14 +766,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         });
     }
     collapse_solution.on_click({
+        let solution_pane = solution_pane.clone();
+        let solution_heading = solution_heading.clone();
         let tree = tree.clone();
         let solution_search = solution_search.clone();
         let collapsed = Rc::new(std::cell::Cell::new(false));
         move || {
             let hidden = !collapsed.get();
             collapsed.set(hidden);
-            tree.set_visible(!hidden);
-            solution_search.set_visible(!hidden);
+            solution_pane.clear();
+            solution_pane.append(&solution_heading);
+            if !hidden {
+                solution_pane.append(&solution_search);
+                solution_pane.append(&tree);
+            }
         }
     });
 
