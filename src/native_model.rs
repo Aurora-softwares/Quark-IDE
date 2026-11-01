@@ -12,6 +12,25 @@ use std::{
 const MAX_SOURCE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_LAYOUT_BYTES: u64 = 1024 * 1024;
 
+/// Shared document-view selection used by the native IDE. The empty
+/// workspace is a real state, not a fake Start/Welcome document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentPage {
+    Empty,
+    Code,
+    Design,
+}
+
+impl DocumentPage {
+    pub fn available(self, has_source: bool, has_layout: bool) -> Self {
+        match self {
+            Self::Code if !has_source => Self::Empty,
+            Self::Design if !has_layout => Self::Empty,
+            _ => self,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
     pub path: PathBuf,
@@ -520,6 +539,21 @@ mod tests {
         assert_eq!(ControlKind::TabControl.category(), "Containers");
         assert_eq!(ControlKind::Button.category(), "Common Controls");
         assert_eq!(ControlKind::Image.category(), "Display");
+    }
+
+    #[test]
+    fn blank_workspace_never_displays_fake_code_or_designer_tabs() {
+        assert_eq!(DocumentPage::Code.available(false, false), DocumentPage::Empty);
+        assert_eq!(DocumentPage::Design.available(false, false), DocumentPage::Empty);
+        assert_eq!(DocumentPage::Empty.available(true, true), DocumentPage::Empty);
+    }
+
+    #[test]
+    fn document_tabs_require_their_matching_open_document() {
+        assert_eq!(DocumentPage::Code.available(true, false), DocumentPage::Code);
+        assert_eq!(DocumentPage::Design.available(false, true), DocumentPage::Design);
+        assert_eq!(DocumentPage::Code.available(false, true), DocumentPage::Empty);
+        assert_eq!(DocumentPage::Design.available(true, false), DocumentPage::Empty);
     }
 
     #[test]
