@@ -137,14 +137,20 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
 }
 
 pub fn load<T: DeserializeOwned>(path: &std::path::Path, text: &str) -> Result<T, String> {
-    if !matches!(path.extension().and_then(|e| e.to_str()), Some("hyyui" | "hyui")) {
+    if !matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("hyyui" | "hyui")
+    ) {
         return Err("Expected a Hydrogen .hyyui UI layout".into());
     }
     decode(text)
 }
 
 pub fn save<T: Serialize>(path: &std::path::Path, layout: &T) -> Result<String, String> {
-    if !matches!(path.extension().and_then(|e| e.to_str()), Some("hyyui" | "hyui")) {
+    if !matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("hyyui" | "hyui")
+    ) {
         return Err("Expected a Hydrogen .hyyui UI layout".into());
     }
     encode(layout)
