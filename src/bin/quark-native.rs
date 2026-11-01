@@ -43,7 +43,9 @@ use std::{
     rc::Rc,
 };
 
-use native_model::{ControlKind, Document, GeometryField, Layout, LayoutDocument, Workspace};
+use native_model::{
+    ControlKind, DockLayout, DockPane, Document, GeometryField, Layout, LayoutDocument, Workspace,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Page {
@@ -388,6 +390,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         1480.0,
         940.0,
     )?;
+    let dock_file = workspace_file().with_file_name("native-docking.json");
+    let dock = Rc::new(RefCell::new(
+        DockLayout::open(&dock_file).unwrap_or_default(),
+    ));
+    let saved_dock = *dock.borrow();
 
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
@@ -625,7 +632,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let inspector = ui.split_view(Orientation::Vertical)?;
     inspector.set_start(&solution_pane);
     inspector.set_end(&properties_pane);
-    inspector.set_position(430.0);
+    inspector.set_position(saved_dock.solution_height);
     inspector.set_min_sizes(190.0, 160.0);
     inspector.set_sizing(Sizing::fill());
 
@@ -675,21 +682,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let edit_and_output = ui.split_view(Orientation::Vertical)?;
     edit_and_output.set_start(&centre);
     edit_and_output.set_end(&bottom);
-    edit_and_output.set_position(640.0);
+    edit_and_output.set_position(saved_dock.editor_height);
     edit_and_output.set_min_sizes(260.0, 130.0);
     edit_and_output.set_sizing(Sizing::fill());
 
     let project_and_editor = ui.split_view(Orientation::Horizontal)?;
     project_and_editor.set_start(&edit_and_output);
     project_and_editor.set_end(&inspector);
-    project_and_editor.set_position(930.0);
+    project_and_editor.set_position(saved_dock.editor_width);
     project_and_editor.set_min_sizes(350.0, 220.0);
     project_and_editor.set_sizing(Sizing::fill());
 
     let main_workspace = ui.split_view(Orientation::Horizontal)?;
     main_workspace.set_start(&left_side);
     main_workspace.set_end(&project_and_editor);
-    main_workspace.set_position(210.0);
+    main_workspace.set_position(saved_dock.toolbox_width);
     main_workspace.set_min_sizes(160.0, 500.0);
     main_workspace.set_sizing(Sizing::fill());
     root.append(&main_workspace);
@@ -698,6 +705,49 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     status_bar.append(&status);
     status_bar.append(&workspace_name);
     root.append(&status_bar);
+
+    // Record native splitter movements so the professional pane layout
+    // survives closing and reopening Quark on each operating system.
+    for (splitter, pane) in [
+        (&main_workspace, DockPane::Toolbox),
+        (&project_and_editor, DockPane::Editor),
+        (&edit_and_output, DockPane::Output),
+        (&inspector, DockPane::Solution),
+    ] {
+        let dock = dock.clone();
+        let file = dock_file.clone();
+        let status = status.clone();
+        splitter.on_resize(move |position| {
+            let mut current = dock.borrow_mut();
+            if current.set_position(pane, position) {
+                if let Err(error) = current.save(&file) {
+                    status.set_text(&format!("Could not save window layout: {error}"));
+                }
+            }
+        });
+    }
+
+    let reset_window_layout: Rc<dyn Fn()> = Rc::new({
+        let dock = dock.clone();
+        let file = dock_file.clone();
+        let status = status.clone();
+        let main_workspace = main_workspace.clone();
+        let project_and_editor = project_and_editor.clone();
+        let edit_and_output = edit_and_output.clone();
+        let inspector = inspector.clone();
+        move || {
+            let restored = DockLayout::default();
+            *dock.borrow_mut() = restored;
+            main_workspace.set_position(restored.toolbox_width);
+            project_and_editor.set_position(restored.editor_width);
+            edit_and_output.set_position(restored.editor_height);
+            inspector.set_position(restored.solution_height);
+            match restored.save(&file) {
+                Ok(()) => status.set_text("Window layout reset to defaults."),
+                Err(error) => status.set_text(&format!("Could not save window layout: {error}")),
+            }
+        }
+    });
 
     // Native docking/tab selection is independent of the active document.
     let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
@@ -1311,6 +1361,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let left_panel = left_panel.clone();
         let status = status.clone();
         let window = window.clone();
+        let reset_window_layout = reset_window_layout.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_page(Page::Start),
             (0, 1) => {
@@ -1428,7 +1479,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (9, 0) => status.set_text("Native Options panel is planned."),
             (10, 0) => status.set_text("Native extension management is planned."),
-            (11, 0) => status.set_text("Window panes can be resized by dragging their separators."),
+            (11, 0) => reset_window_layout(),
             (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
             _ => {}
         }
