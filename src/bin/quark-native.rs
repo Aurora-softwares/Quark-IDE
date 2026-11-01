@@ -43,7 +43,7 @@ use std::{
     rc::Rc,
 };
 
-use native_model::{ControlKind, Document, Layout, LayoutDocument, Workspace};
+use native_model::{ControlKind, Document, GeometryField, Layout, LayoutDocument, Workspace};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Page {
@@ -605,6 +605,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&selected_name);
     properties_pane.append(&ui.label("Text")?);
     properties_pane.append(&selected_text);
+    let selected_x = ui.text_input("")?;
+    let selected_y = ui.text_input("")?;
+    let selected_width = ui.text_input("")?;
+    let selected_height = ui.text_input("")?;
+    for (title, field) in [
+        ("X position", &selected_x),
+        ("Y position", &selected_y),
+        ("Width", &selected_width),
+        ("Height", &selected_height),
+    ] {
+        properties_pane.append(&ui.label(title)?);
+        properties_pane.append(field);
+    }
     let delete_control = ui.button("Delete Selected Control")?;
     properties_pane.append(&delete_control);
     properties_pane.set_sizing(Sizing::fill());
@@ -1043,6 +1056,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         let selected_name = selected_name.clone();
         let selected_text = selected_text.clone();
+        let selected_x = selected_x.clone();
+        let selected_y = selected_y.clone();
+        let selected_width = selected_width.clone();
+        let selected_height = selected_height.clone();
         let status = status.clone();
         move |event| {
             let mut ide = state.borrow_mut();
@@ -1078,6 +1095,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         if let Some(control) = doc.layout.controls.iter().find(|c| c.id == id) {
                             selected_name.set_text(&control.name);
                             selected_text.set_text(&control.text);
+                            selected_x.set_text(&control.x.to_string());
+                            selected_y.set_text(&control.y.to_string());
+                            selected_width.set_text(&control.width.to_string());
+                            selected_height.set_text(&control.height.to_string());
                         }
                     }
                 }
@@ -1092,7 +1113,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         }
                     }
                 }
-                PointerPhase::Up => ide.drag = None,
+                PointerPhase::Up => {
+                    ide.drag = None;
+                    if let (Some(doc), Some(id)) = (&ide.layout, ide.selected_id) {
+                        if let Some(control) = doc.layout.controls.iter().find(|c| c.id == id) {
+                            selected_x.set_text(&control.x.to_string());
+                            selected_y.set_text(&control.y.to_string());
+                        }
+                    }
+                },
             }
             drop(ide);
             canvas.redraw();
@@ -1130,6 +1159,35 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             canvas.redraw();
         }
     });
+    // Property-grid edits update the same validated design model as dragging.
+    // Ignore incomplete numeric input while typing; invalid geometry is
+    // rejected without corrupting the layout on disk.
+    for (field, widget) in [
+        (GeometryField::X, &selected_x),
+        (GeometryField::Y, &selected_y),
+        (GeometryField::Width, &selected_width),
+        (GeometryField::Height, &selected_height),
+    ] {
+        let state = state.clone();
+        let canvas = canvas.clone();
+        let status = status.clone();
+        widget.on_change(move |text| {
+            let Ok(value) = text.trim().parse::<f32>() else {
+                return;
+            };
+            let mut ide = state.borrow_mut();
+            let selected_id = ide.selected_id;
+            let Some((layout, id)) = ide.layout.as_mut().zip(selected_id) else {
+                return;
+            };
+            let result = layout.layout.set_geometry(id, field, value);
+            drop(ide);
+            if let Err(error) = result {
+                status.set_text(&format!("Invalid control geometry: {error}"));
+            }
+            canvas.redraw();
+        });
+    }
     delete_control.on_click({
         let state = state.clone();
         let canvas = canvas.clone();
