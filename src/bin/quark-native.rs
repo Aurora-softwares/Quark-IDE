@@ -212,9 +212,35 @@ fn display_project_name(ide: &Ide) -> String {
 
 fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     let Some(project) = &ide.project else {
+        let Some(folder) = ide.workspace.folders.last() else {
+            return (vec![TreeItem::new("No solution loaded")], vec![]);
+        };
+        let mut files = fs::read_dir(folder)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.is_file()
+                    && matches!(
+                        path.extension().and_then(|ext| ext.to_str()),
+                        Some("hy" | "hyproj" | "quarkui")
+                    )
+            })
+            .collect::<Vec<_>>();
+        files.sort();
+        let children = files
+            .iter()
+            .map(|path| {
+                TreeItem::new(path.file_name().unwrap_or_default().to_string_lossy().to_string())
+            })
+            .collect();
         return (
-            vec![TreeItem::new("Open or create a Hydrogen project")],
-            vec![],
+            vec![TreeItem::new(format!("Folder '{}'", folder.display()))
+                .expanded(true)
+                .children(children)],
+            files,
         );
     };
     let mut paths = Vec::new();
@@ -251,6 +277,32 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
             .expanded(true)
             .children(children)],
         paths,
+    )
+}
+
+fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>) {
+    let (original, files) = file_items(ide);
+    let pattern = search.trim().to_lowercase();
+    if pattern.is_empty() {
+        return (original, files);
+    }
+    let matching: Vec<_> = files
+        .into_iter()
+        .filter(|path| path.to_string_lossy().to_lowercase().contains(&pattern))
+        .collect();
+    let children = matching
+        .iter()
+        .map(|path| {
+            TreeItem::new(path.file_name().unwrap_or_default().to_string_lossy().to_string())
+        })
+        .collect();
+    let label = ide.project
+        .as_ref()
+        .map(|p| format!("Solution '{}'", p.name))
+        .unwrap_or_else(|| "Folder".to_owned());
+    (
+        vec![TreeItem::new(label).expanded(true).children(children)],
+        matching,
     )
 }
 
