@@ -810,12 +810,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let data_view = ui.stack(Orientation::Vertical)?;
     data_view.append(&ui.label("DATA SOURCES")?);
     data_view.append(&ui.label("Data source integration is planned.")?);
-    let symbols_view = ui.stack(Orientation::Vertical)?;
-    symbols_view.append(&ui.label("SYMBOLS")?);
+    let symbols_view = ui.grid()?;
+    symbols_view.set_sizing(Sizing::fill());
+    symbols_view.set_column_track(0, Track::FILL);
+    symbols_view.set_row_track(0, Track::Fixed(24.0));
+    symbols_view.set_row_track(1, Track::FILL);
+    symbols_view.attach(&ui.label("SYMBOLS")?, GridCell::new(0, 0));
     let symbols_list = ui.list()?;
     symbols_list.set_sizing(Sizing::fill());
     symbols_list.set_items(&project_symbols(&state.borrow()));
-    symbols_view.append(&symbols_list);
+    symbols_view.attach(&symbols_list, GridCell::new(0, 1));
     let code_search_view = ui.stack(Orientation::Vertical)?;
     code_search_view.append(&ui.label("SEARCH")?);
     code_search_view.append(&ui.label("Use Search Solution to find project files.")?);
@@ -828,7 +832,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     left_side.set_sizing(Sizing::fill());
 
     let centre = ui.stack(Orientation::Vertical)?;
-    centre.set_spacing(6.0);
+    centre.set_spacing(0.0);
     let document_tabs = ui.stack(Orientation::Horizontal)?;
     document_tabs.set_spacing(3.0);
     let tab_offset = Rc::new(Cell::new(0_usize));
@@ -868,13 +872,48 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     editor.set_sizing(Sizing::fill());
     code.attach(&editor, GridCell::new(0, 0));
 
-    let canvas = ui.canvas()?;
-    canvas.set_sizing(Sizing::fill());
+    // Embedded designer: the upper pane is a window-shaped design surface.
+    // Below it, a dedicated XML editor opens alongside the visual designer.
     let designer = ui.grid()?;
     designer.set_sizing(Sizing::fill());
     designer.set_column_track(0, Track::FILL);
     designer.set_row_track(0, Track::FILL);
-    designer.attach(&canvas, GridCell::new(0, 0));
+    designer.set_row_track(1, Track::Fixed(7.0));
+    designer.set_row_track(2, Track::Fixed(260.0));
+
+    let design_surface = ui.stack(Orientation::Vertical)?;
+    design_surface.set_sizing(Sizing::fill());
+    design_surface.set_spacing(0.0);
+    let design_heading = ui.label("Visual Designer · Native window preview")?;
+    design_surface.append(&design_heading);
+    let canvas = ui.canvas()?;
+    canvas.set_sizing(Sizing::fill());
+    design_surface.append(&canvas);
+
+    let xml_pane = ui.grid()?;
+    xml_pane.set_sizing(Sizing::fill());
+    xml_pane.set_column_track(0, Track::FILL);
+    xml_pane.set_row_track(0, Track::Fixed(32.0));
+    xml_pane.set_row_track(1, Track::FILL);
+    let xml_tabs = ui.stack(Orientation::Horizontal)?;
+    xml_tabs.set_spacing(3.0);
+    let xml_visual_tab = ui.button("Design")?;
+    let xml_text_tab = ui.button("XML Source")?;
+    xml_tabs.append(&xml_visual_tab);
+    xml_tabs.append(&xml_text_tab);
+    xml_pane.attach(&xml_tabs, GridCell::new(0, 0));
+    let xml_editor = ui.text_area("")?;
+    xml_editor.set_sizing(Sizing::fill());
+    xml_pane.attach(&xml_editor, GridCell::new(0, 1));
+
+    let xml_divider = ui.canvas()?;
+    xml_divider.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(7.0)));
+    xml_divider.on_draw(|p| {
+        p.fill_rect(Rect::new(0.0, 2.0, p.width(), 3.0), Color::rgb(0x56, 0x57, 0x61));
+    });
+    designer.attach(&design_surface, GridCell::new(0, 0));
+    designer.attach(&xml_divider, GridCell::new(0, 1));
+    designer.attach(&xml_pane, GridCell::new(0, 2));
 
     pages.append(&empty_workspace);
     centre.append(&pages);
