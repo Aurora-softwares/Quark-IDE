@@ -1726,7 +1726,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let ide = state.borrow();
             let Some(layout) = ide.layout.as_ref().map(|doc| &doc.layout) else {
                 painter.text(
-                    "Open a Hydrogen .hyui or .hyui layout",
+                    "Open a Hydrogen .hyui layout",
                     Point::new(24.0, 36.0),
                     13.0,
                     Color::rgb(0xd0, 0xd0, 0xd4),
