@@ -781,7 +781,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let centre = ui.stack(Orientation::Vertical)?;
     centre.set_spacing(6.0);
     let document_tabs = ui.stack(Orientation::Horizontal)?;
-    document_tabs.set_spacing(8.0);
+    document_tabs.set_spacing(3.0);
+    let tab_offset = Rc::new(Cell::new(0_usize));
+    type TabSelector = Rc<dyn Fn(Page, PathBuf)>;
+    let tab_selector: Rc<RefCell<Option<TabSelector>>> = Rc::new(RefCell::new(None));
     let tab_accent = ui.canvas()?;
     tab_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(1.0)));
     tab_accent.on_draw(|painter| {
@@ -791,8 +794,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             Color::rgb(r, g, b),
         );
     });
-    let code_button = ui.button("Program.hy")?;
-    let design_button = ui.button("Main.hyyui [Design]")?;
 
     let pages = ui.stack(Orientation::Vertical)?;
     pages.set_sizing(Sizing::fill());
@@ -1156,6 +1157,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     // Only opened documents appear as tabs. An empty workspace contains no
     // fake editor or designer tabs and never replaces the launcher.
+    let show_page_redraw: Rc<RefCell<Option<Rc<dyn Fn(Page)>>>> =
+        Rc::new(RefCell::new(None));
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
         let state = state.clone();
         let centre = centre.clone();
@@ -1163,8 +1166,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let tab_accent = tab_accent.clone();
         let pages = pages.clone();
         let empty_workspace = empty_workspace.clone();
-        let code_button = code_button.clone();
-        let design_button = design_button.clone();
+        let ui = ui.clone();
+        let tab_offset = tab_offset.clone();
+        let tab_selector = tab_selector.clone();
+        let show_page_redraw = show_page_redraw.clone();
         let code = code.clone();
         let designer = designer.clone();
         let tab_mode = tab_mode.clone();
@@ -1172,11 +1177,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let side_tabs = side_tabs.clone();
         let left_panel = left_panel.clone();
         move |requested| {
-            let (page, has_code, has_design) = {
+            let (page, tabs, active_path) = {
                 let mut ide = state.borrow_mut();
                 let page = ide.display_page(requested);
                 ide.page = page;
-                (page, ide.document.is_some(), ide.layout.is_some())
+                let active_path = match page {
+                    Page::Code => ide.document.as_ref().map(|d| d.path.clone()),
+                    Page::Design => ide.layout.as_ref().map(|d| d.path.clone()),
+                    Page::Empty => None,
+                };
+                (page, ide.open_tabs(), active_path)
             };
             tab_mode.set(page);
             active_side_tab.set(0);
@@ -1186,13 +1196,82 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             left_panel(0);
             centre.clear();
             document_tabs.clear();
-            if has_code {
-                document_tabs.append(&code_button);
+
+            const VISIBLE_TABS: usize = 4;
+            let maximum_offset = tabs.len().saturating_sub(VISIBLE_TABS);
+            let offset = tab_offset.get().min(maximum_offset);
+            tab_offset.set(offset);
+            for (kind, path) in tabs.iter().skip(offset).take(VISIBLE_TABS) {
+                let filename = path.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.display().to_string());
+                let label = if active_path.as_ref() == Some(path) {
+                    format!("▏{filename}")
+                } else {
+                    filename
+                };
+                if let Ok(button) = ui.button(&label) {
+                    let kind = *kind;
+                    let path = path.clone();
+                    let selector = tab_selector.clone();
+                    button.on_click(move || {
+                        if let Some(open) = selector.borrow().as_ref() {
+                            open(kind, path.clone());
+                        }
+                    });
+                    document_tabs.append(&button);
+                }
             }
-            if has_design {
-                document_tabs.append(&design_button);
+            if tabs.len() > VISIBLE_TABS {
+                if let Ok(previous) = ui.button("‹") {
+                    previous.set_enabled(offset > 0);
+                    let shift = tab_offset.clone();
+                    let redraw = show_page_redraw.clone();
+                    let state = state.clone();
+                    previous.on_click(move || {
+                        shift.set(shift.get().saturating_sub(1));
+                        if let Some(redraw) = redraw.borrow().as_ref() {
+                            redraw(state.borrow().page);
+                        }
+                    });
+                    document_tabs.append(&previous);
+                }
+                if let Ok(next) = ui.button("›") {
+                    next.set_enabled(offset < maximum_offset);
+                    let shift = tab_offset.clone();
+                    let redraw = show_page_redraw.clone();
+                    let state = state.clone();
+                    next.on_click(move || {
+                        shift.set((shift.get() + 1).min(maximum_offset));
+                        if let Some(redraw) = redraw.borrow().as_ref() {
+                            redraw(state.borrow().page);
+                        }
+                    });
+                    document_tabs.append(&next);
+                }
             }
-            if has_code || has_design {
+            if !tabs.is_empty() {
+                if let Ok(all) = ui.combo_box() {
+                    let mut labels = vec!["▾ All tabs".to_owned()];
+                    labels.extend(tabs.iter().map(|(_, path)| {
+                        path.file_name().map(|name| name.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.display().to_string())
+                    }));
+                    all.set_items(&labels.iter().map(String::as_str).collect::<Vec<_>>());
+                    all.set_selected(0);
+                    let choices = tabs.clone();
+                    let selector = tab_selector.clone();
+                    all.on_select(move |selected| {
+                        if let Some((kind, path)) =
+                            selected.checked_sub(1).and_then(|index| choices.get(index))
+                        {
+                            if let Some(open) = selector.borrow().as_ref() {
+                                open(*kind, path.clone());
+                            }
+                        }
+                    });
+                    document_tabs.append(&all);
+                }
                 centre.append(&document_tabs);
                 centre.append(&tab_accent);
             }
@@ -1205,10 +1284,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             centre.append(&pages);
         }
     });
-    for (button, page) in [(&code_button, Page::Code), (&design_button, Page::Design)] {
-        let show_page = show_page.clone();
-        button.on_click(move || show_page(page));
-    }
+    *show_page_redraw.borrow_mut() = Some(show_page.clone());
     for (kind, button) in toolbox_buttons {
         let show_page = show_page.clone();
         let state = state.clone();
@@ -1318,6 +1394,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
         }
     });
+
+    *tab_selector.borrow_mut() = Some(Rc::new({
+        let open_source = open_source.clone();
+        let open_layout = open_layout.clone();
+        move |kind, path| match kind {
+            Page::Code => open_source(path),
+            Page::Design => open_layout(path),
+            Page::Empty => {},
+        }
+    }));
 
     let open_project: Rc<dyn Fn(PathBuf)> = Rc::new({
         let state = state.clone();
