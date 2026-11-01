@@ -594,7 +594,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         tab.set_sizing(
             Sizing::new()
                 .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
-                .height(Length::Fixed(native_shell::SIDE_TAB_HEIGHT)),
+                .height(Length::Fixed(native_shell::SIDE_TAB_HEIGHTS[index])),
         );
         tab.on_draw({
             let mode = tab_mode.clone();
