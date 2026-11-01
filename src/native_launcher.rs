@@ -115,14 +115,21 @@ impl History {
     }
 
     pub fn migrate_paths(&mut self, paths: &[PathBuf], now: u64) {
-        for path in paths.iter().rev() {
+        // Legacy paths are already most-recent first. Preserve that order
+        // without moving old items above existing pinned/native history.
+        for path in paths {
             let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
             if !self.recent.iter().any(|entry| entry.path == canonical)
                 && !self.hidden.contains(&canonical)
             {
-                self.remember(canonical, now);
+                self.recent.push(Recent {
+                    path: canonical,
+                    opened_at: now,
+                    pinned: false,
+                });
             }
         }
+        self.recent.truncate(MAX_RECENTS);
     }
 
     pub fn toggle_pin(&mut self, path: &Path) -> bool {
