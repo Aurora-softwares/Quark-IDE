@@ -269,7 +269,7 @@ impl Layout {
     }
 
     /// Apply a property-grid geometry change atomically. Invalid values
-    /// never leave a .quarkui layout unsaveable.
+    /// never leave a .hyyui layout unsaveable.
     pub fn set_geometry(
         &mut self,
         id: u64,
