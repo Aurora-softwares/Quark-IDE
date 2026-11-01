@@ -7,9 +7,9 @@ mod editor;
 #[cfg(test)]
 mod feature_tests;
 mod hydrogen;
-mod navigation;
 #[cfg(test)]
 mod native_model;
+mod navigation;
 mod panels;
 mod plugins;
 mod problems;
