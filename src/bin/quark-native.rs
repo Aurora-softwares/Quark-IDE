@@ -2544,7 +2544,9 @@ fn build(ui: &Ui) -> naui::Result<()> {
     let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;
     let handle = ui.clone();
     let launch_state = state.clone();
-    let ide_window = window.clone();
+    // The launcher buttons retain the launch closure. Avoid a strong
+    // Window -> button -> closure -> Window cycle across all backends.
+    let ide_window = window.downgrade();
     let launch: Rc<dyn Fn(native_start_window::Action) -> Result<(), String>> =
         Rc::new(move |action| {
             {
@@ -2568,7 +2570,10 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     }
                 }
             }
-            build_ide(&handle, launch_state.clone(), ide_window.clone())
+            let window = ide_window
+                .upgrade()
+                .ok_or("The Start Window has already closed")?;
+            build_ide(&handle, launch_state.clone(), window)
                 .map_err(|error| error.to_string())
         });
     native_start_window::show(
