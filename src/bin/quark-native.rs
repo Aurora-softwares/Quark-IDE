@@ -939,15 +939,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     designer.set_spacing(0.0);
     designer.set_sizing(Sizing::fill());
 
-    let design_surface = ui.stack(Orientation::Vertical)?;
+    let design_surface = ui.grid()?;
     design_surface.set_sizing(Sizing::fill());
-    design_surface.set_spacing(0.0);
+    design_surface.set_column_track(0, Track::FILL);
+    design_surface.set_row_track(0, Track::Fixed(26.0));
+    design_surface.set_row_track(1, Track::FILL);
     let design_heading = ui.label("Visual Designer · Native window preview")?;
-    design_surface.append(&design_heading);
+    design_surface.attach(&design_heading, GridCell::new(0, 0));
     let canvas = ui.canvas()?;
     canvas.set_sizing(Sizing::fill());
     let canvas_width = Rc::new(Cell::new(0.0_f64));
-    design_surface.append(&canvas);
+    design_surface.attach(&canvas, GridCell::new(0, 1));
     // Portable preview uses naui's actual native widgets on macOS (AppKit),
     // Windows (WinUI 3) and Linux (GTK). The canvas remains for flat layouts.
     let portable_preview = ui.stack(Orientation::Vertical)?;
@@ -1252,7 +1254,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let xml = layout.source().ok();
             drop(doc);
             design_surface.clear();
-            design_surface.append(&design_heading);
+            design_surface.attach(&design_heading, GridCell::new(0, 0));
             property_editor.clear();
             if is_native {
                 property_editor.append(&native_property_scroll);
@@ -1263,13 +1265,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         Err(error) => status.set_text(&format!("Cannot render Hydrogen UI: {error}")),
                     }
                 }
-                design_surface.append(&portable_scroll);
+                design_surface.attach(&portable_scroll, GridCell::new(0, 1));
                 if let Some(refresh) = reload_properties.borrow().as_ref() {
                     refresh();
                 }
             } else {
                 property_editor.append(&flat_properties);
-                design_surface.append(&canvas);
+                design_surface.attach(&canvas, GridCell::new(0, 1));
                 canvas.redraw();
             }
         }
