@@ -22,8 +22,8 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, GridCell, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect,
-    Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
+    Color, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect,
+    Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
 };
 use std::{
     cell::RefCell,
@@ -306,13 +306,8 @@ fn build(ui: &Ui) -> naui::Result<()> {
     // Professional IDE layout, deliberately different from the VS Code-style
     // activity bar. The centre owns documents/designers; tools and properties
     // live in persistent surrounding panes.
-    let root = ui.grid()?;
-    root.set_column_track(0, Track::Fixed(200.0));
-    root.set_column_track(1, Track::FILL);
-    root.set_column_track(2, Track::Fixed(320.0));
-    root.set_row_track(0, Track::FILL);
-    root.set_row_track(1, Track::Fixed(220.0));
-    root.set_row_track(2, Track::Fixed(28.0));
+    let root = ui.stack(Orientation::Vertical)?;
+    root.set_sizing(Sizing::fill());
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(9.0);
@@ -329,7 +324,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
         toolbox.append(&button);
     }
     toolbox.append(&ui.label("Select a control, then click the designer surface to place it.")?);
-    root.attach(&toolbox, GridCell::new(0, 0));
+    toolbox.set_sizing(Sizing::fill());
 
     let centre = ui.stack(Orientation::Vertical)?;
     centre.set_spacing(6.0);
@@ -410,7 +405,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
 
     pages.append(&start);
     centre.append(&pages);
-    root.attach(&centre, GridCell::new(1, 0));
+    centre.set_sizing(Sizing::fill());
 
     let inspector = ui.stack(Orientation::Vertical)?;
     inspector.set_spacing(9.0);
@@ -435,7 +430,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
     inspector.append(&selected_text);
     let delete_control = ui.button("Delete Selected Control")?;
     inspector.append(&delete_control);
-    root.attach(&inspector, GridCell::new(2, 0));
+    inspector.set_sizing(Sizing::fill());
 
     let bottom = ui.stack(Orientation::Vertical)?;
     bottom.append(&ui.label("OUTPUT  |  ERROR LIST  |  BUILD")?);
@@ -444,12 +439,39 @@ fn build(ui: &Ui) -> naui::Result<()> {
     output_scroll.set_sizing(Sizing::fill());
     output_scroll.set_child(&output);
     bottom.append(&output_scroll);
-    root.attach(&bottom, GridCell::new(1, 1));
+    bottom.set_sizing(Sizing::fill());
 
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
-    root.attach(&status, GridCell::new(0, 2));
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
-    root.attach(&workspace_name, GridCell::new(1, 2));
+
+    // Native resizable pane splitters: NSSplitView on macOS, GtkPaned on
+    // Linux and WinUI 3 Grid-based dividers on Windows.
+    let edit_and_output = ui.split_view(Orientation::Vertical)?;
+    edit_and_output.set_start(&centre);
+    edit_and_output.set_end(&bottom);
+    edit_and_output.set_position(640.0);
+    edit_and_output.set_min_sizes(260.0, 130.0);
+    edit_and_output.set_sizing(Sizing::fill());
+
+    let project_and_editor = ui.split_view(Orientation::Horizontal)?;
+    project_and_editor.set_start(&edit_and_output);
+    project_and_editor.set_end(&inspector);
+    project_and_editor.set_position(930.0);
+    project_and_editor.set_min_sizes(350.0, 220.0);
+    project_and_editor.set_sizing(Sizing::fill());
+
+    let main_workspace = ui.split_view(Orientation::Horizontal)?;
+    main_workspace.set_start(&toolbox);
+    main_workspace.set_end(&project_and_editor);
+    main_workspace.set_position(210.0);
+    main_workspace.set_min_sizes(160.0, 500.0);
+    main_workspace.set_sizing(Sizing::fill());
+    root.append(&main_workspace);
+
+    let status_bar = ui.stack(Orientation::Horizontal)?;
+    status_bar.append(&status);
+    status_bar.append(&workspace_name);
+    root.append(&status_bar);
 
     // Pane display is controlled separately from the persistent file model.
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
