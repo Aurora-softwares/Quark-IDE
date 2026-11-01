@@ -856,7 +856,10 @@ impl Quark {
         self.request_diagnostic_scan();
     }
     fn open(&mut self, path: PathBuf) {
-        if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") || path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
+        if matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("hyyui" | "hyui")
+        ) {
             self.open_designer(path);
             return;
         }
