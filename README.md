@@ -12,7 +12,7 @@ The production `quark-ide` executable remains the mature **egui/eframe** impleme
 
 ### Native startup window
 
-Unlike the legacy welcome tab, the new native frontend starts with a **separate small Start Window**. The heavyweight editor and IDE shell are created only after a workspace is selected. Its Visual Studio-inspired layout has searchable **Open recent** on the left, with pinned, today, this week, this month and older groups. Choose an entry and click **Open selected**; pin/unpin and remove buttons update persistent history without deleting project files.
+Unlike the legacy welcome tab, the new native frontend starts with a **separate small Start Window**. The heavyweight editor and IDE shell are created only after a workspace is selected. Its Visual Studio-inspired layout has searchable **Open recent** on the left, with pinned, today, this week, this month and older groups. Choose an entry and click **Open selected**; pin/unpin and remove buttons update persistent history without deleting project files. Click a recent-project group heading to collapse or expand it; searching reveals matching entries even in collapsed groups.
 
 **Get started** on the right includes **Clone a repository**, **Open a project or solution**, **Open a local folder**, **Create a new project**, and **Continue without code**. New projects use a separate native wizard for location, name and target. Cloning uses a separate wizard with GitHub HTTPS/SSH URL, destination and directory name; Git runs asynchronously, and successful clones open an available `.hyproj` or the cloned folder. Git must already be installed.
 
@@ -24,9 +24,9 @@ The full IDE follows the **Visual Studio Professional workspace structure**, not
 - A native icon toolbar plus a dense command strip with Debug/Release, architecture, startup project, Build, Run Without Debugging, pending debugger action and Publish
 - Compact left tool-window selector for Toolbox / Server Explorer / Data Sources; centre source/designer tabs; right searchable Solution Explorer and independently resizable Properties inspector
 - Resizable Output / Error List / Debug / Test Results / Find Results panes below the editor and a status bar
-- Separate visual designer canvas with selectable/movable Label, Button, Text Box and Check Box controls; `.quarkui` layout changes remain protected by conflict-aware saving
+- Separate visual designer canvas with selectable/movable Label, Button, Text Box and Check Box controls and editable X/Y/Width/Height in the native Properties panel; invalid geometry is rejected without corrupting `.quarkui` layouts, whose changes remain protected by conflict-aware saving
 
-**Implemented commands:** Build Solution, Rebuild Solution, Clean Solution, Start Without Debugging, and Bundle / Publish Binaries. They invoke the configured Hydrogen CLI on background threads. Set `QUARK_HYDROGEN_COMPILER` to the compiler executable or use `hy` on `PATH`. Build artifacts follow Hydrogen's current output planner under the project `.quark/build` directory. The Publish command requires an existing built binary and creates a ZIP in `.quark/publish`. It currently supports single-file executables, not directory-style Australis OS images.
+**Implemented commands:** Build Solution, Rebuild Solution, Clean Solution, Start Without Debugging, and Bundle / Publish Binaries. They invoke the configured Hydrogen CLI on background threads. Set `QUARK_HYDROGEN_COMPILER` to the compiler executable or use `hy` on `PATH`. Build artifacts follow Hydrogen's current output planner under the project `.quark/build` directory. The Publish command **builds the current project first**, refuses to package a stale binary after a failed build, and creates a ZIP in `.quark/publish` when the build succeeds. It currently supports single-file executables, not directory-style Australis OS images.
 
 The **Debug/Release and CPU target selectors are UI groundwork only** until the Hydrogen compiler provides verified configuration flags. The Start Debugging command is intentionally marked as not yet implemented. Do not confuse Run Without Debugging with source-level debugging.
 
