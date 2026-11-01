@@ -59,10 +59,33 @@ pub enum ControlKind {
     Button,
     TextField,
     Checkbox,
+    TextArea,
+    RadioButton,
+    ComboBox,
+    ListBox,
+    Slider,
+    ProgressBar,
+    Image,
+    Panel,
+    TabControl,
 }
 
 impl ControlKind {
-    pub const ALL: [Self; 4] = [Self::Label, Self::Button, Self::TextField, Self::Checkbox];
+    pub const ALL: [Self; 13] = [
+        Self::Label,
+        Self::Button,
+        Self::TextField,
+        Self::Checkbox,
+        Self::TextArea,
+        Self::RadioButton,
+        Self::ComboBox,
+        Self::ListBox,
+        Self::Slider,
+        Self::ProgressBar,
+        Self::Image,
+        Self::Panel,
+        Self::TabControl,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -70,6 +93,23 @@ impl ControlKind {
             Self::Button => "Button",
             Self::TextField => "Text Box",
             Self::Checkbox => "Check Box",
+            Self::TextArea => "Multiline Text Box",
+            Self::RadioButton => "Radio Button",
+            Self::ComboBox => "Combo Box",
+            Self::ListBox => "List Box",
+            Self::Slider => "Slider",
+            Self::ProgressBar => "Progress Bar",
+            Self::Image => "Image",
+            Self::Panel => "Panel",
+            Self::TabControl => "Tab Control",
+        }
+    }
+
+    pub fn category(self) -> &'static str {
+        match self {
+            Self::Panel | Self::TabControl => "Containers",
+            Self::Image | Self::ProgressBar => "Display",
+            _ => "Common Controls",
         }
     }
 
@@ -79,6 +119,15 @@ impl ControlKind {
             Self::Button => (130.0, 36.0),
             Self::TextField => (180.0, 36.0),
             Self::Checkbox => (160.0, 30.0),
+            Self::TextArea => (220.0, 100.0),
+            Self::RadioButton => (160.0, 30.0),
+            Self::ComboBox => (180.0, 36.0),
+            Self::ListBox => (200.0, 140.0),
+            Self::Slider => (200.0, 32.0),
+            Self::ProgressBar => (200.0, 24.0),
+            Self::Image => (160.0, 120.0),
+            Self::Panel => (300.0, 200.0),
+            Self::TabControl => (320.0, 220.0),
         }
     }
 }
@@ -446,6 +495,31 @@ mod tests {
         assert_eq!(read.solution_height, DockLayout::default().solution_height);
         fs::write(&path, "corrupt").unwrap();
         assert!(DockLayout::open(&path).is_err());
+    }
+
+    #[test]
+    fn all_designer_toolbox_controls_serialize_without_breaking_existing_layouts() {
+        assert!(ControlKind::ALL.len() >= 12);
+        let mut layout = Layout::default();
+        for kind in ControlKind::ALL {
+            assert!(!kind.title().is_empty());
+            let id = layout.add(kind, 5.0, 5.0).unwrap();
+            assert!(id > 0);
+        }
+        assert!(layout.validate().is_ok());
+        let serialized = serde_json::to_string(&layout).unwrap();
+        let reopened: Layout = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(layout, reopened);
+        assert!(serialized.contains("tab_control"));
+        assert!(serialized.contains("text_field"));
+    }
+
+    #[test]
+    fn toolbox_metadata_groups_containers_separately_from_regular_controls() {
+        assert_eq!(ControlKind::Panel.category(), "Containers");
+        assert_eq!(ControlKind::TabControl.category(), "Containers");
+        assert_eq!(ControlKind::Button.category(), "Common Controls");
+        assert_eq!(ControlKind::Image.category(), "Display");
     }
 
     #[test]
