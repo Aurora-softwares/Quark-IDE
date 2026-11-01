@@ -36,12 +36,15 @@ pub fn properties(source: &str, path: &[usize]) -> Result<(String, Vec<(String, 
 
 fn valid_name(name: &str) -> bool {
     let mut chars = name.chars();
-    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'))
 }
 
 fn escaped(value: &str) -> String {
-    value.replace('&', "&amp;")
+    value
+        .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
@@ -91,7 +94,9 @@ pub fn set_attribute(
         let mut cursor = 1;
         while cursor < opening.len() {
             let remaining = &opening[cursor..];
-            let Some(offset) = remaining.find(name) else { break };
+            let Some(offset) = remaining.find(name) else {
+                break;
+            };
             let pos = cursor + offset;
             let before = opening.as_bytes()[pos.saturating_sub(1)];
             let after = opening.as_bytes().get(pos + name.len()).copied();
@@ -99,19 +104,29 @@ pub fn set_attribute(
                 && after.is_some_and(|c| c.is_ascii_whitespace() || c == b'=')
             {
                 let mut value_start = pos + name.len();
-                while opening.as_bytes().get(value_start).is_some_and(|c| c.is_ascii_whitespace()) {
+                while opening
+                    .as_bytes()
+                    .get(value_start)
+                    .is_some_and(|c| c.is_ascii_whitespace())
+                {
                     value_start += 1;
                 }
                 if opening.as_bytes().get(value_start) == Some(&b'=') {
                     value_start += 1;
-                    while opening.as_bytes().get(value_start).is_some_and(|c| c.is_ascii_whitespace()) {
+                    while opening
+                        .as_bytes()
+                        .get(value_start)
+                        .is_some_and(|c| c.is_ascii_whitespace())
+                    {
                         value_start += 1;
                     }
                     let delimiter = opening.as_bytes().get(value_start).copied();
                     if matches!(delimiter, Some(b'"' | b'\'')) {
                         let first = value_start + 1;
-                        let last = opening[first..].find(delimiter.unwrap() as char)
-                            .ok_or("Unterminated Hydrogen UI attribute")? + first;
+                        let last = opening[first..]
+                            .find(delimiter.unwrap() as char)
+                            .ok_or("Unterminated Hydrogen UI attribute")?
+                            + first;
                         replacement = Some((first, last));
                         break;
                     }
@@ -124,7 +139,11 @@ pub fn set_attribute(
     if let Some((first, last)) = replacement {
         result.replace_range(start + first..start + last, &escaped);
     } else {
-        let point = if end > start && bytes[end - 1] == b'/' { end - 1 } else { end };
+        let point = if end > start && bytes[end - 1] == b'/' {
+            end - 1
+        } else {
+            end
+        };
         result.insert_str(point, &format!(" {name}=\"{escaped}\""));
     }
     Document::parse(&result).map_err(|e| e.to_string())?;
@@ -141,7 +160,16 @@ mod tests {
         assert!(changed.contains("text=\"New &amp; &lt;ready&gt;\""));
         assert!(changed.contains("onClick=\"Build\""));
         assert!(changed.contains(r#"<Input id="name" placeholder="Name"/>"#));
-        assert_eq!(properties(&changed, &[0, 0]).unwrap().1.iter().find(|(key, _)| key == "text").unwrap().1, "New & <ready>");
+        assert_eq!(
+            properties(&changed, &[0, 0])
+                .unwrap()
+                .1
+                .iter()
+                .find(|(key, _)| key == "text")
+                .unwrap()
+                .1,
+            "New & <ready>"
+        );
     }
     #[test]
     fn can_change_window_properties_and_add_missing_attributes() {
