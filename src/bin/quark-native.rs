@@ -2559,7 +2559,16 @@ fn build(ui: &Ui) -> naui::Result<()> {
                             .as_ref()
                             .and_then(|project| project.sources.first().cloned());
                         if let Some(source) = source {
-                            ide.open_source(&source)?;
+                            // A project may contain stale or missing source paths,
+                            // especially when moved between Linux and macOS.
+                            // Keep the project open and report the source issue
+                            // instead of aborting the entire IDE transition.
+                            if let Err(error) = ide.open_source(&source) {
+                                eprintln!(
+                                    "Quark: loaded project but could not open {}: {error}",
+                                    source.display()
+                                );
+                            }
                         }
                     }
                     native_start_window::Action::Folder(path) => {
