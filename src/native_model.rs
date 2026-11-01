@@ -336,7 +336,12 @@ impl LayoutDocument {
         let saved = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let layout: Layout = crate::ui_xml::load(&path, &saved)?;
         layout.validate()?;
-        Ok(Self { path, layout, saved, source_draft: None })
+        Ok(Self {
+            path,
+            layout,
+            saved,
+            source_draft: None,
+        })
     }
 
     /// Return the exact user's source draft, if one exists, otherwise current
