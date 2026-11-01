@@ -22,8 +22,8 @@ mod startup;
 mod storage;
 
 use naui::{
-    Color, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect,
-    Settings, Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
+    Color, Length, ListItem, MenuItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
+    Sizing, Theme, ToolbarIcon, ToolbarItem, TreeItem, Ui,
 };
 use std::{
     cell::RefCell,
@@ -85,7 +85,9 @@ impl Ide {
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
         if self.has_unsaved() {
-            return Err("Save open source and UI layout changes before replacing a document".into());
+            return Err(
+                "Save open source and UI layout changes before replacing a document".into(),
+            );
         }
         self.document = Some(Document::open(file)?);
         self.page = Page::Code;
