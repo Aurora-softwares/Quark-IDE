@@ -136,7 +136,8 @@ fn hydrogen_window_projection(text: &str) -> Result<SharedLayout, String> {
         return Err("Expected Hydrogen <Window> UI XML".into());
     }
     let attr_float = |key: &str, fallback: f32| -> f32 {
-        window.attribute(key)
+        window
+            .attribute(key)
             .and_then(|s| s.parse::<f32>().ok())
             .filter(|n| n.is_finite())
             .unwrap_or(fallback)
@@ -149,14 +150,22 @@ fn hydrogen_window_projection(text: &str) -> Result<SharedLayout, String> {
 
     let mut controls = Vec::new();
     let kinds: &[(&str, &str)] = &[
-        ("Label", "label"), ("Button", "button"),
-        ("Input", "text_field"), ("SearchInput", "text_field"),
-        ("NumberInput", "text_field"), ("CheckBox", "checkbox"),
-        ("Switch", "checkbox"), ("TextArea", "text_area"),
-        ("RadioGroup", "radio_button"), ("Select", "combo_box"),
-        ("ListBox", "list_box"), ("Table", "list_box"),
-        ("Slider", "slider"), ("ProgressBar", "progress_bar"),
-        ("Image", "image"), ("Tabs", "tab_control"),
+        ("Label", "label"),
+        ("Button", "button"),
+        ("Input", "text_field"),
+        ("SearchInput", "text_field"),
+        ("NumberInput", "text_field"),
+        ("CheckBox", "checkbox"),
+        ("Switch", "checkbox"),
+        ("TextArea", "text_area"),
+        ("RadioGroup", "radio_button"),
+        ("Select", "combo_box"),
+        ("ListBox", "list_box"),
+        ("Table", "list_box"),
+        ("Slider", "slider"),
+        ("ProgressBar", "progress_bar"),
+        ("Image", "image"),
+        ("Tabs", "tab_control"),
         ("Panel", "panel"),
     ];
 
@@ -166,14 +175,21 @@ fn hydrogen_window_projection(text: &str) -> Result<SharedLayout, String> {
         }
         // A tab control has multiple pages in the document but only one is
         // visible at runtime. The preview defaults to its selected page.
-        let hidden_tab = node.ancestors()
+        let hidden_tab = node
+            .ancestors()
             .find(|ancestor| ancestor.is_element() && ancestor.tag_name().name() == "Tab")
             .and_then(|tab| {
                 let tabs = tab.parent_element()?;
-                if tabs.tag_name().name() != "Tabs" { return None; }
-                let selected = tabs.attribute("value")
-                    .and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
-                let index = tabs.children().filter(|n| n.is_element() && n.tag_name().name() == "Tab")
+                if tabs.tag_name().name() != "Tabs" {
+                    return None;
+                }
+                let selected = tabs
+                    .attribute("value")
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(0);
+                let index = tabs
+                    .children()
+                    .filter(|n| n.is_element() && n.tag_name().name() == "Tab")
                     .position(|candidate| candidate == tab)?;
                 Some(index != selected)
             })
@@ -199,10 +215,18 @@ fn hydrogen_window_projection(text: &str) -> Result<SharedLayout, String> {
             "slider" | "progress_bar" | "text_field" => 210.0,
             _ => 150.0,
         };
-        let w = suggested_width.min(col_width - 8.0).min(available_width).max(20.0);
-        let h = if *kind == "progress_bar" { 24.0 } else { 32.0_f32.min(available_height) };
+        let w = suggested_width
+            .min(col_width - 8.0)
+            .min(available_width)
+            .max(20.0);
+        let h = if *kind == "progress_bar" {
+            24.0
+        } else {
+            32.0_f32.min(available_height)
+        };
         let name = node.attribute("id").unwrap_or(node.tag_name().name());
-        let text = node.attribute("text")
+        let text = node
+            .attribute("text")
             .or_else(|| node.attribute("title"))
             .or_else(|| node.attribute("placeholder"))
             .unwrap_or(name);
@@ -218,8 +242,14 @@ fn hydrogen_window_projection(text: &str) -> Result<SharedLayout, String> {
         });
     }
     Ok(SharedLayout {
-        version: window.attribute("version").and_then(|s| s.parse().ok()).unwrap_or(1),
-        title: window.attribute("title").unwrap_or("Hydrogen Window").to_owned(),
+        version: window
+            .attribute("version")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1),
+        title: window
+            .attribute("title")
+            .unwrap_or("Hydrogen Window")
+            .to_owned(),
         width,
         height,
         controls,
@@ -236,9 +266,8 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
     };
     if root.starts_with("<Window ") || root.starts_with("<Window>") {
         let projected = hydrogen_window_projection(text)?;
-        return serde_json::from_value(
-            serde_json::to_value(projected).map_err(|e| e.to_string())?,
-        ).map_err(|e| e.to_string());
+        return serde_json::from_value(serde_json::to_value(projected).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string());
     }
     if !root.starts_with("<HydrogenUI ") && !root.starts_with("<HydrogenUI>") {
         return Err("Expected Hydrogen <Window> or Quark <HydrogenUI> XML root".into());
@@ -250,20 +279,14 @@ pub fn decode<T: DeserializeOwned>(text: &str) -> Result<T, String> {
 }
 
 pub fn load<T: DeserializeOwned>(path: &std::path::Path, text: &str) -> Result<T, String> {
-    if !matches!(
-        path.extension().and_then(|e| e.to_str()),
-        Some("hyui")
-    ) {
+    if !matches!(path.extension().and_then(|e| e.to_str()), Some("hyui")) {
         return Err("Expected a Hydrogen .hyui UI layout".into());
     }
     decode(text)
 }
 
 pub fn save<T: Serialize>(path: &std::path::Path, layout: &T) -> Result<String, String> {
-    if !matches!(
-        path.extension().and_then(|e| e.to_str()),
-        Some("hyui")
-    ) {
+    if !matches!(path.extension().and_then(|e| e.to_str()), Some("hyui")) {
         return Err("Expected a Hydrogen .hyui UI layout".into());
     }
     encode(layout)
@@ -337,7 +360,10 @@ mod tests {
         assert_eq!(parsed.title, "Hydrogen Studio");
         assert_eq!(parsed.width, 1120.0);
         assert!(parsed.controls.iter().any(|c| c.name == "build"));
-        assert!(parsed.controls.iter().any(|c| c.text == "Aurora & Hydrogen"));
+        assert!(parsed
+            .controls
+            .iter()
+            .any(|c| c.text == "Aurora & Hydrogen"));
         assert!(!parsed.controls.iter().any(|c| c.name == "hidden"));
     }
 
