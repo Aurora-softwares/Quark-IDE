@@ -746,6 +746,42 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
                 .height(Length::Fixed(native_shell::SIDE_TAB_HEIGHTS[index])),
         );
+        // GTK4 draws the complete word rotated, preserving its natural
+        // typography. The generic canvas fallback remains for other OSes.
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let drawing_area = tab.native_widget()
+                .downcast::<gtk4::DrawingArea>()
+                .expect("naui GTK Canvas must use GtkDrawingArea");
+            let mode = tab_mode.clone();
+            let active = active_side_tab.clone();
+            drawing_area.set_draw_func(move |_, cairo, _width, height| {
+                let titles = if mode.get() == Page::Code {
+                    &native_shell::CODE_SIDE_TABS[..]
+                } else {
+                    &native_shell::DESIGN_SIDE_TABS[..]
+                };
+                let title = titles.get(index).copied().unwrap_or("");
+                if active.get() == index {
+                    cairo.set_source_rgb(0.53, 0.49, 0.64);
+                    cairo.rectangle(0.0, 0.0, 2.0, f64::from(height));
+                    let _ = cairo.fill();
+                }
+                cairo.set_source_rgb(0.78, 0.78, 0.81);
+                cairo.select_font_face(
+                    "Sans", gtk4::cairo::FontSlant::Normal,
+                    gtk4::cairo::FontWeight::Normal,
+                );
+                cairo.set_font_size(10.0);
+                cairo.translate(8.0, f64::from(height) - 9.0);
+                cairo.rotate(-std::f64::consts::FRAC_PI_2);
+                cairo.move_to(0.0, 0.0);
+                let _ = cairo.show_text(title);
+            });
+        }
+        #[cfg(not(target_os = "linux"))]
         tab.on_draw({
             let mode = tab_mode.clone();
             let active = active_side_tab.clone();
@@ -755,24 +791,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 } else {
                     &native_shell::DESIGN_SIDE_TABS
                 };
-                let Some(title) = names.get(index) else {
-                    return;
-                };
-                let y_start = 4.0;
-                let line_height = 10.0;
+                let Some(title) = names.get(index) else { return; };
                 if active.get() == index {
-                    p.fill_rect(
-                        Rect::new(0.0, 0.0, 2.0, p.height()),
-                        Color::rgb(0x8a, 0x81, 0xa4),
-                    );
+                    p.fill_rect(Rect::new(0.0, 0.0, 2.0, p.height()), Color::rgb(0x8a, 0x81, 0xa4));
                 }
                 for (i, letter) in title.chars().enumerate() {
-                    p.text(
-                        &letter.to_string(),
-                        Point::new(5.0, y_start + i as f64 * line_height),
-                        9.0,
-                        Color::rgb(0xc5, 0xc5, 0xc9),
-                    );
+                    p.text(&letter.to_string(), Point::new(6.0, 7.0 + i as f64 * 10.0), 9.0, Color::rgb(0xc5, 0xc5, 0xc9));
                 }
             }
         });
