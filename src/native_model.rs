@@ -70,7 +70,7 @@ impl Document {
     }
 }
 
-/// Matches Quark's existing version-1 .quarkui schema exactly.
+/// Matches the Hydrogen UI version-1 control schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlKind {
@@ -329,10 +329,10 @@ impl LayoutDocument {
         let path = path.canonicalize().map_err(|e| e.to_string())?;
         let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
         if !metadata.is_file() || metadata.len() > MAX_LAYOUT_BYTES {
-            return Err("Not a valid .quarkui file or exceeds 1 MiB".into());
+            return Err("Not a valid .hyyui file or exceeds 1 MiB".into());
         }
         let saved = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let layout: Layout = serde_json::from_str(&saved).map_err(|e| e.to_string())?;
+        let layout: Layout = crate::ui_xml::load(&path, &saved)?;
         layout.validate()?;
         Ok(Self {
             path,
@@ -342,12 +342,12 @@ impl LayoutDocument {
     }
 
     pub fn dirty(&self) -> bool {
-        serde_json::to_string_pretty(&self.layout).is_ok_and(|current| current != self.saved)
+        crate::ui_xml::save(&self.path, &self.layout).is_ok_and(|current| current != self.saved)
     }
 
     pub fn save(&mut self) -> Result<(), String> {
         self.layout.validate()?;
-        let next = serde_json::to_string_pretty(&self.layout).map_err(|e| e.to_string())?;
+        let next = crate::ui_xml::save(&self.path, &self.layout)?;
         crate::storage::save_checked(&self.path, &next, &self.saved)
             .map_err(|e| format!("Layout was modified externally or cannot be saved: {e:?}"))?;
         self.saved = next;
@@ -641,14 +641,14 @@ mod tests {
     }
 
     #[test]
-    fn layout_is_compatible_with_existing_quarkui_file() {
+    fn layout_round_trips_hydrogen_hyyui_xml() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("Main.quarkui");
+        let path = directory.path().join("Main.hyyui");
         let mut layout = Layout::default();
         let id = layout.add(ControlKind::Button, 120.0, 90.0).unwrap();
         assert_eq!(layout.hit_test(125.0, 96.0), Some(id));
         assert!(layout.position(id, 300.0, 120.0));
-        fs::write(&path, serde_json::to_string_pretty(&layout).unwrap()).unwrap();
+        fs::write(&path, crate::ui_xml::encode(&layout).unwrap()).unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.controls[0].text = "Launch".into();
         document.save().unwrap();
@@ -690,10 +690,10 @@ mod tests {
     #[test]
     fn layout_save_refuses_external_modification() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Main.quarkui");
+        let path = dir.path().join("Main.hyyui");
         fs::write(
             &path,
-            serde_json::to_string_pretty(&Layout::default()).unwrap(),
+            crate::ui_xml::encode(&Layout::default()).unwrap(),
         )
         .unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
