@@ -95,6 +95,15 @@ pub struct Control {
     pub height: f32,
 }
 
+/// Editable geometry fields shown in Quark's native Properties window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GeometryField {
+    X,
+    Y,
+    Width,
+    Height,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Layout {
     pub version: u32,
@@ -189,6 +198,35 @@ impl Layout {
                     && y <= control.y + control.height
             })
             .map(|control| control.id)
+    }
+
+    /// Apply a property-grid geometry change atomically. Invalid values
+    /// never leave a .quarkui layout unsaveable.
+    pub fn set_geometry(
+        &mut self,
+        id: u64,
+        field: GeometryField,
+        value: f32,
+    ) -> Result<(), String> {
+        if !value.is_finite() {
+            return Err("Geometry values must be finite numbers".into());
+        }
+        let control = self.controls.iter_mut().find(|control| control.id == id)
+            .ok_or("Select a control first")?;
+        let previous = control.clone();
+        match field {
+            GeometryField::X => control.x = value,
+            GeometryField::Y => control.y = value,
+            GeometryField::Width => control.width = value,
+            GeometryField::Height => control.height = value,
+        }
+        if let Err(error) = self.validate() {
+            if let Some(control) = self.controls.iter_mut().find(|control| control.id == id) {
+                *control = previous;
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub fn position(&mut self, id: u64, x: f32, y: f32) -> bool {
@@ -303,6 +341,36 @@ mod tests {
         assert!(doc.save().is_err());
         assert_eq!(doc.text, "unsaved");
         assert_eq!(fs::read_to_string(path).unwrap(), "external");
+    }
+
+    #[test]
+    fn property_grid_edits_control_position_and_dimensions() {
+        let mut layout = Layout::default();
+        let id = layout.add(ControlKind::Button, 20.0, 30.0).unwrap();
+        layout.set_geometry(id, GeometryField::X, 80.0).unwrap();
+        layout.set_geometry(id, GeometryField::Y, 90.0).unwrap();
+        layout.set_geometry(id, GeometryField::Width, 205.0).unwrap();
+        layout.set_geometry(id, GeometryField::Height, 48.0).unwrap();
+        let control = &layout.controls[0];
+        assert_eq!((control.x, control.y, control.width, control.height), (80.0, 90.0, 205.0, 48.0));
+        assert!(layout.validate().is_ok());
+    }
+
+    #[test]
+    fn invalid_geometry_edits_preserve_the_original_control() {
+        let mut layout = Layout::default();
+        let id = layout.add(ControlKind::TextField, 30.0, 30.0).unwrap();
+        let original = layout.controls[0].clone();
+        for (field, value) in [
+            (GeometryField::Width, 10.0),
+            (GeometryField::Width, 10000.0),
+            (GeometryField::X, -1.0),
+            (GeometryField::Y, f32::NAN),
+            (GeometryField::Height, f32::INFINITY),
+        ] {
+            assert!(layout.set_geometry(id, field, value).is_err());
+            assert_eq!(layout.controls[0], original);
+        }
     }
 
     #[test]
