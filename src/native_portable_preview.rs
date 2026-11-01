@@ -24,7 +24,11 @@ fn render_children(
     path: &[usize],
     on_select: &SelectElement,
 ) -> Result<(), String> {
-    for (index, child) in node.children().filter(|child| child.is_element()).enumerate() {
+    for (index, child) in node
+        .children()
+        .filter(|child| child.is_element())
+        .enumerate()
+    {
         let mut next = path.to_vec();
         next.push(index);
         render_node(ui, parent, child, next, on_select)?;
@@ -45,7 +49,8 @@ fn render_node(
     let kind = node.tag_name().name();
     if matches!(kind, "Timer" | "Dialog") {
         // Non-visual nodes still appear as editable entries.
-        let choose = ui.button(&format!("Edit {}", node_title(node)))
+        let choose = ui
+            .button(&format!("Edit {}", node_title(node)))
             .map_err(|e| e.to_string())?;
         let selected = on_select.clone();
         choose.on_click(move || selected(path.clone()));
@@ -56,7 +61,8 @@ fn render_node(
     row.set_spacing(3.0);
     // Every element, including labels and layout containers, has a selection
     // target. Buttons additionally select when their native face is clicked.
-    let choose = ui.button(&format!("◇ {}", node_title(node)))
+    let choose = ui
+        .button(&format!("◇ {}", node_title(node)))
         .map_err(|e| e.to_string())?;
     let selected = on_select.clone();
     let selected_path = path.clone();
@@ -66,59 +72,100 @@ fn render_node(
     match kind {
         "ColumnPanel" | "Panel" | "Tab" | "ScrollView" | "Window" => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            children.set_spacing(node.attribute("gap").and_then(|v| v.parse::<f64>().ok()).unwrap_or(6.0).clamp(0.0, 48.0));
+            children.set_spacing(
+                node.attribute("gap")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(6.0)
+                    .clamp(0.0, 48.0),
+            );
             render_children(ui, &children, node, &path, on_select)?;
             row.append(&children);
         }
         "RowPanel" | "GridPanel" | "MenuBar" | "Menu" => {
-            let children = ui.stack(Orientation::Horizontal).map_err(|e| e.to_string())?;
+            let children = ui
+                .stack(Orientation::Horizontal)
+                .map_err(|e| e.to_string())?;
             children.set_spacing(8.0);
             render_children(ui, &children, node, &path, on_select)?;
             row.append(&children);
         }
         "Tabs" => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            let selected = node.attribute("value").and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+            let selected = node
+                .attribute("value")
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
             // Render the selected tab, but list the remaining tab headers so
             // their attributes can also be edited through Properties.
-            for (i, tab) in node.children().filter(|n| n.is_element() && n.tag_name().name() == "Tab").enumerate() {
-                let title = ui.button(tab.attribute("title").unwrap_or("Page")).map_err(|e| e.to_string())?;
+            for (i, tab) in node
+                .children()
+                .filter(|n| n.is_element() && n.tag_name().name() == "Tab")
+                .enumerate()
+            {
+                let title = ui
+                    .button(tab.attribute("title").unwrap_or("Page"))
+                    .map_err(|e| e.to_string())?;
                 let mut tab_path = path.clone();
-                let position = node.children().filter(|n| n.is_element()).position(|n| n == tab).unwrap_or(i);
+                let position = node
+                    .children()
+                    .filter(|n| n.is_element())
+                    .position(|n| n == tab)
+                    .unwrap_or(i);
                 tab_path.push(position);
                 let select = on_select.clone();
                 title.on_click(move || select(tab_path.clone()));
                 children.append(&title);
                 if i == selected {
-                    render_children(ui, &children, tab, &{
-                        let mut p = path.clone();
-                        p.push(position);
-                        p
-                    }, on_select)?;
+                    render_children(
+                        ui,
+                        &children,
+                        tab,
+                        &{
+                            let mut p = path.clone();
+                            p.push(position);
+                            p
+                        },
+                        on_select,
+                    )?;
                 }
             }
             row.append(&children);
         }
-        "Label" => row.append(&ui.label(node.attribute("text").unwrap_or("Label")).map_err(|e| e.to_string())?),
+        "Label" => row.append(
+            &ui.label(node.attribute("text").unwrap_or("Label"))
+                .map_err(|e| e.to_string())?,
+        ),
         "Button" | "MenuItem" => {
-            let button = ui.button(node.attribute("text").unwrap_or("Button")).map_err(|e| e.to_string())?;
+            let button = ui
+                .button(node.attribute("text").unwrap_or("Button"))
+                .map_err(|e| e.to_string())?;
             let selected = on_select.clone();
             button.on_click(move || selected(path.clone()));
             row.append(&button);
         }
         "Input" | "NumberInput" | "SearchInput" => {
-            let input = ui.text_input(node.attribute("text").unwrap_or("")).map_err(|e| e.to_string())?;
+            let input = ui
+                .text_input(node.attribute("text").unwrap_or(""))
+                .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
             input.set_sizing(Sizing::new().width(Length::Fixed(190.0)));
             row.append(&input);
         }
         "TextArea" => {
-            let input = ui.text_area(node.attribute("text").unwrap_or("")).map_err(|e| e.to_string())?;
-            input.set_sizing(Sizing::new().width(Length::Fixed(240.0)).height(Length::Fixed(88.0)));
+            let input = ui
+                .text_area(node.attribute("text").unwrap_or(""))
+                .map_err(|e| e.to_string())?;
+            input.set_sizing(
+                Sizing::new()
+                    .width(Length::Fixed(240.0))
+                    .height(Length::Fixed(88.0)),
+            );
             row.append(&input);
         }
         "CheckBox" | "Switch" => {
-            let input = ui.checkbox(node.attribute("text").unwrap_or("Check box")).map_err(|e| e.to_string())?;
+            let input = ui
+                .checkbox(node.attribute("text").unwrap_or("Check box"))
+                .map_err(|e| e.to_string())?;
             input.set_checked(node.attribute("checked") == Some("true"));
             row.append(&input);
         }
@@ -153,12 +200,19 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
     let window = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     window.set_spacing(8.0);
     window.set_padding(Padding::all(12.0));
-    let width = root.attribute("width").and_then(|v| v.parse::<f64>().ok())
-        .unwrap_or(720.0).clamp(320.0, 1400.0);
+    let width = root
+        .attribute("width")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(720.0)
+        .clamp(320.0, 1400.0);
     window.set_sizing(Sizing::new().width(Length::Fixed(width)));
-    outer.append(&ui.label(root.attribute("title").unwrap_or("Hydrogen Window"))
-        .map_err(|e| e.to_string())?);
-    let choose_window = ui.button("Select window properties").map_err(|e| e.to_string())?;
+    outer.append(
+        &ui.label(root.attribute("title").unwrap_or("Hydrogen Window"))
+            .map_err(|e| e.to_string())?,
+    );
+    let choose_window = ui
+        .button("Select window properties")
+        .map_err(|e| e.to_string())?;
     let selected = on_select.clone();
     choose_window.on_click(move || selected(Vec::new()));
     window.append(&choose_window);
