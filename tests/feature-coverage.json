@@ -1725,6 +1725,34 @@
         "linux",
         "darwin"
       ]
+    },
+    {
+      "id": "native-document-model",
+      "category": "Native platform",
+      "feature": "Native document open, atomic save and external modification safety",
+      "tests": [
+        "native_model::tests::source_save_rejects_concurrent_modification_and_keeps_text",
+        "native_model::tests::source_round_trip_can_open_edit_and_save"
+      ]
+    },
+    {
+      "id": "native-layout-model",
+      "category": "Native platform",
+      "feature": "Cross-platform visual designer layout compatibility, hit testing, persistence and validation",
+      "tests": [
+        "native_model::tests::layout_is_compatible_with_existing_quarkui_file",
+        "native_model::tests::untrusted_layouts_are_bounded_and_invalid_geometry_is_rejected",
+        "native_model::tests::layout_save_refuses_external_modification"
+      ]
+    },
+    {
+      "id": "native-workspace-model",
+      "category": "Native platform",
+      "feature": "Native workspace recent items can be reopened without duplication and with persistent state",
+      "tests": [
+        "native_model::tests::native_workspace_recent_items_are_deduplicated_and_persisted",
+        "native_model::tests::source_round_trip_can_open_edit_and_save"
+      ]
     }
   ]
 }
