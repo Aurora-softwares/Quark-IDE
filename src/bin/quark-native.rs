@@ -428,6 +428,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let pane_path = workspace_file().with_file_name("native-pane-layout.json");
     let preferred = native_layout::PaneSizes::open(&pane_path).unwrap_or_default();
     let pane_sizes = Rc::new(Cell::new(preferred));
+    let viewport_width = Rc::new(Cell::new(1480.0));
+    let viewport_height = Rc::new(Cell::new(869.0));
+    let reflow: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
     // The familiar Visual Studio command strip lives below the native menu.
     // Configuration and architecture are visible now; native compiler flag
@@ -456,27 +459,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     command_strip.append(&run_button);
     command_strip.append(&debug_button);
     command_strip.append(&publish_button);
-    // A small orbital-spectrum accent: cyan Hydrogen → blue electron
-    // orbit → violet Quark. Leave the native OS controls untouched.
+    // Subtle, neutral toolbar separator, also used to observe viewport width.
     let command_area = ui.stack(Orientation::Vertical)?;
     let brand_rule = ui.canvas()?;
-    brand_rule.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(4.0)));
-    brand_rule.on_draw(|painter| {
-        let width = painter.width();
-        let height = painter.height();
-        for (segment, color) in [
-            native_shell::HYDROGEN_CYAN,
-            native_shell::ORBIT_BLUE,
-            native_shell::QUARK_VIOLET,
-        ]
-        .iter()
-        .enumerate()
-        {
-            let (r, g, b) = *color;
+    brand_rule.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(1.0)));
+    brand_rule.on_draw({
+        let viewport_width = viewport_width.clone();
+        let reflow = reflow.clone();
+        move |painter| {
             painter.fill_rect(
-                Rect::new(width * segment as f64 / 3.0, 0.0, width / 3.0 + 1.0, height),
-                Color::rgb(r, g, b),
+                Rect::new(0.0, 0.0, painter.width(), painter.height()),
+                Color::rgb(0x40, 0x44, 0x4e),
             );
+            if (viewport_width.get() - painter.width()).abs() > 0.5 {
+                viewport_width.set(painter.width());
+                if let Some(update) = reflow.borrow().as_ref() {
+                    update();
+                }
+            }
         }
     });
     command_area.append(&brand_rule);
@@ -542,19 +542,23 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
-    // Narrow native tool-window tabs, with vertically written captions.
-    // They are keyboard-focusable platform buttons, not a VS Code activity bar.
+    // Compact, keyboard-focusable tool tabs anchored at the top-left.
     let left_rail = ui.stack(Orientation::Vertical)?;
     left_rail.set_spacing(0.0);
     left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
     let toolbox_tab = ui.button(native_shell::SIDE_TABS[0].1)?;
     let server_tab = ui.button(native_shell::SIDE_TABS[1].1)?;
     let data_tab = ui.button(native_shell::SIDE_TABS[2].1)?;
-    for (button, tab) in [
+    let active_side_tab = Rc::new(Cell::new(0_usize));
+    let mut side_indicators = Vec::new();
+    for (index, (button, tab)) in [
         (&toolbox_tab, native_shell::SIDE_TABS[0]),
         (&server_tab, native_shell::SIDE_TABS[1]),
         (&data_tab, native_shell::SIDE_TABS[2]),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         button.set_sizing(
             Sizing::new()
                 .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH - 3.0))
@@ -569,12 +573,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 .width(Length::Fixed(3.0))
                 .height(Length::Fixed(tab.2)),
         );
-        let selected = tab.0 == "Toolbox";
+        let active = active_side_tab.clone();
         indicator.on_draw(move |painter| {
-            let (r, g, b) = if selected {
-                native_shell::QUARK_VIOLET
+            let (r, g, b) = if active.get() == index {
+                (0x84, 0x78, 0xa1)
             } else {
-                native_shell::QUIET_SURFACE
+                (0x39, 0x3b, 0x42)
             };
             painter.fill_rect(
                 Rect::new(0.0, 0.0, painter.width(), painter.height()),
@@ -582,9 +586,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             );
         });
         tab_row.append(&indicator);
+        side_indicators.push(indicator);
         tab_row.append(button);
         left_rail.append(&tab_row);
     }
+    // Fill the unused rail height and detect window-height changes.
+    let rail_probe = ui.canvas()?;
+    rail_probe.set_sizing(Sizing::new().width(Length::Fixed(1.0)).height(Length::Fill));
+    rail_probe.on_draw({
+        let viewport_height = viewport_height.clone();
+        let reflow = reflow.clone();
+        move |painter| {
+            let measured = painter.height() + 3.0 * 32.0;
+            if (viewport_height.get() - measured).abs() > 0.5 {
+                viewport_height.set(measured);
+                if let Some(update) = reflow.borrow().as_ref() {
+                    update();
+                }
+            }
+        }
+    });
+    left_rail.append(&rail_probe);
     let server_view = ui.stack(Orientation::Vertical)?;
     server_view.append(&ui.label("SERVER EXPLORER")?);
     server_view.append(&ui.label("Server connections can be added here in a future update.")?);
@@ -604,9 +626,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let document_tabs = ui.stack(Orientation::Horizontal)?;
     document_tabs.set_spacing(8.0);
     let tab_accent = ui.canvas()?;
-    tab_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(3.0)));
+    tab_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(1.0)));
     tab_accent.on_draw(|painter| {
-        let (r, g, b) = native_shell::HYDROGEN_CYAN;
+        let (r, g, b) = (0x44, 0x4a, 0x55);
         painter.fill_rect(
             Rect::new(0.0, 0.0, painter.width(), painter.height()),
             Color::rgb(r, g, b),
@@ -714,7 +736,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     inspector.set_sizing(Sizing::fill());
     inspector.set_start(&solution_pane);
     inspector.set_end(&properties_pane);
-    inspector.set_position(940.0 - preferred.properties - 145.0);
+    inspector.set_position(viewport_height.get() - preferred.properties - 6.0);
     inspector.set_min_sizes(110.0, 150.0);
 
     let bottom = ui.stack(Orientation::Vertical)?;
@@ -768,7 +790,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     document_workspace.set_sizing(Sizing::fill());
     document_workspace.set_start(&centre);
     document_workspace.set_end(&bottom);
-    document_workspace.set_position(940.0 - preferred.output - 80.0);
+    document_workspace.set_position(viewport_height.get() - preferred.output - 6.0);
     document_workspace.set_min_sizes(160.0, 100.0);
 
     let left_split = ui.split_view(Orientation::Horizontal)?;
@@ -782,7 +804,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     main_workspace.set_sizing(Sizing::fill());
     main_workspace.set_start(&left_split);
     main_workspace.set_end(&inspector);
-    main_workspace.set_position(1480.0 - preferred.inspector - 35.0);
+    main_workspace.set_position(viewport_width.get() - preferred.inspector - 6.0);
     main_workspace.set_min_sizes(300.0, 220.0);
     root.attach(&main_workspace, GridCell::new(0, 1));
 
@@ -791,15 +813,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let main_workspace = main_workspace.clone();
         let document_workspace = document_workspace.clone();
         let inspector = inspector.clone();
+        let viewport_width = viewport_width.clone();
+        let viewport_height = viewport_height.clone();
         move |sizes| {
             left_split.set_position(sizes.toolbox);
-            // The right and lower panes use their desired size with the
-            // initial viewport as the baseline; user drags override this.
-            main_workspace.set_position(1480.0 - sizes.inspector - 35.0);
-            document_workspace.set_position(940.0 - sizes.output - 80.0);
-            inspector.set_position(940.0 - sizes.properties - 145.0);
+            main_workspace.set_position((viewport_width.get() - sizes.inspector - 6.0).max(300.0));
+            document_workspace.set_position((viewport_height.get() - sizes.output - 6.0).max(160.0));
+            inspector.set_position((viewport_height.get() - sizes.properties - 6.0).max(110.0));
         }
     });
+    *reflow.borrow_mut() = Some(Rc::new({
+        let refresh_tracks = refresh_tracks.clone();
+        let pane_sizes = pane_sizes.clone();
+        move || refresh_tracks(pane_sizes.get())
+    }));
     left_split.on_resize({
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
@@ -814,9 +841,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     main_workspace.on_resize({
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
+        let viewport_width = viewport_width.clone();
         move |position| {
             let mut next = sizes.get();
-            next.inspector = (1480.0 - position - 35.0).max(0.0);
+            next.inspector = (viewport_width.get() - position - 6.0).max(0.0);
             next = next.sanitize();
             sizes.set(next);
             let _ = next.save(&path);
@@ -825,9 +853,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     document_workspace.on_resize({
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
+        let viewport_height = viewport_height.clone();
         move |position| {
             let mut next = sizes.get();
-            next.output = (940.0 - position - 80.0).max(0.0);
+            next.output = (viewport_height.get() - position - 6.0).max(0.0);
             next = next.sanitize();
             sizes.set(next);
             let _ = next.save(&path);
@@ -836,9 +865,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     inspector.on_resize({
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
+        let viewport_height = viewport_height.clone();
         move |position| {
             let mut next = sizes.get();
-            next.properties = (940.0 - position - 145.0).max(0.0);
+            next.properties = (viewport_height.get() - position - 6.0).max(0.0);
             next = next.sanitize();
             sizes.set(next);
             let _ = next.save(&path);
@@ -948,7 +978,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     });
     for (button, index) in [(&toolbox_tab, 0), (&server_tab, 1), (&data_tab, 2)] {
         let left_panel = left_panel.clone();
-        button.on_click(move || left_panel(index));
+        let active = active_side_tab.clone();
+        let indicators = side_indicators.clone();
+        button.on_click(move || {
+            active.set(index);
+            for indicator in &indicators {
+                indicator.redraw();
+            }
+            left_panel(index);
+        });
     }
 
     // Only opened documents appear as tabs. An empty workspace contains no
