@@ -888,6 +888,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     design_surface.append(&design_heading);
     let canvas = ui.canvas()?;
     canvas.set_sizing(Sizing::fill());
+    let canvas_width = Rc::new(Cell::new(0.0_f64));
     design_surface.append(&canvas);
 
     let xml_pane = ui.grid()?;
@@ -1685,7 +1686,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     canvas.on_draw({
         let state = state.clone();
+        let canvas_width = canvas_width.clone();
         move |painter| {
+            canvas_width.set(painter.width());
             let background = Color::rgb(0x2b, 0x2d, 0x33);
             painter.fill_rect(
                 Rect::new(0.0, 0.0, painter.width(), painter.height()),
@@ -1757,6 +1760,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     canvas.on_pointer({
         let state = state.clone();
         let canvas = canvas.clone();
+        let canvas_width = canvas_width.clone();
         let selected_name = selected_name.clone();
         let selected_text = selected_text.clone();
         let selected_x = selected_x.clone();
@@ -1769,7 +1773,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             match event.phase {
                 PointerPhase::Down => {
                     let (x, y) = if let Some(doc) = ide.layout.as_ref() {
-                        let left = ((canvas.width() - f64::from(doc.layout.width)) / 2.0).max(20.0);
+                        let left = ((canvas_width.get() - f64::from(doc.layout.width)) / 2.0).max(20.0);
                         ((event.point.x - left) as f32, (event.point.y - 60.0) as f32)
                     } else {
                         (event.point.x as f32, event.point.y as f32)
