@@ -19,7 +19,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
     (
         "View",
         &[
-            "Start Page",
+            "Empty Workspace",
             "Code Editor",
             "UI Designer",
             "Solution Explorer",
@@ -55,6 +55,22 @@ pub const MENUS: &[(&str, &[&str])] = &[
     ("Help", &["About Quark"]),
 ];
 
+/// Compact, native-button side rail. naui 0.8 does not expose rotated
+/// text for buttons, so captions use vertical writing while retaining
+/// keyboard focus and native platform styling.
+pub const SIDE_RAIL_WIDTH: f64 = 46.0;
+pub const SIDE_TABS: &[(&str, &str, f64)] = &[
+    ("Toolbox", "T\nO\nO\nL\nB\nO\nX", 166.0),
+    ("Server Explorer", "S\nE\nR\nV\nE\nR", 148.0),
+    ("Data Sources", "D\nA\nT\nA", 104.0),
+];
+
+/// Quark's palette: Hydrogen electron cyan, orbital blue, quark violet.
+pub const HYDROGEN_CYAN: (u8, u8, u8) = (50, 212, 226);
+pub const ORBIT_BLUE: (u8, u8, u8) = (51, 103, 214);
+pub const QUARK_VIOLET: (u8, u8, u8) = (158, 113, 235);
+pub const QUIET_SURFACE: (u8, u8, u8) = (28, 34, 48);
+
 pub const TOOL_WINDOWS: &[&str] = &[
     "Toolbox",
     "Solution Explorer",
@@ -89,6 +105,29 @@ pub fn position(menu: &str, action: &str) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn professional_side_rail_is_compact_and_uses_native_focusable_tabs() {
+        assert!(SIDE_RAIL_WIDTH <= 48.0);
+        assert_eq!(SIDE_TABS.len(), 3);
+        assert_eq!(SIDE_TABS[0].0, "Toolbox");
+        for &(name, caption, height) in SIDE_TABS {
+            assert!(!name.is_empty());
+            assert!(height >= 90.0);
+            assert!(caption.contains('\n'));
+            assert!(caption.lines().all(|line| line.chars().count() == 1));
+        }
+    }
+
+    #[test]
+    fn hydrogen_quark_accents_are_distinct_and_start_tab_is_not_an_ide_document() {
+        assert_ne!(HYDROGEN_CYAN, QUARK_VIOLET);
+        assert_ne!(HYDROGEN_CYAN, ORBIT_BLUE);
+        assert_ne!(ORBIT_BLUE, QUARK_VIOLET);
+        assert_eq!(QUIET_SURFACE, (28, 34, 48));
+        assert_eq!(position("View", "Empty Workspace"), Some((2, 0)));
+        assert!(position("View", "Start Page").is_none());
+    }
 
     #[test]
     fn professional_menus_include_debug_build_test_analyze_and_extensions() {
