@@ -7,9 +7,7 @@ use crate::{
     native_model::Layout,
     startup,
 };
-use naui::{
-    Length, ListItem, Orientation, Padding, Sizing, TextColor, TextStyle, Ui, Window,
-};
+use naui::{Length, ListItem, Orientation, Padding, Sizing, TextColor, TextStyle, Ui, Window};
 use std::{
     cell::RefCell,
     path::{Path, PathBuf},
