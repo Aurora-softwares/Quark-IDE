@@ -5,14 +5,19 @@
 //! This native frontend deliberately shares .hyproj, .hy and .quarkui files
 //! instead of silently converting or rewriting them.
 
+#[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
+#[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
+#[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../project.rs"]
 mod project;
+#[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../startup.rs"]
 mod startup;
+#[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../storage.rs"]
 mod storage;
 
@@ -50,6 +55,10 @@ struct Ide {
 impl Ide {
     fn load() -> Self {
         let workspace = Workspace::open(&workspace_file()).unwrap_or_default();
+        Self::from_workspace(workspace)
+    }
+
+    fn from_workspace(workspace: Workspace) -> Self {
         let project = workspace.selected.as_deref().map(project::load);
         Self {
             workspace,
@@ -75,6 +84,9 @@ impl Ide {
     }
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
+        if self.document.as_ref().is_some_and(Document::dirty) {
+            return Err("Save the current source file before opening another".into());
+        }
         self.document = Some(Document::open(file)?);
         self.page = Page::Code;
         Ok(())
@@ -934,8 +946,10 @@ mod tests {
         fs::write(dir.path().join("Program.hy"), "class Program {}").unwrap();
         let layout = dir.path().join("Main.quarkui");
         fs::write(&layout, serde_json::to_vec(&Layout::default()).unwrap()).unwrap();
-        let mut ide = Ide::load();
-        ide.remember_project(manifest.clone()).unwrap();
+        let mut workspace = Workspace::default();
+        workspace.selected = Some(manifest.clone());
+        workspace.projects.push(manifest.clone());
+        let ide = Ide::from_workspace(workspace);
         assert!(ide.project.is_some());
         let (_, files) = file_items(&ide);
         assert!(files.contains(&manifest.canonicalize().unwrap()));
@@ -949,7 +963,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("App.hy");
         fs::write(&source, "original").unwrap();
-        let mut ide = Ide::load();
+        let mut ide = Ide::from_workspace(Workspace::default());
         ide.open_source(&source).unwrap();
         ide.document.as_mut().unwrap().text = "modified".into();
         assert!(ide.has_unsaved());
