@@ -459,17 +459,57 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     root.append(&command_strip);
 
     let toolbox = ui.stack(Orientation::Vertical)?;
-    toolbox.set_spacing(9.0);
+    toolbox.set_spacing(7.0);
     toolbox.append(&ui.label("TOOLBOX")?);
-    toolbox.append(&ui.label("Common Controls")?);
+    let toolbox_search = ui.search_input()?;
+    toolbox_search.set_placeholder("Search controls");
+    toolbox.append(&toolbox_search);
+    let toolbox_items = ui.stack(Orientation::Vertical)?;
+    toolbox_items.set_spacing(4.0);
     let mut toolbox_buttons = Vec::new();
-    for kind in ControlKind::ALL {
-        let button = ui.button(kind.title())?;
-        toolbox.append(&button);
-        toolbox_buttons.push((kind, button));
+    let mut toolbox_headers = Vec::new();
+    for category in ["Common Controls", "Containers", "Display"] {
+        let heading = ui.label(category)?;
+        toolbox_items.append(&heading);
+        toolbox_headers.push((category, heading));
+        for kind in ControlKind::ALL {
+            if kind.category() == category {
+                let button = ui.button(kind.title())?;
+                button.set_sizing(Sizing::fill_width());
+                toolbox_items.append(&button);
+                toolbox_buttons.push((kind, button));
+            }
+        }
     }
-    toolbox.append(&ui.label("Select a control, then click the designer surface to place it.")?);
+    let toolbox_scroll = ui.scroll()?;
+    toolbox_scroll.set_child(&toolbox_items);
+    toolbox_scroll.set_sizing(Sizing::fill());
+    toolbox.append(&toolbox_scroll);
+    toolbox.append(&ui.label("Select a control, then click the design surface.")?);
     toolbox.set_sizing(Sizing::fill());
+    toolbox_search.on_change({
+        let entries = toolbox_items.clone();
+        let controls = toolbox_buttons.clone();
+        move |search| {
+            let query = search.trim().to_lowercase();
+            entries.clear();
+            for (category, header) in &toolbox_headers {
+                let visible = controls
+                    .iter()
+                    .filter(|(kind, _)| {
+                        kind.category() == *category
+                            && (query.is_empty() || kind.title().to_lowercase().contains(&query))
+                    })
+                    .collect::<Vec<_>>();
+                if !visible.is_empty() {
+                    entries.append(header);
+                    for (_, button) in visible {
+                        entries.append(button);
+                    }
+                }
+            }
+        }
+    });
 
     // Visual Studio's compact auto-hide rail lives to the left of Toolbox.
     let left_rail = ui.stack(Orientation::Vertical)?;
