@@ -55,14 +55,11 @@ pub const MENUS: &[(&str, &[&str])] = &[
     ("Help", &["About Quark"]),
 ];
 
-/// Compact, native-button side rail. Short labels avoid the excessive
-/// height and padding of newline-stacked pseudo-rotated captions.
-pub const SIDE_RAIL_WIDTH: f64 = 30.0;
-pub const SIDE_TABS: &[(&str, &str, f64)] = &[
-    ("Toolbox", "T", 32.0),
-    ("Server Explorer", "S", 32.0),
-    ("Data Sources", "D", 32.0),
-];
+/// Text-only vertical rail; upright glyphs fit in a narrow 18px gutter.
+pub const SIDE_RAIL_WIDTH: f64 = 18.0;
+pub const SIDE_TAB_HEIGHT: f64 = 106.0;
+pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
+pub const CODE_SIDE_TABS: [&str; 3] = ["SYMBOLS", "SEARCH", "FILES"];
 
 /// Quark's palette: Hydrogen electron cyan, orbital blue, quark violet.
 pub const HYDROGEN_CYAN: (u8, u8, u8) = (50, 212, 226);
@@ -106,15 +103,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn professional_side_rail_is_compact_and_uses_native_focusable_tabs() {
-        assert_eq!(SIDE_RAIL_WIDTH, 30.0);
-        assert_eq!(SIDE_TABS.len(), 3);
-        assert_eq!(SIDE_TABS[0].0, "Toolbox");
-        for &(name, caption, height) in SIDE_TABS {
-            assert!(!name.is_empty());
-            assert_eq!(height, 32.0);
-            assert_eq!(caption.chars().count(), 1);
-        }
+    fn side_rail_presets_are_compact_and_context_sensitive() {
+        assert_eq!(SIDE_RAIL_WIDTH, 18.0);
+        assert!(SIDE_TAB_HEIGHT <= 110.0);
+        assert_eq!(DESIGN_SIDE_TABS, ["TOOLBOX", "SERVER", "DATA"]);
+        assert_eq!(CODE_SIDE_TABS, ["SYMBOLS", "SEARCH", "FILES"]);
+        assert!(!CODE_SIDE_TABS.contains(&"TOOLBOX"));
+        assert!(!DESIGN_SIDE_TABS.contains(&"SYMBOLS"));
     }
 
     #[test]
