@@ -15,6 +15,8 @@ mod native_model;
 mod native_launcher;
 #[path = "../native_commands.rs"]
 mod native_commands;
+#[path = "../native_shell.rs"]
+mod native_shell;
 #[path = "../problems.rs"]
 mod problems;
 #[path = "../native_start_window.rs"]
@@ -374,58 +376,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
     let menu = ui.menu_bar()?;
-    menu.set_menus(&[
-        MenuSpec::new(
-            "File",
-            [
-                "New Project…",
-                "Open Project or Solution…",
-                "Open Local Folder…",
-                "Open File…",
-                "Save",
-                "Close Workspace",
-                "Exit",
-            ],
-        ),
-        MenuSpec::new("Edit", ["Undo", "Redo", "Cut", "Copy", "Paste", "Find"]),
-        MenuSpec::new(
-            "View",
-            [
-                "Start Page",
-                "Code Editor",
-                "UI Designer",
-                "Solution Explorer",
-                "Toolbox",
-                "Output",
-                "Error List",
-            ],
-        ),
-        MenuSpec::new("Git", ["Clone Repository…", "Git Changes"]),
-        MenuSpec::new("Project", ["Add New UI Layout", "Project Properties"]),
-        MenuSpec::new(
-            "Build",
-            [
-                "Build Solution",
-                "Rebuild Solution",
-                "Clean Solution",
-                "Bundle / Publish Binaries",
-            ],
-        ),
-        MenuSpec::new(
-            "Debug",
-            [
-                "Start Debugging (coming soon)",
-                "Start Without Debugging",
-                "Stop Debugging (coming soon)",
-            ],
-        ),
-        MenuSpec::new("Test", ["Test Explorer", "Run Tests (coming soon)"]),
-        MenuSpec::new("Analyze", ["Run Code Analysis (coming soon)"]),
-        MenuSpec::new("Tools", ["Options"]),
-        MenuSpec::new("Extensions", ["Manage Extensions"]),
-        MenuSpec::new("Window", ["Reset Window Layout"]),
-        MenuSpec::new("Help", ["About Quark"]),
-    ]);
+    menu.set_menus(
+        &native_shell::MENUS
+            .iter()
+            .map(|(name, items)| MenuSpec::new(*name, items.iter().copied()))
+            .collect::<Vec<_>>(),
+    );
     window.set_menu_bar(&menu);
 
     let toolbar = ui.toolbar()?;
