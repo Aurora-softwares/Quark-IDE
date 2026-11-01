@@ -469,7 +469,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
         let state = state.clone();
         move |text| {
             if let Some(document) = state.borrow_mut().document.as_mut() {
-                document.text = text;
+                document.text = text.to_owned();
             }
         }
     });
@@ -680,12 +680,17 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     Color::rgb(0xdf, 0xe6, 0xf0)
                 };
                 painter.fill_rect(
-                    Rect::new(control.x, control.y, control.width, control.height),
+                    Rect::new(
+                        f64::from(control.x),
+                        f64::from(control.y),
+                        f64::from(control.width),
+                        f64::from(control.height),
+                    ),
                     colour,
                 );
                 painter.text(
                     &control.text,
-                    Point::new(control.x + 8.0, control.y + 8.0),
+                    Point::new(f64::from(control.x) + 8.0, f64::from(control.y) + 8.0),
                     14.0,
                     Color::BLACK,
                 );
@@ -703,7 +708,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
             let mut ide = state.borrow_mut();
             match event.phase {
                 PointerPhase::Down => {
-                    let (x, y) = (event.point.x, event.point.y);
+                    let (x, y) = (event.point.x as f32, event.point.y as f32);
                     if let Some(kind) = ide.armed.take() {
                         if let Some(layout) = ide.layout.as_mut() {
                             if let Ok(id) = layout.layout.add(kind, x, y) {
@@ -741,7 +746,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
                         if let Some(layout) = ide.layout.as_mut() {
                             layout
                                 .layout
-                                .position(id, event.point.x - dx, event.point.y - dy);
+                                .position(id, event.point.x as f32 - dx, event.point.y as f32 - dy);
                         }
                     }
                 }
@@ -762,7 +767,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 .as_mut()
                 .and_then(|d| d.layout.controls.iter_mut().find(|c| Some(c.id) == id))
             {
-                control.name = text;
+                control.name = text.to_owned();
             }
         }
     });
@@ -777,7 +782,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 .as_mut()
                 .and_then(|d| d.layout.controls.iter_mut().find(|c| Some(c.id) == id))
             {
-                control.text = text;
+                control.text = text.to_owned();
             }
             drop(ide);
             canvas.redraw();
