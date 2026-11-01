@@ -2678,7 +2678,7 @@ mod tests {
         workspace.selected = Some(manifest);
         let ide = Ide::from_workspace(workspace);
         let (_, files) = file_items(&ide);
-        assert!(files.contains(&layout));
+        assert!(files.contains(&layout.canonicalize().unwrap()));
     }
 
     #[test]
