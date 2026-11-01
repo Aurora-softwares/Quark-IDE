@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 
-pub const HANDLE: f64 = 6.0;
+/// Wide enough to grab reliably with a mouse or touchpad.\npub const HANDLE: f64 = 12.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pane {
@@ -54,6 +54,18 @@ impl PaneSizes {
             };
         }
         self
+    }
+
+    /// The pointer position reported by a canvas is relative to the moving
+    /// divider. As the divider follows the pointer, update from the CURRENT
+    /// pane width/height, not the old size captured at pointer down.
+    pub fn drag(self, pane: Pane, grab_coordinate: f64, pointer_coordinate: f64) -> Self {
+        self.resized(pane, pointer_coordinate - grab_coordinate)
+    }
+
+    /// Keyboard-friendly resizing, independent of host window resize.
+    pub fn adjust(self, pane: Pane, steps: i32) -> Self {
+        self.resized(pane, 24.0 * f64::from(steps.clamp(-20, 20)))
     }
 
     pub fn resized(self, pane: Pane, delta: f64) -> Self {
@@ -109,6 +121,44 @@ mod tests {
         assert_eq!(large_w - small_w, 700.0);
         assert_eq!(large_h - small_h, 370.0);
         assert_eq!(panes, PaneSizes::default());
+    }
+
+    #[test]
+    fn grip_drags_accumulate_against_current_size_after_handle_reflows() {
+        let original = PaneSizes::default();
+        let toolbox = original.drag(Pane::Toolbox, 6.0, 34.0);
+        assert_eq!(toolbox.toolbox, original.toolbox + 28.0);
+        // After the handle moves 28px, the pointer's local coordinate
+        // is 6px again; the next 15px movement must add another 15px.
+        let toolbox = toolbox.drag(Pane::Toolbox, 6.0, 21.0);
+        assert_eq!(toolbox.toolbox, original.toolbox + 43.0);
+        let inspector = original.drag(Pane::Inspector, 6.0, 26.0);
+        assert_eq!(inspector.inspector, original.inspector - 20.0);
+        let output = original.drag(Pane::Output, 6.0, -24.0);
+        assert_eq!(output.output, original.output + 30.0);
+    }
+
+    #[test]
+    fn grip_hit_target_is_accessible_and_keyboard_adjustments_preserve_fixed_tracks() {
+        assert!(HANDLE >= 10.0);
+        let original = PaneSizes::default();
+        assert_eq!(
+            original.adjust(Pane::Toolbox, 1).toolbox,
+            original.toolbox + 24.0
+        );
+        assert_eq!(
+            original.adjust(Pane::Properties, -1).properties,
+            original.properties + 24.0
+        );
+        assert_eq!(
+            original.adjust(Pane::Output, -1).output,
+            original.output + 24.0
+        );
+        assert_eq!(
+            original.adjust(Pane::Inspector, 1).inspector,
+            original.inspector - 24.0
+        );
+        assert_eq!(original.editor_area(1480.0, 940.0).0 + original.toolbox + original.inspector + 2.0 * HANDLE, 1480.0);
     }
 
     #[test]
