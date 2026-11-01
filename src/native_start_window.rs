@@ -375,7 +375,7 @@ pub(crate) fn create_project_wizard(
     actions.append(&submit);
     actions.append(&cancel);
     root.append(&actions);
-    let status = ui.label("Creates a Hydrogen project and a Main.hyyui design.")?;
+    let status = ui.label("Creates a Hydrogen project and a Main.hyui design.")?;
     status.set_color(TextColor::Secondary);
     root.append(&status);
 
@@ -402,7 +402,7 @@ pub(crate) fn create_project_wizard(
                 .unwrap_or(startup::Template::Linux);
             match startup::create_project(Path::new(&parent.text()), &name.text(), kind) {
                 Ok(manifest) => {
-                    let design = manifest.parent().unwrap().join("Main.hyyui");
+                    let design = manifest.parent().unwrap().join("Main.hyui");
                     if let Ok(bytes) = crate::ui_xml::encode(&Layout::default()).map(String::into_bytes) {
                         if let Err(error) = crate::storage::atomic_write(&design, &bytes) {
                             status.set_text(&format!(
