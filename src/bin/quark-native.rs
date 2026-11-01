@@ -7,8 +7,6 @@
 
 #[path = "../editor.rs"]
 mod editor;
-#[path = "../theme.rs"]
-mod theme;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
@@ -39,6 +37,8 @@ mod startup;
 mod storage;
 #[path = "../symbols.rs"]
 mod symbols;
+#[path = "../theme.rs"]
+mod theme;
 #[path = "../ui_xml.rs"]
 mod ui_xml;
 
@@ -734,7 +734,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         {
             use gtk4::prelude::*;
             use naui::Widget as _;
-            let drawing_area = tab.native_widget()
+            let drawing_area = tab
+                .native_widget()
                 .downcast::<gtk4::DrawingArea>()
                 .expect("naui GTK Canvas must use GtkDrawingArea");
             let mode = tab_mode.clone();
@@ -753,7 +754,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 }
                 cairo.set_source_rgb(0.78, 0.78, 0.81);
                 cairo.select_font_face(
-                    "Sans", gtk4::cairo::FontSlant::Normal,
+                    "Sans",
+                    gtk4::cairo::FontSlant::Normal,
                     gtk4::cairo::FontWeight::Normal,
                 );
                 cairo.set_font_size(10.0);
@@ -773,12 +775,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 } else {
                     &native_shell::DESIGN_SIDE_TABS
                 };
-                let Some(title) = names.get(index) else { return; };
+                let Some(title) = names.get(index) else {
+                    return;
+                };
                 if active.get() == index {
-                    p.fill_rect(Rect::new(0.0, 0.0, 2.0, p.height()), Color::rgb(0x8a, 0x81, 0xa4));
+                    p.fill_rect(
+                        Rect::new(0.0, 0.0, 2.0, p.height()),
+                        Color::rgb(0x8a, 0x81, 0xa4),
+                    );
                 }
                 for (i, letter) in title.chars().enumerate() {
-                    p.text(&letter.to_string(), Point::new(6.0, 7.0 + i as f64 * 10.0), 9.0, Color::rgb(0xc5, 0xc5, 0xc9));
+                    p.text(
+                        &letter.to_string(),
+                        Point::new(6.0, 7.0 + i as f64 * 10.0),
+                        9.0,
+                        Color::rgb(0xc5, 0xc5, 0xc9),
+                    );
                 }
             }
         });
@@ -1515,7 +1527,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(position[1]).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") || path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
+                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui")
+                    || path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
+                {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -1851,7 +1865,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             }
             (0, 3) => {
                 if let Some(path) = rfd::FileDialog::new().pick_file() {
-                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") || path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
+                    if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui")
+                        || path.extension().and_then(|ext| ext.to_str()) == Some("hyui")
+                    {
                         open_layout(path);
                     } else {
                         open_source(path);
