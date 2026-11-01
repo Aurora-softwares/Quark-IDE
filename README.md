@@ -18,13 +18,16 @@ Unlike the legacy welcome tab, the new native frontend starts with a **separate 
 
 ### Native IDE shell
 
+Quark's restrained native accent palette uses **Hydrogen electron cyan**, **orbital blue** and **Quark violet** in a thin toolbar strip, editor-tab underline, side-tab rail and visible resize handles. System-native menu bars, title frames, text inputs and buttons still follow the OS theme. The separate startup launcher remains the place to create/open projects; the main IDE no longer includes a Start document. **File > New Project** opens the separate native project wizard directly.
+
+
 The full IDE follows the **Visual Studio Professional workspace structure**, not VS Code's activity-bar model:
 
 - Native menus: File, Edit, View, Git, Project, Build, Debug, Test, Analyze, Tools, Extensions, Window, Help
 - A native icon toolbar plus a dense command strip with Debug/Release, architecture, startup project, Build, Run Without Debugging, pending debugger action and Publish
-- Compact left tool-window selector for Toolbox / Server Explorer / Data Sources; centre source/designer tabs; right searchable Solution Explorer and independently resizable Properties inspector
+- Narrow left **vertical, keyboard-focusable native tool tabs** for Toolbox / Server Explorer / Data Sources; centre tabs appear **only for open files** (a blank dark-neutral editor surface otherwise); right searchable Solution Explorer and resizable Properties inspector. The lightweight **external project launcher remains intact**.
 - Resizable Output / Error List / Debug / Test Results / Find Results panes below the editor and a status bar
-- Native pane divider positions are saved automatically to `native-docking.json` and restored at startup; **Window > Reset Window Layout** restores the defaults without changing projects or source files.
+- **Resizable fixed-size tool windows:** Toolbox and Solution Explorer widths, and Output and Properties heights, use wide cyan/violet drag handles plus native increment/decrement buttons; the window's extra size goes to the editor instead of stretching these panes. Sizes are saved to `native-pane-layout.json` and restored at startup; **Window > Reset Window Layout** restores defaults without changing projects or files.
 - A **searchable, categorized Toolbox** with 13 design-time controls (labels, buttons, text inputs, check boxes, radio buttons, combo/list boxes, slider, progress bar, image, panel and tab control), and a separate visual designer canvas. Editable X/Y/Width/Height in native Properties is validated to keep `.quarkui` layouts safe. Placing a control currently uses Toolbox select + canvas click; full cross-widget drag/drop is future work. Native and legacy Quark designers use the same control serialization, and automated tests verify round-trip compatibility.
 
 **Implemented commands:** Build Solution, Rebuild Solution, Clean Solution, Start Without Debugging, and Bundle / Publish Binaries. They invoke the configured Hydrogen CLI on background threads. Set `QUARK_HYDROGEN_COMPILER` to the compiler executable or use `hy` on `PATH`. Build artifacts follow Hydrogen's current output planner under the project `.quark/build` directory. The Publish command **builds the current project first**, refuses to package a stale binary after a failed build, and creates a ZIP in `.quark/publish` when the build succeeds. It currently supports single-file executables, not directory-style Australis OS images.
@@ -33,7 +36,7 @@ The **Debug/Release and CPU target selectors are UI groundwork only** until the 
 
 Build this preview with `cargo run --release --features native-ui --bin quark-native`. On Ubuntu/Debian install `pkg-config libgtk-4-dev libadwaita-1-dev libpango1.0-dev libgdk-pixbuf-2.0-dev`. Windows needs a compatible Windows App SDK runtime. The existing `quark-ide` binary remains unchanged during migration.
 
-**Current development checkpoint:** version `0.6.0`, native launcher + professional shell on a feature branch. **Next targets:** native screenshot/interaction acceptance, native editor parity, real toolbox drag/drop, persistent dock/float layouts, advanced Properties, test/Git integrations, and a Hydrogen debugger adapter. **Release gates:** all Linux/macOS/Windows formatting, Clippy, unit/coverage and release-build jobs green; manual system UI smoke tests; unsaved-buffer recovery and safe close; accessibility, theme and native packaging; source-level build/debug and interface-designer completeness. A passing build alone cannot certify native GUI behaviour.
+**Current development checkpoint:** version `0.6.0` development, native launcher + native IDE shell with no in-window Start page; native pane sizing, accents and tool rails are being validated on a feature branch. **Next targets:** native screenshot/interaction acceptance, native editor parity, real toolbox drag/drop, persistent dock/float layouts, advanced Properties, test/Git integrations, and a Hydrogen debugger adapter. **Release gates:** all Linux/macOS/Windows formatting, Clippy, unit/coverage and release-build jobs green; manual system UI smoke tests; unsaved-buffer recovery and safe close; accessibility, theme and native packaging; source-level build/debug and interface-designer completeness. A passing build alone cannot certify native GUI behaviour.
 
 ## Start Window and visual application designer
 
