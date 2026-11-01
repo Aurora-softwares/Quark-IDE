@@ -1,7 +1,7 @@
 //! Portable design-time rendering for Hydrogen <Window> files.
 //! naui creates real AppKit / WinUI 3 / GTK controls from the same tree.
 //! The preview never dispatches application handlers.
-use naui::{Length, Orientation, Padding, Sizing, Ui};
+use naui::{GridCell, Length, Orientation, Padding, Sizing, Track, Ui};
 use roxmltree::Node;
 use std::rc::Rc;
 
@@ -44,6 +44,12 @@ fn render_node(
     on_select: &SelectElement,
 ) -> Result<(), String> {
     if node.attribute("visible") == Some("false") {
+        let hidden = ui
+            .button(&format!("Edit hidden {}", node_title(node)))
+            .map_err(|e| e.to_string())?;
+        let select = on_select.clone();
+        hidden.on_click(move || select(path.clone()));
+        parent.append(&hidden);
         return Ok(());
     }
     let kind = node.tag_name().name();
@@ -81,13 +87,33 @@ fn render_node(
             render_children(ui, &children, node, &path, on_select)?;
             row.append(&children);
         }
-        "RowPanel" | "GridPanel" | "MenuBar" | "Menu" => {
+        "RowPanel" | "MenuBar" | "Menu" => {
             let children = ui
                 .stack(Orientation::Horizontal)
                 .map_err(|e| e.to_string())?;
             children.set_spacing(8.0);
             render_children(ui, &children, node, &path, on_select)?;
             row.append(&children);
+        }
+        "GridPanel" => {
+            let grid = ui.grid().map_err(|e| e.to_string())?;
+            let columns = node
+                .attribute("columns")
+                .and_then(|n| n.parse::<usize>().ok())
+                .unwrap_or(2)
+                .clamp(1, 12);
+            grid.set_spacing(8.0, 8.0);
+            for column in 0..columns {
+                grid.set_column_track(column, Track::FILL);
+            }
+            for (index, child) in node.children().filter(|n| n.is_element()).enumerate() {
+                let cell = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+                let mut child_path = path.clone();
+                child_path.push(index);
+                render_node(ui, &cell, child, child_path, on_select)?;
+                grid.attach(&cell, GridCell::new(index % columns, index / columns));
+            }
+            row.append(&grid);
         }
         "Tabs" => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
