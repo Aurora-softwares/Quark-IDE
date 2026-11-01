@@ -11,6 +11,10 @@ mod hydrogen;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
+#[path = "../native_launcher.rs"]
+mod native_launcher;
+#[path = "../native_start_window.rs"]
+mod native_start_window;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../project.rs"]
 mod project;
@@ -73,14 +77,50 @@ impl Ide {
     }
 
     fn remember_project(&mut self, manifest: PathBuf) -> Result<(), String> {
+        if self.has_unsaved() {
+            return Err("Save open source and UI design changes before changing projects".into());
+        }
         if manifest.extension().and_then(|s| s.to_str()) != Some("hyproj") || !manifest.is_file() {
             return Err("Choose an existing Hydrogen .hyproj file".into());
         }
         self.workspace.remember(manifest, true);
         self.workspace.save(&workspace_file())?;
         self.project = self.workspace.selected.as_deref().map(project::load);
+        self.document = None;
+        self.layout = None;
         self.page = Page::Code;
+        if let Some(path) = &self.workspace.selected {
+            record_recent(path.clone());
+        }
         Ok(())
+    }
+
+    fn remember_folder(&mut self, folder: PathBuf) -> Result<(), String> {
+        if self.has_unsaved() {
+            return Err("Save open source and UI design changes before changing folders".into());
+        }
+        if !folder.is_dir() {
+            return Err("Choose an existing folder".into());
+        }
+        self.workspace.remember(folder, false);
+        self.workspace.selected = None;
+        self.workspace.save(&workspace_file())?;
+        self.project = None;
+        self.document = None;
+        self.layout = None;
+        self.page = Page::Code;
+        if let Some(path) = self.workspace.folders.last() {
+            record_recent(path.clone());
+        }
+        Ok(())
+    }
+
+    fn clear_workspace(&mut self) {
+        self.project = None;
+        self.workspace.selected = None;
+        self.document = None;
+        self.layout = None;
+        self.page = Page::Start;
     }
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
@@ -138,6 +178,15 @@ fn workspace_file() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")));
     root.unwrap_or_else(std::env::temp_dir)
         .join("QuarkIDE/native-workspace.json")
+}
+
+fn record_recent(path: PathBuf) {
+    let file = workspace_file().with_file_name("native-launcher.json");
+    // A damaged history file must not be overwritten automatically.
+    if let Ok(mut history) = native_launcher::History::open(&file) {
+        history.remember(path, native_launcher::now_epoch());
+        let _ = history.save(&file);
+    }
 }
 
 fn backend() -> &'static str {
@@ -257,8 +306,7 @@ fn run_build(state: Rc<RefCell<Ide>>, output: naui::Label, status: naui::Label, 
     });
 }
 
-fn build(ui: &Ui) -> naui::Result<()> {
-    let state = Rc::new(RefCell::new(Ide::load()));
+fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let window = ui.window(
         "Quark IDE — Hydrogen Development Environment",
         1480.0,
@@ -938,11 +986,60 @@ fn build(ui: &Ui) -> naui::Result<()> {
         }
     });
 
+    // Projects selected in the small launcher open directly in an editor tab.
+    // "Continue without code" enters the full IDE with no selected project.
+    if let Some(text) = state.borrow().document.as_ref().map(|document| document.text.clone()) {
+        editor.set_text(&text);
+        show_page(Page::Code);
+    } else if state.borrow().layout.is_some() {
+        show_page(Page::Design);
+    } else {
+        show_page(Page::Start);
+    }
+
     // The native shell provides the actual OS frame and follows the system's
     // appearance; unlike the legacy renderer, none of these widgets is egui.
     window.set_child(&root);
     window.show();
     Ok(())
+}
+
+fn build(ui: &Ui) -> naui::Result<()> {
+    let state = Rc::new(RefCell::new(Ide::load()));
+    let existing = state.borrow().workspace.recent.clone();
+    let handle = ui.clone();
+    let launch_state = state.clone();
+    let launch: Rc<dyn Fn(native_start_window::Action) -> Result<(), String>> =
+        Rc::new(move |action| {
+            {
+                let mut ide = launch_state.borrow_mut();
+                match action {
+                    native_start_window::Action::Project(path) => {
+                        ide.remember_project(path)?;
+                        let source = ide
+                            .project
+                            .as_ref()
+                            .and_then(|project| project.sources.first().cloned());
+                        if let Some(source) = source {
+                            ide.open_source(&source)?;
+                        }
+                    }
+                    native_start_window::Action::Folder(path) => {
+                        ide.remember_folder(path)?;
+                    }
+                    native_start_window::Action::Empty => {
+                        ide.clear_workspace();
+                    }
+                }
+            }
+            build_ide(&handle, launch_state.clone()).map_err(|error| error.to_string())
+        });
+    native_start_window::show(
+        ui,
+        workspace_file().with_file_name("native-launcher.json"),
+        &existing,
+        launch,
+    )
 }
 
 fn main() -> naui::Result<()> {
