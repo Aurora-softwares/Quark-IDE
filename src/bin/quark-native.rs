@@ -268,25 +268,38 @@ fn display_project_name(ide: &Ide) -> String {
         .unwrap_or_else(|| "No solution loaded".into())
 }
 
+/// Include Hydrogen UI files in nested project directories without walking
+/// build outputs, dot-directories or symbolic-link directories.
+fn discover_hydrogen_files(root: &Path, result: &mut Vec<PathBuf>, depth: usize) {
+    if depth > 8 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(root) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(kind) = entry.file_type() else { continue };
+        if kind.is_dir() {
+            let skip = path.file_name().and_then(|s| s.to_str())
+                .is_some_and(|name| name.starts_with('.') || matches!(name, "target" | "build" | "node_modules"));
+            if !skip {
+                discover_hydrogen_files(&path, result, depth + 1);
+            }
+        } else if kind.is_file() && matches!(
+            path.extension().and_then(|s| s.to_str()),
+            Some("hy" | "hyproj" | "hyyui")
+        ) {
+            result.push(path);
+        }
+    }
+}
+
 fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
     let Some(project) = &ide.project else {
         let Some(folder) = ide.workspace.folders.last() else {
             return (vec![TreeItem::new("No solution loaded")], vec![]);
         };
-        let mut files = fs::read_dir(folder)
-            .ok()
-            .into_iter()
-            .flatten()
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.is_file()
-                    && matches!(
-                        path.extension().and_then(|ext| ext.to_str()),
-                        Some("hy" | "hyproj" | "hyyui")
-                    )
-            })
-            .collect::<Vec<_>>();
+        let mut files = Vec::new();
+        discover_hydrogen_files(folder, &mut files, 0);
         files.sort();
         let children: Vec<TreeItem> = files
             .iter()
@@ -313,14 +326,7 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
         paths.push(layout.path.clone());
     }
     if let Some(folder) = project.path.parent() {
-        if let Ok(entries) = fs::read_dir(folder) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyyui") {
-                    paths.push(path);
-                }
-            }
-        }
+        discover_hydrogen_files(folder, &mut paths, 0);
     }
     paths.sort();
     paths.dedup();
@@ -1871,6 +1877,21 @@ mod tests {
         assert!(files
             .iter()
             .any(|path| path.file_name().unwrap() == "Main.hyyui"));
+    }
+
+    #[test]
+    fn solution_explorer_discovers_nested_hydrogen_ui_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = dir.path().join("Studio.hyproj");
+        fs::write(&manifest, "name = 'Studio'\nsources = []").unwrap();
+        fs::create_dir_all(dir.path().join("views/dialogs")).unwrap();
+        let layout = dir.path().join("views/dialogs/Main.hyyui");
+        fs::write(&layout, ui_xml::encode(&Layout::default()).unwrap()).unwrap();
+        let mut workspace = Workspace::default();
+        workspace.selected = Some(manifest);
+        let ide = Ide::from_workspace(workspace);
+        let (_, files) = file_items(&ide);
+        assert!(files.contains(&layout));
     }
 
     #[test]
