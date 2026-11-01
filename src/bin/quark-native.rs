@@ -55,7 +55,9 @@ struct Ide {
     workspace: Workspace,
     project: Option<project::Project>,
     document: Option<Document>,
+    other_documents: Vec<Document>,
     layout: Option<LayoutDocument>,
+    other_layouts: Vec<LayoutDocument>,
     page: Page,
     armed: Option<ControlKind>,
     selected_id: Option<u64>,
@@ -74,7 +76,9 @@ impl Ide {
             workspace,
             project,
             document: None,
+            other_documents: Vec::new(),
             layout: None,
+            other_layouts: Vec::new(),
             page: Page::Empty,
             armed: None,
             selected_id: None,
@@ -93,7 +97,9 @@ impl Ide {
         self.workspace.save(&workspace_file())?;
         self.project = self.workspace.selected.as_deref().map(project::load);
         self.document = None;
+        self.other_documents.clear();
         self.layout = None;
+        self.other_layouts.clear();
         self.page = Page::Empty;
         if let Some(path) = &self.workspace.selected {
             record_recent(path.clone());
@@ -114,7 +120,9 @@ impl Ide {
         self.workspace.save(&workspace_file())?;
         self.project = None;
         self.document = None;
+        self.other_documents.clear();
         self.layout = None;
+        self.other_layouts.clear();
         self.page = Page::Empty;
         record_recent(canonical);
         Ok(())
@@ -126,29 +134,70 @@ impl Ide {
         self.workspace.projects.clear();
         self.workspace.folders.clear();
         self.document = None;
+        self.other_documents.clear();
         self.layout = None;
+        self.other_layouts.clear();
         self.page = Page::Empty;
     }
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
-        if self.has_unsaved() {
-            return Err(
-                "Save open source and UI layout changes before replacing a document".into(),
-            );
+        let path = file.canonicalize().map_err(|e| e.to_string())?;
+        if self.document.as_ref().is_some_and(|d| d.path == path) {
+            self.page = Page::Code;
+            return Ok(());
         }
-        self.document = Some(Document::open(file)?);
+        if let Some(index) = self.other_documents.iter().position(|d| d.path == path) {
+            let restored = self.other_documents.remove(index);
+            if let Some(current) = self.document.replace(restored) {
+                self.other_documents.push(current);
+            }
+        } else {
+            let loaded = Document::open(&path)?;
+            if let Some(current) = self.document.replace(loaded) {
+                self.other_documents.push(current);
+            }
+        }
         self.page = Page::Code;
         Ok(())
     }
 
     fn open_design(&mut self, file: &Path) -> Result<(), String> {
-        if self.layout.as_ref().is_some_and(LayoutDocument::dirty) {
-            return Err("Save your current UI layout before opening another".into());
+        let path = file.canonicalize().map_err(|e| e.to_string())?;
+        if self.layout.as_ref().is_some_and(|d| d.path == path) {
+            self.page = Page::Design;
+            return Ok(());
         }
-        self.layout = Some(LayoutDocument::open(file)?);
+        if let Some(index) = self.other_layouts.iter().position(|d| d.path == path) {
+            let restored = self.other_layouts.remove(index);
+            if let Some(current) = self.layout.replace(restored) {
+                self.other_layouts.push(current);
+            }
+        } else {
+            let loaded = LayoutDocument::open(&path)?;
+            if let Some(current) = self.layout.replace(loaded) {
+                self.other_layouts.push(current);
+            }
+        }
         self.page = Page::Design;
         self.selected_id = None;
         Ok(())
+    }
+
+    fn open_tabs(&self) -> Vec<(Page, PathBuf)> {
+        let mut tabs = Vec::new();
+        for document in &self.other_documents {
+            tabs.push((Page::Code, document.path.clone()));
+        }
+        if let Some(document) = &self.document {
+            tabs.push((Page::Code, document.path.clone()));
+        }
+        for layout in &self.other_layouts {
+            tabs.push((Page::Design, layout.path.clone()));
+        }
+        if let Some(layout) = &self.layout {
+            tabs.push((Page::Design, layout.path.clone()));
+        }
+        tabs
     }
 
     fn display_page(&self, requested: Page) -> Page {
@@ -173,7 +222,9 @@ impl Ide {
 
     fn has_unsaved(&self) -> bool {
         self.document.as_ref().is_some_and(Document::dirty)
+            || self.other_documents.iter().any(Document::dirty)
             || self.layout.as_ref().is_some_and(LayoutDocument::dirty)
+            || self.other_layouts.iter().any(LayoutDocument::dirty)
     }
 }
 
