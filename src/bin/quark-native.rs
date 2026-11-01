@@ -5,6 +5,7 @@
 //! This native frontend deliberately shares .hyproj, .hy and .hyyui files
 //! instead of silently converting or rewriting them.
 
+#[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
 #[path = "../editor.rs"]
 mod editor;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
@@ -14,6 +15,7 @@ mod hydrogen;
 mod native_commands;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
+#[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
 #[path = "../native_layout.rs"]
 mod native_layout;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
@@ -35,10 +37,9 @@ mod startup;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../storage.rs"]
 mod storage;
+#[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
 #[path = "../symbols.rs"]
 mod symbols;
-#[path = "../theme.rs"]
-mod theme;
 #[path = "../ui_xml.rs"]
 mod ui_xml;
 
