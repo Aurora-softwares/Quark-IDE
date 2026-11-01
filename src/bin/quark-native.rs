@@ -744,9 +744,11 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 PointerPhase::Move => {
                     if let Some((id, dx, dy)) = ide.drag {
                         if let Some(layout) = ide.layout.as_mut() {
-                            layout
-                                .layout
-                                .position(id, event.point.x as f32 - dx, event.point.y as f32 - dy);
+                            layout.layout.position(
+                                id,
+                                event.point.x as f32 - dx,
+                                event.point.y as f32 - dy,
+                            );
                         }
                     }
                 }
