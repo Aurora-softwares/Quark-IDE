@@ -158,7 +158,13 @@ mod tests {
             original.adjust(Pane::Inspector, 1).inspector,
             original.inspector - 24.0
         );
-        assert_eq!(original.editor_area(1480.0, 940.0).0 + original.toolbox + original.inspector + 2.0 * HANDLE, 1480.0);
+        assert_eq!(
+            original.editor_area(1480.0, 940.0).0
+                + original.toolbox
+                + original.inspector
+                + 2.0 * HANDLE,
+            1480.0
+        );
     }
 
     #[test]
