@@ -5,13 +5,11 @@
 //! This native frontend deliberately shares .hyproj, .hy and .hyyui files
 //! instead of silently converting or rewriting them.
 
+#[path = "../editor.rs"]
+mod editor;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
-#[path = "../editor.rs"]
-mod editor;
-#[path = "../symbols.rs"]
-mod symbols;
 #[path = "../native_commands.rs"]
 mod native_commands;
 #[path = "../native_launcher.rs"]
@@ -37,6 +35,8 @@ mod startup;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../storage.rs"]
 mod storage;
+#[path = "../symbols.rs"]
+mod symbols;
 #[path = "../ui_xml.rs"]
 mod ui_xml;
 
@@ -278,20 +278,30 @@ fn discover_hydrogen_files(root: &Path, result: &mut Vec<PathBuf>, depth: usize)
     if depth > 8 {
         return;
     }
-    let Ok(entries) = fs::read_dir(root) else { return };
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
-        let Ok(kind) = entry.file_type() else { continue };
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
         if kind.is_dir() {
-            let skip = path.file_name().and_then(|s| s.to_str())
-                .is_some_and(|name| name.starts_with('.') || matches!(name, "target" | "build" | "node_modules"));
+            let skip = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|name| {
+                    name.starts_with('.') || matches!(name, "target" | "build" | "node_modules")
+                });
             if !skip {
                 discover_hydrogen_files(&path, result, depth + 1);
             }
-        } else if kind.is_file() && matches!(
-            path.extension().and_then(|s| s.to_str()),
-            Some("hy" | "hyproj" | "hyyui" | "hyui")
-        ) {
+        } else if kind.is_file()
+            && matches!(
+                path.extension().and_then(|s| s.to_str()),
+                Some("hy" | "hyproj" | "hyyui" | "hyui")
+            )
+        {
             result.push(path);
         }
     }
@@ -338,16 +348,23 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
         let mut pending = vec![(folder.to_path_buf(), 0_u8)];
         let mut visited = 0_usize;
         while let Some((directory, depth)) = pending.pop() {
-            if visited >= 4096 { break; }
+            if visited >= 4096 {
+                break;
+            }
             if let Ok(entries) = fs::read_dir(directory) {
                 for entry in entries.flatten() {
                     visited += 1;
-                    if visited > 4096 { break; }
+                    if visited > 4096 {
+                        break;
+                    }
                     let path = entry.path();
                     if path.is_dir() && !path.is_symlink() && depth < 5 {
                         pending.push((path, depth + 1));
                     } else if path.is_file()
-                        && matches!(path.extension().and_then(|e| e.to_str()), Some("hyyui" | "hyui"))
+                        && matches!(
+                            path.extension().and_then(|e| e.to_str()),
+                            Some("hyyui" | "hyui")
+                        )
                     {
                         paths.push(path);
                     }
@@ -378,7 +395,10 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
 
 fn flatten_symbols(node: &symbols::SymbolNode, parent: &str, output: &mut Vec<ListItem>) {
     for item in &node.items {
-        output.push(ListItem::new(format!("{}{} ({})", parent, item.name, item.kind)));
+        output.push(ListItem::new(format!(
+            "{}{} ({})",
+            parent, item.name, item.kind
+        )));
     }
     for (name, child) in &node.branches {
         flatten_symbols(child, &format!("{parent}{name}."), output);
@@ -733,7 +753,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 } else {
                     native_shell::DESIGN_SIDE_TABS
                 };
-                let Some(title) = names.get(index) else { return; };
+                let Some(title) = names.get(index) else {
+                    return;
+                };
                 let y_start = 4.0;
                 let line_height = 10.0;
                 if active.get() == index {
@@ -1145,7 +1167,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let tab_mode = tab_mode.clone();
         tab.on_pointer(move |event| {
             if event.phase == PointerPhase::Down {
-                if tab_mode.get() == Page::Code && index > 1 { return; }
+                if tab_mode.get() == Page::Code && index > 1 {
+                    return;
+                }
                 active.set(index);
                 for tab in &tabs {
                     tab.redraw();
@@ -1157,8 +1181,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
 
     // Only opened documents appear as tabs. An empty workspace contains no
     // fake editor or designer tabs and never replaces the launcher.
-    let show_page_redraw: Rc<RefCell<Option<Rc<dyn Fn(Page)>>>> =
-        Rc::new(RefCell::new(None));
+    let show_page_redraw: Rc<RefCell<Option<Rc<dyn Fn(Page)>>>> = Rc::new(RefCell::new(None));
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
         let state = state.clone();
         let centre = centre.clone();
@@ -1202,7 +1225,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let offset = tab_offset.get().min(maximum_offset);
             tab_offset.set(offset);
             for (kind, path) in tabs.iter().skip(offset).take(VISIBLE_TABS) {
-                let filename = path.file_name()
+                let filename = path
+                    .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.display().to_string());
                 let label = if active_path.as_ref() == Some(path) {
@@ -1254,7 +1278,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 if let Ok(all) = ui.combo_box() {
                     let mut labels = vec!["▾ All tabs".to_owned()];
                     labels.extend(tabs.iter().map(|(_, path)| {
-                        path.file_name().map(|name| name.to_string_lossy().into_owned())
+                        path.file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
                             .unwrap_or_else(|| path.display().to_string())
                     }));
                     all.set_items(&labels.iter().map(String::as_str).collect::<Vec<_>>());
@@ -1401,7 +1426,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         move |kind, path| match kind {
             Page::Code => open_source(path),
             Page::Design => open_layout(path),
-            Page::Empty => {},
+            Page::Empty => {}
         }
     }));
 
