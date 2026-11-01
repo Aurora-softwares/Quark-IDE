@@ -40,6 +40,9 @@ mod storage;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
 #[path = "../symbols.rs"]
 mod symbols;
+#[allow(dead_code)] // Required by the shared editor lexer; native theme integration is pending.
+#[path = "../theme.rs"]
+mod theme;
 #[path = "../ui_xml.rs"]
 mod ui_xml;
 
@@ -962,6 +965,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             designer.set_row_track(2, Track::Fixed(260.0));
         }
     });
+    let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     xml_editor.on_change({
         let state = state.clone();
         let canvas = canvas.clone();
@@ -1104,7 +1108,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
 
-    let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
+
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
     // True native splitters provide pointer capture and keyboard resizing.
