@@ -6,6 +6,24 @@ Current development status, next target and release gates are tracked in [Hydrog
 
 ![Quark IDE themes and welcome controls](assets/quark-catalogues.png)
 
+## Native UI migration — experimental preview
+
+The main `quark-ide` executable currently remains the fully featured **egui/eframe** application. Development is underway on a **separate optional native frontend** so that moving to OS-native controls does not sacrifice the working editor, project system and visual designer.
+
+Native target toolkit selection:
+
+- **Windows:** WinUI 3 (Windows App SDK; Fluent controls and native window frame).
+- **macOS:** AppKit (native menus, controls and standard macOS window).
+- **Linux:** GTK 4 with libadwaita (native GTK controls and host-managed windows).
+
+The experimental `quark-native` app uses the `naui` native widget abstraction to present a **Visual Studio Professional-inspired layout**: Toolbox on the left, documents and design canvas in the centre, Solution Explorer and Properties on the right, Output below and native menus/toolbars. Its state model reads existing Hydrogen `.hyproj`, source `.hy` and Quark `.quarkui` documents. New-project templates and basic source editing, building and UI control placement are initially available.
+
+To build this **preview** from source, use `cargo run --release --features native-ui --bin quark-native`. Linux requires GTK 4 and libadwaita development libraries; Windows needs a supported Windows App SDK environment. CI checks compile, lint and unit-test this separate frontend on all three host operating systems. The default `quark-ide` executable remains unchanged during the migration.
+
+**Not yet ready for general use:** native dock/float layout management, sophisticated code editor (syntax/semantic tooling, completion), native toolbox drag-and-drop, full property grid and multi-form editing, a real debugger, session recovery and complete tool parity. The native frontend is not a finished replacement for Quark, and a passing CI build does not establish GUI behaviour on every desktop environment. Migration must preserve source and layout safety before making it the default binary.
+
+**Development checkpoint:** native prototype on a draft feature branch. **Next target:** finish the three-platform native build/test matrix, then implement accessible, resizable/dockable native panes, drag/drop control authoring and full editor/build/debug integration. **Release gates:** native smoke tests, editor/designer recovery, OS integration and accessibility tests, runtime packaging, feature parity with existing Quark, and real application builds.
+
 ## Start Window and visual application designer
 
 When there is no active editor tab, Quark opens its **Start Window**. Choose **Create a new project…** to select a parent folder, a project name, and a Hydrogen target template (Linux, Windows, macOS, Australis executable or library). Quark creates a directory with `Program.hy` and a format-2 `.hyproj`, opens it in Solution Explorer, and creates a `Main.quarkui` layout. Existing folders and Hydrogen projects can be reopened using the recent-projects list.
