@@ -14,6 +14,9 @@ mod native_commands;
 #[allow(dead_code)]
 mod native_launcher;
 #[cfg(test)]
+#[allow(dead_code)]
+mod native_layout;
+#[cfg(test)]
 #[allow(dead_code)] // The native frontend uses the rest of this API.
 mod native_model;
 #[cfg(test)]

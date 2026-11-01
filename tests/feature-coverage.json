@@ -1883,6 +1883,34 @@
         "designer::tests::legacy_and_native_designers_can_open_each_others_extended_controls",
         "native_model::tests::all_designer_toolbox_controls_serialize_without_breaking_existing_layouts"
       ]
+    },
+    {
+      "id": "native-blank-document-workspace",
+      "category": "Native platform",
+      "feature": "Empty full-IDE workspace has no in-window Start page or fake document tabs and restores blank after project closure",
+      "tests": [
+        "native_model::tests::blank_workspace_never_displays_fake_code_or_designer_tabs",
+        "native_model::tests::document_tabs_require_their_matching_open_document"
+      ]
+    },
+    {
+      "id": "native-hydrogen-quark-side-tabs-and-accent",
+      "category": "Native shell",
+      "feature": "Compact vertically written native tool-window tabs and Hydrogen cyan/orbital blue/Quark violet accent without replacing OS widgets",
+      "tests": [
+        "native_shell::tests::professional_side_rail_is_compact_and_uses_native_focusable_tabs",
+        "native_shell::tests::hydrogen_quark_accents_are_distinct_and_start_tab_is_not_an_ide_document"
+      ]
+    },
+    {
+      "id": "native-grip-and-button-resizing",
+      "category": "Native layout",
+      "feature": "User-resizable pane handles and buttons update persisted widths/heights, while OS window resizing only affects the editor/designer Fill tracks",
+      "tests": [
+        "native_layout::tests::grip_drags_accumulate_against_current_size_after_handle_reflows",
+        "native_layout::tests::grip_hit_target_is_accessible_and_keyboard_adjustments_preserve_fixed_tracks",
+        "native_layout::tests::increasing_window_size_expands_only_the_editor"
+      ]
     }
   ]
 }

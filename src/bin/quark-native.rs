@@ -45,14 +45,9 @@ use std::{
     rc::Rc,
 };
 
-use native_model::{ControlKind, Document, GeometryField, Layout, LayoutDocument, Workspace};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Page {
-    Start,
-    Code,
-    Design,
-}
+use native_model::{
+    ControlKind, Document, DocumentPage as Page, GeometryField, Layout, LayoutDocument, Workspace,
+};
 
 struct Ide {
     workspace: Workspace,
@@ -78,7 +73,7 @@ impl Ide {
             project,
             document: None,
             layout: None,
-            page: Page::Start,
+            page: Page::Empty,
             armed: None,
             selected_id: None,
             drag: None,
@@ -97,7 +92,7 @@ impl Ide {
         self.project = self.workspace.selected.as_deref().map(project::load);
         self.document = None;
         self.layout = None;
-        self.page = Page::Code;
+        self.page = Page::Empty;
         if let Some(path) = &self.workspace.selected {
             record_recent(path.clone());
         }
@@ -118,7 +113,7 @@ impl Ide {
         self.project = None;
         self.document = None;
         self.layout = None;
-        self.page = Page::Code;
+        self.page = Page::Empty;
         record_recent(canonical);
         Ok(())
     }
@@ -130,7 +125,7 @@ impl Ide {
         self.workspace.folders.clear();
         self.document = None;
         self.layout = None;
-        self.page = Page::Start;
+        self.page = Page::Empty;
     }
 
     fn open_source(&mut self, file: &Path) -> Result<(), String> {
@@ -154,6 +149,10 @@ impl Ide {
         Ok(())
     }
 
+    fn display_page(&self, requested: Page) -> Page {
+        requested.available(self.document.is_some(), self.layout.is_some())
+    }
+
     fn save_active(&mut self) -> Result<(), String> {
         match self.page {
             Page::Code => self
@@ -166,7 +165,7 @@ impl Ide {
                 .as_mut()
                 .ok_or_else(|| "No UI layout is open".to_owned())?
                 .save(),
-            Page::Start => Err("Select a source file or UI layout first".into()),
+            Page::Empty => Err("No document is open".into()),
         }
     }
 
@@ -399,16 +398,33 @@ fn attach_pane_grip(
     );
     grip.on_draw(move |painter| {
         let (width, height) = (painter.width(), painter.height());
+        // Full-width hit target with an unmistakable Hydrogen / Quark grip.
+        painter.fill_rect(
+            Rect::new(0.0, 0.0, width, height),
+            Color::rgb(0x23, 0x2c, 0x40),
+        );
+        let (r, g, b) = native_shell::HYDROGEN_CYAN;
         let line = if vertical_divider {
-            Rect::new((width - 1.0) / 2.0, 0.0, 1.0, height)
+            Rect::new((width - 2.0) / 2.0, 0.0, 2.0, height)
         } else {
-            Rect::new(0.0, (height - 1.0) / 2.0, width, 1.0)
+            Rect::new(0.0, (height - 2.0) / 2.0, width, 2.0)
         };
-        painter.fill_rect(line, Color::rgb(0x77, 0x77, 0x77));
+        painter.fill_rect(line, Color::rgb(r, g, b));
+        let (r, g, b) = native_shell::QUARK_VIOLET;
+        let marker = if vertical_divider {
+            Rect::new((width - 4.0) / 2.0, (height - 38.0) / 2.0, 4.0, 38.0)
+        } else {
+            Rect::new((width - 38.0) / 2.0, (height - 4.0) / 2.0, 38.0, 4.0)
+        };
+        painter.fill_rect(marker, Color::rgb(r, g, b));
     });
-    let dragging = Rc::new(Cell::new(None::<(f64, native_layout::PaneSizes)>));
+    // Captured pointers are relative to the MOVING grip itself. Using the
+    // original pane size caused the divider to snap back after every reflow.
+    let dragging = Rc::new(Cell::new(None::<f64>));
+    let modified = Rc::new(Cell::new(false));
     grip.on_pointer({
         let dragging = dragging.clone();
+        let modified = modified.clone();
         move |event| {
             let coordinate = if vertical_divider {
                 event.point.x
@@ -416,16 +432,23 @@ fn attach_pane_grip(
                 event.point.y
             };
             match event.phase {
-                PointerPhase::Down => dragging.set(Some((coordinate, prefs.get()))),
+                PointerPhase::Down => {
+                    dragging.set(Some(coordinate));
+                    modified.set(false);
+                }
                 PointerPhase::Move => {
-                    if let Some((begin, original)) = dragging.get() {
-                        let next = original.resized(pane, coordinate - begin);
-                        prefs.set(next);
-                        apply(next);
+                    if let Some(begin) = dragging.get() {
+                        let original = prefs.get();
+                        let next = original.drag(pane, begin, coordinate);
+                        if next != original {
+                            prefs.set(next);
+                            modified.set(true);
+                            apply(next);
+                        }
                     }
                 }
                 PointerPhase::Up => {
-                    if dragging.replace(None).is_some() {
+                    if dragging.replace(None).is_some() && modified.replace(false) {
                         let _ = prefs.get().save(&save_path);
                     }
                 }
@@ -507,11 +530,42 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     command_strip.append(&run_button);
     command_strip.append(&debug_button);
     command_strip.append(&publish_button);
-    root.attach(&command_strip, GridCell::new(0, 0));
+    // A small orbital-spectrum accent: cyan Hydrogen → blue electron
+    // orbit → violet Quark. Leave the native OS controls untouched.
+    let command_area = ui.stack(Orientation::Vertical)?;
+    let brand_rule = ui.canvas()?;
+    brand_rule.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(4.0)));
+    brand_rule.on_draw(|painter| {
+        let width = painter.width();
+        let height = painter.height();
+        for (segment, color) in [
+            native_shell::HYDROGEN_CYAN,
+            native_shell::ORBIT_BLUE,
+            native_shell::QUARK_VIOLET,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let (r, g, b) = *color;
+            painter.fill_rect(
+                Rect::new(width * segment as f64 / 3.0, 0.0, width / 3.0 + 1.0, height),
+                Color::rgb(r, g, b),
+            );
+        }
+    });
+    command_area.append(&brand_rule);
+    command_area.append(&command_strip);
+    root.attach(&command_area, GridCell::new(0, 0));
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(7.0);
-    toolbox.append(&ui.label("TOOLBOX")?);
+    let toolbox_heading = ui.stack(Orientation::Horizontal)?;
+    toolbox_heading.append(&ui.label("TOOLBOX")?);
+    let toolbox_narrow = ui.button("◂")?;
+    let toolbox_wide = ui.button("▸")?;
+    toolbox_heading.append(&toolbox_narrow);
+    toolbox_heading.append(&toolbox_wide);
+    toolbox.append(&toolbox_heading);
     let toolbox_search = ui.search_input()?;
     toolbox_search.set_placeholder("Search controls");
     toolbox.append(&toolbox_search);
@@ -562,16 +616,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
-    // Visual Studio's compact auto-hide rail lives to the left of Toolbox.
+    // Narrow native tool-window tabs, with vertically written captions.
+    // They are keyboard-focusable platform buttons, not a VS Code activity bar.
     let left_rail = ui.stack(Orientation::Vertical)?;
-    left_rail.set_spacing(5.0);
-    left_rail.set_sizing(Sizing::new().width(Length::Fixed(85.0)));
-    let server_tab = ui.button("Server")?;
-    let toolbox_tab = ui.button("Toolbox")?;
-    let data_tab = ui.button("Data")?;
-    left_rail.append(&server_tab);
-    left_rail.append(&toolbox_tab);
-    left_rail.append(&data_tab);
+    left_rail.set_spacing(2.0);
+    left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
+    let rail_accent = ui.canvas()?;
+    rail_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(4.0)));
+    rail_accent.on_draw(|painter| {
+        let (r, g, b) = native_shell::QUARK_VIOLET;
+        painter.fill_rect(
+            Rect::new(0.0, 0.0, painter.width(), painter.height()),
+            Color::rgb(r, g, b),
+        );
+    });
+    left_rail.append(&rail_accent);
+    let toolbox_tab = ui.button(native_shell::SIDE_TABS[0].1)?;
+    let server_tab = ui.button(native_shell::SIDE_TABS[1].1)?;
+    let data_tab = ui.button(native_shell::SIDE_TABS[2].1)?;
+    for (button, tab) in [
+        (&toolbox_tab, native_shell::SIDE_TABS[0]),
+        (&server_tab, native_shell::SIDE_TABS[1]),
+        (&data_tab, native_shell::SIDE_TABS[2]),
+    ] {
+        button.set_sizing(
+            Sizing::new()
+                .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH - 4.0))
+                .height(Length::Fixed(tab.2)),
+        );
+        left_rail.append(button);
+    }
     let server_view = ui.stack(Orientation::Vertical)?;
     server_view.append(&ui.label("SERVER EXPLORER")?);
     server_view.append(&ui.label("Server connections can be added here in a future update.")?);
@@ -590,66 +664,33 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     centre.set_spacing(6.0);
     let document_tabs = ui.stack(Orientation::Horizontal)?;
     document_tabs.set_spacing(8.0);
-    let start_button = ui.button("Start Window")?;
+    let tab_accent = ui.canvas()?;
+    tab_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(3.0)));
+    tab_accent.on_draw(|painter| {
+        let (r, g, b) = native_shell::HYDROGEN_CYAN;
+        painter.fill_rect(
+            Rect::new(0.0, 0.0, painter.width(), painter.height()),
+            Color::rgb(r, g, b),
+        );
+    });
     let code_button = ui.button("Program.hy")?;
     let design_button = ui.button("Main.quarkui [Design]")?;
-    document_tabs.append(&start_button);
-    document_tabs.append(&code_button);
-    document_tabs.append(&design_button);
-    centre.append(&document_tabs);
 
     let pages = ui.stack(Orientation::Vertical)?;
     pages.set_sizing(Sizing::fill());
 
-    let start = ui.stack(Orientation::Vertical)?;
-    start.set_spacing(12.0);
-    start.append(&ui.label("QUARK  |  START WINDOW")?);
-    start.append(&ui.label("Get started with a Hydrogen project")?);
-    let parent_field = ui.text_input("")?;
-    parent_field.set_placeholder("Parent directory for a new project");
-    parent_field.set_text(
-        &std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .to_string_lossy(),
-    );
-    let name_field = ui.text_input("MyHydrogenApp")?;
-    let template_box = ui.combo_box()?;
-    template_box.set_items(&[
-        "Linux Application",
-        "Windows Application",
-        "macOS Application",
-        "Australis Executable",
-        "Hydrogen Library",
-    ]);
-    template_box.set_selected(0);
-    let create_button = ui.button("Create New Project")?;
-    let open_project_button = ui.button("Open Existing Project…")?;
-    let open_file_button = ui.button("Open Source File…")?;
-    start.append(&ui.label("Project name")?);
-    start.append(&name_field);
-    start.append(&ui.label("Create in folder")?);
-    start.append(&parent_field);
-    start.append(&ui.label("Target platform")?);
-    start.append(&template_box);
-    start.append(&create_button);
-    start.append(&open_project_button);
-    start.append(&open_file_button);
-
-    start.append(&ui.label("RECENT PROJECTS")?);
-    let recent = ui.list()?;
-    let initial_recent = state.borrow().workspace.recent.clone();
-    recent.set_items(
-        &initial_recent
-            .iter()
-            .map(|path| ListItem::new(path.display().to_string()))
-            .collect::<Vec<_>>(),
-    );
-    recent.set_sizing(
-        Sizing::new()
-            .width(Length::Fill)
-            .height(Length::Fixed(210.0)),
-    );
-    start.append(&recent);
+    // The full IDE has no Start document. Without an open source or layout,
+    // the editing region is a quiet canvas. Project management stays in the
+    // separate lightweight launcher.
+    let empty_workspace = ui.canvas()?;
+    empty_workspace.set_sizing(Sizing::fill());
+    empty_workspace.on_draw(|painter| {
+        let (r, g, b) = native_shell::QUIET_SURFACE;
+        painter.fill_rect(
+            Rect::new(0.0, 0.0, painter.width(), painter.height()),
+            Color::rgb(r, g, b),
+        );
+    });
 
     let code = ui.stack(Orientation::Vertical)?;
     code.append(&ui.label("CODE EDITOR  |  Native multiline text control")?);
@@ -663,7 +704,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     designer.append(&ui.label("WINDOW DESIGNER  |  Native canvas with movable controls")?);
     designer.append(&canvas);
 
-    pages.append(&start);
+    pages.append(&empty_workspace);
     centre.append(&pages);
     centre.set_sizing(Sizing::fill());
 
@@ -677,6 +718,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let collapse_solution = ui.button("−")?;
     solution_heading.append(&refresh_solution);
     solution_heading.append(&collapse_solution);
+    let inspector_wide = ui.button("◂")?;
+    let inspector_narrow = ui.button("▸")?;
+    solution_heading.append(&inspector_wide);
+    solution_heading.append(&inspector_narrow);
     solution_pane.append(&solution_heading);
     let solution_search = ui.search_input()?;
     solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
@@ -694,7 +739,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.set_spacing(7.0);
     let properties_heading = ui.label("PROPERTIES")?;
     properties_heading.set_style(naui::TextStyle::Heading);
-    properties_pane.append(&properties_heading);
+    let properties_toolbar = ui.stack(Orientation::Horizontal)?;
+    properties_toolbar.append(&properties_heading);
+    let properties_grow = ui.button("▲")?;
+    let properties_shrink = ui.button("▼")?;
+    properties_toolbar.append(&properties_grow);
+    properties_toolbar.append(&properties_shrink);
+    properties_pane.append(&properties_toolbar);
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
@@ -749,6 +800,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     bottom_tabs.append(&debug_tab);
     bottom_tabs.append(&test_tab);
     bottom_tabs.append(&find_tab);
+    let output_grow = ui.button("▲")?;
+    let output_shrink = ui.button("▼")?;
+    bottom_tabs.append(&output_grow);
+    bottom_tabs.append(&output_shrink);
     bottom.append(&bottom_tabs);
 
     let bottom_pages = ui.stack(Orientation::Vertical)?;
@@ -849,7 +904,43 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         );
     }
 
+    // Accessible native-button alternatives to fine pointer dragging.
+    // Both routes update exactly the same fixed Grid tracks and persisted
+    // dimensions; resizing the OS window still only expands the centre.
+    let adjust_pane: Rc<dyn Fn(native_layout::Pane, i32)> = Rc::new({
+        let pane_sizes = pane_sizes.clone();
+        let refresh_tracks = refresh_tracks.clone();
+        let pane_path = pane_path.clone();
+        let status = status.clone();
+        move |pane, steps| {
+            let original = pane_sizes.get();
+            let next = original.adjust(pane, steps);
+            if next == original {
+                return;
+            }
+            pane_sizes.set(next);
+            refresh_tracks(next);
+            if let Err(error) = next.save(&pane_path) {
+                status.set_text(&format!("Could not save tool window sizes: {error}"));
+            }
+        }
+    });
+    for (button, pane, steps) in [
+        (&toolbox_narrow, native_layout::Pane::Toolbox, -1),
+        (&toolbox_wide, native_layout::Pane::Toolbox, 1),
+        (&inspector_wide, native_layout::Pane::Inspector, -1),
+        (&inspector_narrow, native_layout::Pane::Inspector, 1),
+        (&properties_grow, native_layout::Pane::Properties, -1),
+        (&properties_shrink, native_layout::Pane::Properties, 1),
+        (&output_grow, native_layout::Pane::Output, -1),
+        (&output_shrink, native_layout::Pane::Output, 1),
+    ] {
+        let adjust_pane = adjust_pane.clone();
+        button.on_click(move || adjust_pane(pane, steps));
+    }
+
     let status_bar = ui.stack(Orientation::Horizontal)?;
+    status_bar.append(&ui.label("✦ QUARK · HYDROGEN")?);
     status_bar.append(&status);
     status_bar.append(&workspace_name);
     root.attach(&status_bar, GridCell::new(0, 2));
@@ -919,28 +1010,48 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         button.on_click(move || left_panel(index));
     }
 
-    // Pane display is controlled separately from the persistent file model.
+    // Only opened documents appear as tabs. An empty workspace contains no
+    // fake editor or designer tabs and never replaces the launcher.
     let show_page: Rc<dyn Fn(Page)> = Rc::new({
         let state = state.clone();
+        let centre = centre.clone();
+        let document_tabs = document_tabs.clone();
+        let tab_accent = tab_accent.clone();
         let pages = pages.clone();
-        let start = start.clone();
+        let empty_workspace = empty_workspace.clone();
+        let code_button = code_button.clone();
+        let design_button = design_button.clone();
         let code = code.clone();
         let designer = designer.clone();
-        move |page| {
-            state.borrow_mut().page = page;
+        move |requested| {
+            let (page, has_code, has_design) = {
+                let mut ide = state.borrow_mut();
+                let page = ide.display_page(requested);
+                ide.page = page;
+                (page, ide.document.is_some(), ide.layout.is_some())
+            };
+            centre.clear();
+            document_tabs.clear();
+            if has_code {
+                document_tabs.append(&code_button);
+            }
+            if has_design {
+                document_tabs.append(&design_button);
+            }
+            if has_code || has_design {
+                centre.append(&document_tabs);
+                centre.append(&tab_accent);
+            }
             pages.clear();
             match page {
-                Page::Start => pages.append(&start),
+                Page::Empty => pages.append(&empty_workspace),
                 Page::Code => pages.append(&code),
                 Page::Design => pages.append(&designer),
             }
+            centre.append(&pages);
         }
     });
-    for (button, page) in [
-        (&start_button, Page::Start),
-        (&code_button, Page::Code),
-        (&design_button, Page::Design),
-    ] {
+    for (button, page) in [(&code_button, Page::Code), (&design_button, Page::Design)] {
         let show_page = show_page.clone();
         button.on_click(move || show_page(page));
     }
@@ -982,7 +1093,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     let refresh_project: Rc<dyn Fn()> = Rc::new({
         let state = state.clone();
         let tree = tree.clone();
-        let recent = recent.clone();
         let workspace_name = workspace_name.clone();
         let startup_project = startup_project.clone();
         let solution_query = solution_query.clone();
@@ -996,13 +1106,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             workspace_name.set_text(&project_name);
             startup_project.set_items(&[&project_name]);
             startup_project.set_selected(0);
-            recent.set_items(
-                &ide.workspace
-                    .recent
-                    .iter()
-                    .map(|path| ListItem::new(path.display().to_string()))
-                    .collect::<Vec<_>>(),
-            );
         }
     });
     solution_search.on_change({
@@ -1080,83 +1183,29 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         }
     });
 
-    create_button.on_click({
-        let state = state.clone();
+    // File > New Project reuses the native launcher wizard as a separate
+    // window, without reopening the IDE's removed Start document or closing
+    // the IDE when creation completes.
+    let show_new_project: Rc<dyn Fn()> = Rc::new({
+        let ui = ui.clone();
+        let window = window.clone();
         let open_project = open_project.clone();
         let status = status.clone();
-        let parent_field = parent_field.clone();
-        let name_field = name_field.clone();
-        let template_box = template_box.clone();
-        let canvas = canvas.clone();
-        let show_page = show_page.clone();
         move || {
-            let name = name_field.text();
-            let parent = PathBuf::from(parent_field.text());
-            let templates = startup::Template::ALL;
-            let selected = template_box.selected().unwrap_or(0);
-            let template = templates
-                .get(selected)
-                .copied()
-                .unwrap_or(startup::Template::Linux);
-            match startup::create_project(&parent, &name, template) {
-                Ok(manifest) => {
-                    let layout_path = manifest.parent().unwrap().join("Main.quarkui");
-                    let data = serde_json::to_vec_pretty(&Layout::default()).unwrap_or_default();
-                    if let Err(error) = fs::write(&layout_path, data) {
-                        status.set_text(&format!("Created project, cannot create layout: {error}"));
+            let launch: native_start_window::Launch = Rc::new({
+                let open_project = open_project.clone();
+                move |action| match action {
+                    native_start_window::Action::Project(manifest) => {
+                        open_project(manifest);
+                        Ok(())
                     }
-                    open_project(manifest);
-                    if layout_path.exists() {
-                        if let Ok(doc) = LayoutDocument::open(&layout_path) {
-                            state.borrow_mut().layout = Some(doc);
-                            show_page(Page::Design);
-                            canvas.redraw();
-                        }
-                    }
+                    _ => Err("Choose a new Hydrogen project".into()),
                 }
-                Err(error) => status.set_text(&format!("New project: {error}")),
-            }
-        }
-    });
-
-    open_project_button.on_click({
-        let open_project = open_project.clone();
-        move || {
-            if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Hydrogen project", &["hyproj"])
-                .pick_file()
+            });
+            if let Err(error) =
+                native_start_window::create_project_wizard(&ui, window.clone(), launch, false)
             {
-                open_project(path);
-            }
-        }
-    });
-    open_file_button.on_click({
-        let open_source = open_source.clone();
-        move || {
-            if let Some(path) = rfd::FileDialog::new()
-                .add_filter("Hydrogen source", &["hy"])
-                .pick_file()
-            {
-                open_source(path);
-            }
-        }
-    });
-
-    recent.on_select({
-        let state = state.clone();
-        let open_project = open_project.clone();
-        let status = status.clone();
-        move |indices| {
-            let Some(&index) = indices.first() else {
-                return;
-            };
-            let path = state.borrow().workspace.recent.get(index).cloned();
-            if let Some(path) = path {
-                if path.extension().and_then(|s| s.to_str()) == Some("hyproj") {
-                    open_project(path);
-                } else {
-                    status.set_text("Recent folder support is available through Open Project.");
-                }
+                status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
     });
@@ -1442,12 +1491,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     toolbar.on_activate({
         let save_action = save_action.clone();
         let open_project = open_project.clone();
-        let show_page = show_page.clone();
+        let show_new_project = show_new_project.clone();
         let task_action = task_action.clone();
         let status = status.clone();
         let solution_search = solution_search.clone();
         move |index| match index {
-            0 => show_page(Page::Start),
+            0 => show_new_project(),
             1 => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Hydrogen project", &["hyproj"])
@@ -1473,6 +1522,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let state = state.clone();
         let save_action = save_action.clone();
         let show_page = show_page.clone();
+        let show_new_project = show_new_project.clone();
         let open_project = open_project.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
@@ -1484,7 +1534,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let window = window.clone();
         let reset_window_layout = reset_window_layout.clone();
         move |menu, action| match (menu, action) {
-            (0, 0) => show_page(Page::Start),
+            (0, 0) => show_new_project(),
             (0, 1) => {
                 if let Some(path) = rfd::FileDialog::new()
                     .add_filter("Hydrogen", &["hyproj"])
@@ -1498,7 +1548,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                     match state.borrow_mut().remember_folder(path) {
                         Ok(()) => {
                             refresh_project();
-                            show_page(Page::Start);
+                            show_page(Page::Empty);
                         }
                         Err(error) => status.set_text(&error),
                     }
@@ -1522,7 +1572,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 } else {
                     state.borrow_mut().clear_workspace();
                     refresh_project();
-                    show_page(Page::Start);
+                    show_page(Page::Empty);
                 }
             }
             (0, 6) => {
@@ -1533,7 +1583,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 }
             }
             (1, _) => status.set_text("Native editor editing commands are being integrated."),
-            (2, 0) => show_page(Page::Start),
+            (2, 0) => show_page(Page::Empty),
             (2, 1) => show_page(Page::Code),
             (2, 2) => show_page(Page::Design),
             (2, 3) => refresh_project(),
@@ -1621,7 +1671,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     } else if initial_document.1 {
         show_page(Page::Design);
     } else {
-        show_page(Page::Start);
+        show_page(Page::Empty);
     }
 
     // The native shell provides the actual OS frame and follows the system's
@@ -1676,6 +1726,35 @@ fn main() -> naui::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn entering_full_ide_without_documents_is_a_blank_workspace() {
+        let mut ide = Ide::from_workspace(Workspace::default());
+        assert_eq!(ide.page, Page::Empty);
+        assert_eq!(ide.display_page(Page::Code), Page::Empty);
+        assert_eq!(ide.display_page(Page::Design), Page::Empty);
+        assert!(ide.document.is_none() && ide.layout.is_none());
+        assert!(ide.save_active().is_err());
+    }
+
+    #[test]
+    fn blank_workspace_is_restored_after_closing_a_folder_and_existing_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Program.hy");
+        fs::write(&path, "class Program {}").unwrap();
+        // Keep unit tests isolated from the user's real workspace history.
+        let mut workspace = Workspace::default();
+        workspace.remember(dir.path().to_path_buf(), false);
+        let mut ide = Ide::from_workspace(workspace);
+        assert_eq!(ide.page, Page::Empty);
+        ide.open_source(&path).unwrap();
+        assert_eq!(ide.display_page(Page::Code), Page::Code);
+        assert_eq!(ide.display_page(Page::Design), Page::Empty);
+        ide.clear_workspace();
+        assert_eq!(ide.page, Page::Empty);
+        assert_eq!(ide.display_page(Page::Code), Page::Empty);
+        assert!(ide.document.is_none());
+    }
+
     #[test]
     fn platform_name_matches_native_target() {
         #[cfg(target_os = "windows")]
