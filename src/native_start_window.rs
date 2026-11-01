@@ -153,7 +153,9 @@ pub fn show(
     search.on_change({
         let filter = filter.clone();
         let refresh = refresh.clone();
+        let selected = selected.clone();
         move |value| {
+            *selected.borrow_mut() = None;
             *filter.borrow_mut() = value.to_owned();
             refresh();
         }
