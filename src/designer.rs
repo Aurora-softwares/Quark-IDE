@@ -1,5 +1,5 @@
 //! Quark's design-time Hydrogen UI layout editor.
-//! Layouts are Hydrogen UI XML documents (.hyyui). They are deliberately not represented
+//! Layouts are Hydrogen UI XML documents (.hyui). They are deliberately not represented
 //! as runnable native widgets until Hydrogen.UI has a supported runtime binding.
 
 use crate::storage;
@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn layout_roundtrip_create_edit_save_reopen() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Form.hyyui");
+        let path = dir.path().join("Form.hyui");
         let mut editor = Designer::create(path.clone()).unwrap();
         assert!(Designer::create(path.clone()).is_err());
         editor.add(Kind::Label, 50.0, 80.0).unwrap();
@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn refuses_invalid_and_untrusted_layout_files() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Bad.hyyui");
+        let path = dir.path().join("Bad.hyui");
         fs::write(
             &path,
             r#"{"version":999,"title":"bad","width":720,"height":480,"controls":[]}"#,
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn detects_external_modification_on_save() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Form.hyyui");
+        let path = dir.path().join("Form.hyui");
         let mut editor = Designer::create(path.clone()).unwrap();
         editor.add(Kind::TextField, 50.0, 60.0).unwrap();
         fs::write(&path, "external edit").unwrap();
