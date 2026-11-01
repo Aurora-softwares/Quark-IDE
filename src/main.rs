@@ -8,6 +8,8 @@ mod editor;
 mod feature_tests;
 mod hydrogen;
 mod navigation;
+#[cfg(test)]
+mod native_model;
 mod panels;
 mod plugins;
 mod problems;
