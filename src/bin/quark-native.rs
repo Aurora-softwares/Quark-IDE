@@ -2577,7 +2577,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
 }
 
 fn main() -> naui::Result<()> {
-    naui::run(Settings::new("quark-ide").theme(Theme::Dark), build)
+    naui::run(Settings::new("quark-ide").theme(Theme::System), build)
 }
 
 #[cfg(test)]
