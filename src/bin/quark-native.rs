@@ -1686,40 +1686,69 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     canvas.on_draw({
         let state = state.clone();
         move |painter| {
+            let background = Color::rgb(0x2b, 0x2d, 0x33);
             painter.fill_rect(
                 Rect::new(0.0, 0.0, painter.width(), painter.height()),
-                Color::rgb(0xf2, 0xf5, 0xfa),
+                background,
             );
             let ide = state.borrow();
             let Some(layout) = ide.layout.as_ref().map(|doc| &doc.layout) else {
                 painter.text(
-                    "Open or create Main.hyyui to use the designer",
+                    "Open a Hydrogen .hyui or .hyyui layout",
                     Point::new(24.0, 36.0),
-                    15.0,
-                    Color::BLACK,
+                    13.0,
+                    Color::rgb(0xd0, 0xd0, 0xd4),
                 );
                 return;
             };
+            let (width, height) = (f64::from(layout.width), f64::from(layout.height));
+            let left = ((painter.width() - width) / 2.0).max(20.0);
+            let top = 28.0;
+            // GTK-like window framing; the document coordinates begin below
+            // a 32px titlebar and remain independent of the editor viewport.
+            painter.fill_rect(
+                Rect::new(left - 1.0, top - 1.0, width + 2.0, height + 34.0),
+                Color::rgb(0x65, 0x65, 0x6c),
+            );
+            painter.fill_rect(
+                Rect::new(left, top, width, 32.0),
+                Color::rgb(0x39, 0x3a, 0x40),
+            );
+            painter.text(
+                &layout.title,
+                Point::new(left + 12.0, top + 8.0),
+                12.0,
+                Color::rgb(0xee, 0xee, 0xee),
+            );
+            painter.fill_rect(
+                Rect::new(left, top + 32.0, width, height),
+                Color::rgb(0xf7, 0xf7, 0xf8),
+            );
             for control in &layout.controls {
-                let colour = if ide.selected_id == Some(control.id) {
-                    Color::rgb(0xa4, 0xcf, 0xf6)
-                } else {
-                    Color::rgb(0xdf, 0xe6, 0xf0)
-                };
-                painter.fill_rect(
-                    Rect::new(
-                        f64::from(control.x),
-                        f64::from(control.y),
-                        f64::from(control.width),
-                        f64::from(control.height),
-                    ),
-                    colour,
+                let (x, y) = (
+                    left + f64::from(control.x),
+                    top + 32.0 + f64::from(control.y),
                 );
+                let (w, h) = (f64::from(control.width), f64::from(control.height));
+                let colour = match control.kind {
+                    ControlKind::Button => Color::rgb(0xe0, 0xe0, 0xe4),
+                    ControlKind::TextField | ControlKind::TextArea => Color::WHITE,
+                    ControlKind::Panel | ControlKind::TabControl => Color::rgb(0xec, 0xec, 0xef),
+                    _ => Color::rgb(0xf7, 0xf7, 0xf8),
+                };
+                painter.fill_rect(Rect::new(x, y, w, h), colour);
+                if ide.selected_id == Some(control.id) {
+                    let stroke = Color::rgb(0x64, 0x74, 0xaa);
+                    painter.fill_rect(Rect::new(x, y, w, 2.0), stroke);
+                    painter.fill_rect(Rect::new(x, y + h - 2.0, w, 2.0), stroke);
+                    painter.fill_rect(Rect::new(x, y, 2.0, h), stroke);
+                    painter.fill_rect(Rect::new(x + w - 2.0, y, 2.0, h), stroke);
+                }
                 painter.text(
                     &control.text,
-                    Point::new(f64::from(control.x) + 8.0, f64::from(control.y) + 8.0),
-                    14.0,
-                    Color::BLACK,
+                    Point::new(x + 9.0, y + 9.0),
+                    12.0,
+                    Color::rgb(0x24, 0x24, 0x28),
                 );
             }
         }
@@ -1739,7 +1768,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             let mut ide = state.borrow_mut();
             match event.phase {
                 PointerPhase::Down => {
-                    let (x, y) = (event.point.x as f32, event.point.y as f32);
+                    let (x, y) = if let Some(doc) = ide.layout.as_ref() {
+                        let left = ((canvas.width() - f64::from(doc.layout.width)) / 2.0).max(20.0);
+                        ((event.point.x - left) as f32, (event.point.y - 60.0) as f32)
+                    } else {
+                        (event.point.x as f32, event.point.y as f32)
+                    };
                     if let Some(kind) = ide.armed.take() {
                         if let Some(layout) = ide.layout.as_mut() {
                             if let Ok(id) = layout.layout.add(kind, x, y) {
