@@ -14,16 +14,48 @@ pub enum Kind {
     Button,
     TextField,
     Checkbox,
+    TextArea,
+    RadioButton,
+    ComboBox,
+    ListBox,
+    Slider,
+    ProgressBar,
+    Image,
+    Panel,
+    TabControl,
 }
 
 impl Kind {
-    pub const ALL: [Self; 4] = [Self::Label, Self::Button, Self::TextField, Self::Checkbox];
+    pub const ALL: [Self; 13] = [
+        Self::Label,
+        Self::Button,
+        Self::TextField,
+        Self::Checkbox,
+        Self::TextArea,
+        Self::RadioButton,
+        Self::ComboBox,
+        Self::ListBox,
+        Self::Slider,
+        Self::ProgressBar,
+        Self::Image,
+        Self::Panel,
+        Self::TabControl,
+    ];
     pub fn label(self) -> &'static str {
         match self {
             Self::Label => "Label",
             Self::Button => "Button",
             Self::TextField => "Text box",
             Self::Checkbox => "Check box",
+            Self::TextArea => "Multiline Text Box",
+            Self::RadioButton => "Radio Button",
+            Self::ComboBox => "Combo Box",
+            Self::ListBox => "List Box",
+            Self::Slider => "Slider",
+            Self::ProgressBar => "Progress Bar",
+            Self::Image => "Image",
+            Self::Panel => "Panel",
+            Self::TabControl => "Tab Control",
         }
     }
     fn size(self) -> [f32; 2] {
@@ -32,6 +64,15 @@ impl Kind {
             Self::Button => [130.0, 36.0],
             Self::TextField => [180.0, 36.0],
             Self::Checkbox => [160.0, 30.0],
+            Self::TextArea => [220.0, 100.0],
+            Self::RadioButton => [160.0, 30.0],
+            Self::ComboBox => [180.0, 36.0],
+            Self::ListBox => [200.0, 140.0],
+            Self::Slider => [200.0, 32.0],
+            Self::ProgressBar => [200.0, 24.0],
+            Self::Image => [160.0, 120.0],
+            Self::Panel => [300.0, 200.0],
+            Self::TabControl => [320.0, 220.0],
         }
     }
 }
@@ -413,6 +454,32 @@ impl Designer {
                     foreground,
                 );
             }
+            Kind::Panel | Kind::TabControl => {
+                painter.rect_filled(rect, 3.0, Color32::from_rgb(229, 234, 240));
+                painter.text(
+                    rect.left_top() + egui::vec2(8.0, 12.0),
+                    Align2::LEFT_CENTER,
+                    &control.text,
+                    FontId::proportional(14.0),
+                    foreground,
+                );
+            }
+            Kind::TextArea
+            | Kind::RadioButton
+            | Kind::ComboBox
+            | Kind::ListBox
+            | Kind::Slider
+            | Kind::ProgressBar
+            | Kind::Image => {
+                painter.rect_filled(rect, 3.0, Color32::from_rgb(245, 247, 249));
+                painter.text(
+                    rect.left_center() + egui::vec2(8.0, 0.0),
+                    Align2::LEFT_CENTER,
+                    &control.text,
+                    FontId::proportional(14.0),
+                    foreground,
+                );
+            }
         }
         if self.selected == Some(control.id) {
             let outline = Stroke::new(2.0_f32, Color32::from_rgb(55, 120, 230));
@@ -427,6 +494,22 @@ impl Designer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_and_native_designers_can_open_each_others_extended_controls() {
+        let mut native = crate::native_model::Layout::default();
+        for kind in crate::native_model::ControlKind::ALL {
+            native.add(kind, 15.0, 15.0).unwrap();
+        }
+        let native_json = serde_json::to_string(&native).unwrap();
+        let legacy: Layout = serde_json::from_str(&native_json).unwrap();
+        assert_eq!(legacy.controls.len(), Kind::ALL.len());
+        legacy.validate().unwrap();
+        let legacy_json = serde_json::to_string(&legacy).unwrap();
+        let native_round_trip: crate::native_model::Layout =
+            serde_json::from_str(&legacy_json).unwrap();
+        assert_eq!(native_round_trip, native);
+    }
 
     #[test]
     fn add_move_and_clamp_controls_to_canvas() {
