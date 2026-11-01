@@ -897,14 +897,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     editor.set_sizing(Sizing::fill());
     code.attach(&editor, GridCell::new(0, 0));
 
-    // Embedded designer: the upper pane is a window-shaped design surface.
-    // Below it, a dedicated XML editor opens alongside the visual designer.
-    let designer = ui.grid()?;
+    // The first tab row selects documents; the second selects the editor
+    // representation of a .hyui document. Both views use the full workspace.
+    let design_tabs = ui.stack(Orientation::Horizontal)?;
+    design_tabs.set_spacing(4.0);
+    let xml_visual_tab = ui.button("Design")?;
+    let xml_text_tab = ui.button("XML Source")?;
+    design_tabs.append(&xml_visual_tab);
+    design_tabs.append(&xml_text_tab);
+
+    let designer = ui.stack(Orientation::Vertical)?;
+    designer.set_spacing(0.0);
     designer.set_sizing(Sizing::fill());
-    designer.set_column_track(0, Track::FILL);
-    designer.set_row_track(0, Track::FILL);
-    designer.set_row_track(1, Track::Fixed(7.0));
-    designer.set_row_track(2, Track::Fixed(260.0));
+    let design_mode = Rc::new(Cell::new(true));
 
     let design_surface = ui.stack(Orientation::Vertical)?;
     design_surface.set_sizing(Sizing::fill());
@@ -934,53 +939,29 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
             })
     };
 
-    let xml_pane = ui.grid()?;
-    xml_pane.set_sizing(Sizing::fill());
-    xml_pane.set_column_track(0, Track::FILL);
-    xml_pane.set_row_track(0, Track::Fixed(32.0));
-    xml_pane.set_row_track(1, Track::FILL);
-    let xml_tabs = ui.stack(Orientation::Horizontal)?;
-    xml_tabs.set_spacing(3.0);
-    let xml_visual_tab = ui.button("Design")?;
-    let xml_text_tab = ui.button("XML Source")?;
-    xml_tabs.append(&xml_visual_tab);
-    xml_tabs.append(&xml_text_tab);
-    xml_pane.attach(&xml_tabs, GridCell::new(0, 0));
     let xml_editor = ui.text_area("")?;
     xml_editor.set_sizing(Sizing::fill());
-    xml_pane.attach(&xml_editor, GridCell::new(0, 1));
-
-    // XML is visible by default when a layout is opened. The Design tab
-    // collapses the lower source editor without closing or discarding it.
-    let source_visible = Rc::new(Cell::new(true));
     let sync_xml = Rc::new(Cell::new(false));
-
-    let xml_divider = ui.canvas()?;
-    xml_divider.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(7.0)));
-    xml_divider.on_draw(|p| {
-        p.fill_rect(
-            Rect::new(0.0, 2.0, p.width(), 3.0),
-            Color::rgb(0x56, 0x57, 0x61),
-        );
-    });
-    designer.attach(&design_surface, GridCell::new(0, 0));
-    designer.attach(&xml_divider, GridCell::new(0, 1));
-    designer.attach(&xml_pane, GridCell::new(0, 2));
+    designer.append(&design_surface);
 
     xml_visual_tab.on_click({
         let designer = designer.clone();
-        let source_visible = source_visible.clone();
+        let design_surface = design_surface.clone();
+        let design_mode = design_mode.clone();
         move || {
-            source_visible.set(false);
-            designer.set_row_track(2, Track::Fixed(32.0));
+            design_mode.set(true);
+            designer.clear();
+            designer.append(&design_surface);
         }
     });
     xml_text_tab.on_click({
         let designer = designer.clone();
-        let source_visible = source_visible.clone();
+        let xml_editor = xml_editor.clone();
+        let design_mode = design_mode.clone();
         move || {
-            source_visible.set(true);
-            designer.set_row_track(2, Track::Fixed(260.0));
+            design_mode.set(false);
+            designer.clear();
+            designer.append(&xml_editor);
         }
     });
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
@@ -1392,7 +1373,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let designer = designer.clone();
         let xml_editor = xml_editor.clone();
         let sync_xml = sync_xml.clone();
-        let source_visible = source_visible.clone();
+        let design_tabs = design_tabs.clone();
+        let design_mode = design_mode.clone();
+        let design_surface = design_surface.clone();
         let tab_mode = tab_mode.clone();
         let active_side_tab = active_side_tab.clone();
         let side_tabs = side_tabs.clone();
@@ -1535,9 +1518,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         sync_xml.set(false);
                     }
                 }
-                // Opening the designer defaults to the XML editor visible.
-                source_visible.set(true);
-                designer.set_row_track(2, Track::Fixed(260.0));
+                designer.clear();
+                if design_mode.get() {
+                    designer.append(&design_surface);
+                } else {
+                    designer.append(&xml_editor);
+                }
+            }
+            if page == Page::Design {
+                centre.append(&design_tabs);
             }
             pages.clear();
             match page {
@@ -1655,6 +1644,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let status = status.clone();
         let canvas = canvas.clone();
         let design_heading = design_heading.clone();
+        let design_mode = design_mode.clone();
         #[cfg(target_os = "linux")]
         let native_preview = native_preview.clone();
         move |path| {
@@ -1691,7 +1681,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         .is_some_and(|d| d.native_window)
                     {
                         design_heading.set_text(
-                            "Hydrogen <Window> preview · responsive source can be edited below",
+                            "Hydrogen <Window> preview · switch to XML Source to edit responsive layout",
                         );
                     } else {
                         design_heading.set_text("Visual Designer · Native window preview");
@@ -1702,6 +1692,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                         .position(|(kind, candidate)| *kind == Page::Design && candidate == &path)
                         .unwrap_or(0);
                     tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
+                    design_mode.set(true);
                     show_page(Page::Design);
                     canvas.redraw();
                     status.set_text(&format!("Designing {}", path.display()));
