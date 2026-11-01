@@ -1108,6 +1108,173 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     properties_pane.append(&property_editor);
     properties_pane.set_sizing(Sizing::fill());
 
+    type PropertyRefresh = Rc<dyn Fn()>;
+    let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> =
+        Rc::new(RefCell::new(None));
+    let apply_xml_property: Rc<dyn Fn(String, String)> = Rc::new({
+        let state = state.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let xml_editor = xml_editor.clone();
+        let sync_xml = sync_xml.clone();
+        let reload_preview = reload_preview.clone();
+        let reload_properties = reload_properties.clone();
+        let status = status.clone();
+        move |name, value| {
+            let source = state
+                .borrow()
+                .layout
+                .as_ref()
+                .and_then(|doc| doc.source().ok());
+            let Some(source) = source else { return };
+            let path = selected_xml_path.borrow().clone();
+            let updated = native_ui_properties::set_attribute(&source, &path, &name, &value);
+            match updated {
+                Ok(updated) => {
+                    let change = state.borrow_mut().layout.as_mut()
+                        .map(|doc| doc.edit_source(updated.clone()));
+                    match change {
+                        Some(Ok(())) => {
+                            sync_xml.set(true);
+                            xml_editor.set_text(&updated);
+                            sync_xml.set(false);
+                            status.set_text("Hydrogen UI property updated");
+                            if let Some(refresh) = reload_preview.borrow().as_ref() {
+                                refresh();
+                            }
+                            if let Some(refresh) = reload_properties.borrow().as_ref() {
+                                refresh();
+                            }
+                        }
+                        Some(Err(error)) => status.set_text(&format!("Invalid property: {error}")),
+                        None => {}
+                    }
+                }
+                Err(error) => status.set_text(&format!("Cannot edit XML property: {error}")),
+            }
+        }
+    });
+
+    *reload_properties.borrow_mut() = Some(Rc::new({
+        let state = state.clone();
+        let ui = ui.clone();
+        let native_property_content = native_property_content.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let apply_xml_property = apply_xml_property.clone();
+        move || {
+            native_property_content.clear();
+            let Some(xml) = state.borrow().layout.as_ref().and_then(|doc| doc.source().ok()) else {
+                return;
+            };
+            let path = selected_xml_path.borrow().clone();
+            let Ok((kind, fields)) = native_ui_properties::properties(&xml, &path) else {
+                return;
+            };
+            if let Ok(title) = ui.label(&format!("{kind} properties")) {
+                native_property_content.append(&title);
+            }
+            for (name, current) in fields {
+                let Ok(row) = ui.stack(Orientation::Vertical) else { continue };
+                row.set_spacing(2.0);
+                if let Ok(caption) = ui.label(&name) {
+                    row.append(&caption);
+                }
+                if let Ok(value_field) = ui.text_input(&current) {
+                    let draft = Rc::new(RefCell::new(current));
+                    value_field.on_change({
+                        let draft = draft.clone();
+                        move |next| *draft.borrow_mut() = next.to_owned()
+                    });
+                    row.append(&value_field);
+                    if let Ok(apply_button) = ui.button(&format!("Apply {name}")) {
+                        let update = apply_xml_property.clone();
+                        apply_button.on_click(move || update(name.clone(), draft.borrow().clone()));
+                        row.append(&apply_button);
+                    }
+                }
+                native_property_content.append(&row);
+            }
+            if let Ok(label) = ui.label("Add or update an attribute") {
+                native_property_content.append(&label);
+            }
+            let new_name = Rc::new(RefCell::new(String::new()));
+            let new_value = Rc::new(RefCell::new(String::new()));
+            if let Ok(input) = ui.text_input("") {
+                input.set_placeholder("Attribute name (e.g. tone)");
+                let name = new_name.clone();
+                input.on_change(move |next| *name.borrow_mut() = next.to_owned());
+                native_property_content.append(&input);
+            }
+            if let Ok(input) = ui.text_input("") {
+                input.set_placeholder("Attribute value");
+                let value = new_value.clone();
+                input.on_change(move |next| *value.borrow_mut() = next.to_owned());
+                native_property_content.append(&input);
+            }
+            if let Ok(add) = ui.button("Apply attribute") {
+                add.on_click({
+                    let update = apply_xml_property.clone();
+                    move || update(new_name.borrow().clone(), new_value.borrow().clone())
+                });
+                native_property_content.append(&add);
+            }
+        }
+    }));
+
+    let select_native_element: native_portable_preview::SelectElement = Rc::new({
+        let selected_xml_path = selected_xml_path.clone();
+        let reload_properties = reload_properties.clone();
+        move |path| {
+            *selected_xml_path.borrow_mut() = path;
+            if let Some(refresh) = reload_properties.borrow().as_ref() {
+                refresh();
+            }
+        }
+    });
+
+    *reload_preview.borrow_mut() = Some(Rc::new({
+        let state = state.clone();
+        let ui = ui.clone();
+        let portable_preview = portable_preview.clone();
+        let portable_scroll = portable_scroll.clone();
+        let design_surface = design_surface.clone();
+        let design_heading = design_heading.clone();
+        let canvas = canvas.clone();
+        let property_editor = property_editor.clone();
+        let flat_properties = flat_properties.clone();
+        let native_property_scroll = native_property_scroll.clone();
+        let select_native_element = select_native_element.clone();
+        let reload_properties = reload_properties.clone();
+        let status = status.clone();
+        move || {
+            let doc = state.borrow();
+            let Some(layout) = doc.layout.as_ref() else { return };
+            let is_native = layout.native_window;
+            let xml = layout.source().ok();
+            drop(doc);
+            design_surface.clear();
+            design_surface.append(&design_heading);
+            property_editor.clear();
+            if is_native {
+                property_editor.append(&native_property_scroll);
+                portable_preview.clear();
+                if let Some(xml) = xml {
+                    match native_portable_preview::render(&ui, &xml, select_native_element.clone()) {
+                        Ok(view) => portable_preview.append(&view),
+                        Err(error) => status.set_text(&format!("Cannot render Hydrogen UI: {error}")),
+                    }
+                }
+                design_surface.append(&portable_scroll);
+                if let Some(refresh) = reload_properties.borrow().as_ref() {
+                    refresh();
+                }
+            } else {
+                property_editor.append(&flat_properties);
+                design_surface.append(&canvas);
+                canvas.redraw();
+            }
+        }
+    }));
+
     let inspector = ui.split_view(Orientation::Vertical)?;
     inspector.set_sizing(Sizing::fill());
     inspector.set_start(&solution_pane);
