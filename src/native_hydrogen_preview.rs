@@ -144,11 +144,9 @@ fn build_widget(node: Node<'_, '_>) -> Option<gtk::Widget> {
             box_widget.upcast()
         }
         "Select" | "ListBox" | "RadioGroup" => {
-            let list = gtk::ComboBoxText::new();
-            for value in attr(node, "items").split('|') {
-                list.append_text(value);
-            }
-            list.set_active(Some(attr(node, "value").parse().unwrap_or(0)));
+            let items = attr(node, "items").split('|').collect::<Vec<_>>();
+            let list = gtk::DropDown::from_strings(&items);
+            list.set_selected(attr(node, "value").parse().unwrap_or(0));
             list.upcast()
         }
         "Slider" => {
