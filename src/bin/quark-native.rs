@@ -97,7 +97,7 @@ impl Ide {
         self.project = self.workspace.selected.as_deref().map(project::load);
         self.document = None;
         self.layout = None;
-        self.page = Page::Code;
+        self.page = Page::Empty;
         if let Some(path) = &self.workspace.selected {
             record_recent(path.clone());
         }
@@ -118,7 +118,7 @@ impl Ide {
         self.project = None;
         self.document = None;
         self.layout = None;
-        self.page = Page::Code;
+        self.page = Page::Empty;
         record_recent(canonical);
         Ok(())
     }
