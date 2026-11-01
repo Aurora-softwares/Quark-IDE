@@ -21,15 +21,15 @@ mod native_layout;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../native_model.rs"]
 mod native_model;
+#[path = "../native_portable_preview.rs"]
+mod native_portable_preview;
 #[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
-#[path = "../native_portable_preview.rs"]
-mod native_portable_preview;
-#[path = "../native_ui_properties.rs"]
-mod native_ui_properties;
 #[path = "../native_start_window.rs"]
 mod native_start_window;
+#[path = "../native_ui_properties.rs"]
+mod native_ui_properties;
 #[path = "../problems.rs"]
 mod problems;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
