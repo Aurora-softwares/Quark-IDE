@@ -11,6 +11,8 @@ egui_extras = { version = "0.31", features = ["syntect"] }
 rfd = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+quick-xml = { version = "0.38", features = ["serialize"] }
+roxmltree = "0.20"
 toml = "0.8"
 tempfile = "3"
 naui = { version = "=0.8.0", optional = true }
@@ -21,6 +23,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk4 = { version = "0.9", optional = true }
+
 [profile.release]
 lto = "thin"
 strip = true
@@ -28,7 +33,7 @@ strip = true
 
 [features]
 default = []
-native-ui = ["dep:naui"]
+native-ui = ["dep:naui", "dep:gtk4"]
 
 [[bin]]
 name = "quark-ide"

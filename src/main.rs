@@ -33,6 +33,7 @@ mod symbols;
 mod terminal;
 mod theme;
 mod ui;
+mod ui_xml;
 mod window;
 mod workspace;
 
@@ -383,7 +384,7 @@ impl Quark {
                         }
                     });
                 ui.label("Quark creates a Hydrogen .hyproj and Program.hy.");
-                ui.label("The visual designer saves .quarkui layouts separately from executable source code.");
+                ui.label("The visual designer saves .hyui layouts separately from executable source code.");
                 create = ui.button("Create project").clicked();
             });
         if create {
@@ -394,7 +395,7 @@ impl Quark {
                     self.show_new_project = false;
                     self.add_project(path.clone());
                     self.status = format!("Created project {}", path.display());
-                    let layout_path = path.parent().unwrap_or(Path::new(".")).join("Main.quarkui");
+                    let layout_path = path.parent().unwrap_or(Path::new(".")).join("Main.hyui");
                     match designer::Designer::create(layout_path) {
                         Ok(document) => {
                             self.designer = Some(document);
@@ -447,7 +448,7 @@ impl Quark {
             } else if self.designer.as_ref().is_some_and(|d| d.dirty) {
                 self.status = "Save the current UI layout before creating another".into();
             } else if let Some(parent) = parent {
-                let path = parent.join(format!("{}.quarkui", self.new_layout_name));
+                let path = parent.join(format!("{}.hyui", self.new_layout_name));
                 match designer::Designer::create(path) {
                     Ok(document) => {
                         self.designer = Some(document);
@@ -855,7 +856,7 @@ impl Quark {
         self.request_diagnostic_scan();
     }
     fn open(&mut self, path: PathBuf) {
-        if path.extension().and_then(|ext| ext.to_str()) == Some("quarkui") {
+        if matches!(path.extension().and_then(|ext| ext.to_str()), Some("hyui")) {
             self.open_designer(path);
             return;
         }

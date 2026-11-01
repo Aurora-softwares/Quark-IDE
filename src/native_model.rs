@@ -70,7 +70,7 @@ impl Document {
     }
 }
 
-/// Matches Quark's existing version-1 .quarkui schema exactly.
+/// Matches the Hydrogen UI version-1 control schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ControlKind {
@@ -269,7 +269,7 @@ impl Layout {
     }
 
     /// Apply a property-grid geometry change atomically. Invalid values
-    /// never leave a .quarkui layout unsaveable.
+    /// never leave a .hyui layout unsaveable.
     pub fn set_geometry(
         &mut self,
         id: u64,
@@ -322,6 +322,11 @@ pub struct LayoutDocument {
     pub path: PathBuf,
     pub layout: Layout,
     saved: String,
+    /// Retains partially edited XML without discarding text on parse errors.
+    source_draft: Option<String>,
+    /// The Hydrogen compiler's actual <Window> hierarchy is retained
+    /// verbatim; a flat designer projection may never replace it on save.
+    pub native_window: bool,
 }
 
 impl LayoutDocument {
@@ -329,28 +334,78 @@ impl LayoutDocument {
         let path = path.canonicalize().map_err(|e| e.to_string())?;
         let metadata = fs::metadata(&path).map_err(|e| e.to_string())?;
         if !metadata.is_file() || metadata.len() > MAX_LAYOUT_BYTES {
-            return Err("Not a valid .quarkui file or exceeds 1 MiB".into());
+            return Err("Not a valid Hydrogen UI layout or exceeds 1 MiB".into());
         }
         let saved = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let layout: Layout = serde_json::from_str(&saved).map_err(|e| e.to_string())?;
+        let layout: Layout = crate::ui_xml::load(&path, &saved)?;
         layout.validate()?;
+        let native_window = crate::ui_xml::is_native_window(&saved);
         Ok(Self {
             path,
             layout,
+            source_draft: native_window.then(|| saved.clone()),
             saved,
+            native_window,
         })
     }
 
+    /// Return the exact user's source draft, if one exists, otherwise current
+    /// designer XML. This avoids losing partial edits on view switches.
+    pub fn source(&self) -> Result<String, String> {
+        if let Some(draft) = &self.source_draft {
+            Ok(draft.clone())
+        } else {
+            crate::ui_xml::save(&self.path, &self.layout)
+        }
+    }
+
+    /// Preserve partial XML and update the visual model only on valid input.
+    pub fn edit_source(&mut self, text: String) -> Result<(), String> {
+        if text.len() > MAX_LAYOUT_BYTES as usize {
+            return Err("Hydrogen UI XML exceeds the 1 MiB size limit".into());
+        }
+        self.source_draft = Some(text.clone());
+        let parsed: Layout = crate::ui_xml::load(&self.path, &text)?;
+        parsed.validate()?;
+        self.layout = parsed;
+        self.native_window = crate::ui_xml::is_native_window(&text);
+        Ok(())
+    }
+
+    /// A designer mutation invalidates an older XML draft only when the
+    /// draft is valid; invalid text must be resolved before visual edits.
+    pub fn refresh_designer_xml(&mut self) -> Result<String, String> {
+        if self.native_window {
+            return Err(
+                "Responsive Hydrogen <Window> documents must retain their nested XML. \
+                 Edit in XML Source until the hierarchical visual editor supports native controls."
+                    .into(),
+            );
+        }
+        if self.source_draft.is_some() {
+            let current = self.source()?;
+            let parsed: Layout = crate::ui_xml::load(&self.path, &current)?;
+            parsed.validate()?;
+        }
+        let xml = crate::ui_xml::save(&self.path, &self.layout)?;
+        self.source_draft = Some(xml.clone());
+        Ok(xml)
+    }
+
     pub fn dirty(&self) -> bool {
-        serde_json::to_string_pretty(&self.layout).is_ok_and(|current| current != self.saved)
+        self.source().is_ok_and(|current| current != self.saved)
     }
 
     pub fn save(&mut self) -> Result<(), String> {
-        self.layout.validate()?;
-        let next = serde_json::to_string_pretty(&self.layout).map_err(|e| e.to_string())?;
-        crate::storage::save_checked(&self.path, &next, &self.saved)
+        let text = self.source()?;
+        let parsed: Layout = crate::ui_xml::load(&self.path, &text)?;
+        parsed.validate()?;
+        crate::storage::save_checked(&self.path, &text, &self.saved)
             .map_err(|e| format!("Layout was modified externally or cannot be saved: {e:?}"))?;
-        self.saved = next;
+        self.layout = parsed;
+        self.native_window = crate::ui_xml::is_native_window(&text);
+        self.saved = text.clone();
+        self.source_draft = self.native_window.then_some(text);
         Ok(())
     }
 }
@@ -641,14 +696,14 @@ mod tests {
     }
 
     #[test]
-    fn layout_is_compatible_with_existing_quarkui_file() {
+    fn layout_round_trips_hydrogen_hyui_xml() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("Main.quarkui");
+        let path = directory.path().join("Main.hyui");
         let mut layout = Layout::default();
         let id = layout.add(ControlKind::Button, 120.0, 90.0).unwrap();
         assert_eq!(layout.hit_test(125.0, 96.0), Some(id));
         assert!(layout.position(id, 300.0, 120.0));
-        fs::write(&path, serde_json::to_string_pretty(&layout).unwrap()).unwrap();
+        fs::write(&path, crate::ui_xml::encode(&layout).unwrap()).unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.controls[0].text = "Launch".into();
         document.save().unwrap();
@@ -656,6 +711,70 @@ mod tests {
             LayoutDocument::open(&path).unwrap().layout.controls[0].text,
             "Launch"
         );
+    }
+
+    #[test]
+    fn source_editing_updates_visual_model_and_preserves_invalid_draft() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Form.hyui");
+        fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
+        let mut doc = LayoutDocument::open(&path).unwrap();
+        let mut changed = doc.layout.clone();
+        changed.add(ControlKind::Button, 20.0, 30.0).unwrap();
+        let xml = crate::ui_xml::encode(&changed).unwrap();
+        doc.edit_source(xml.clone()).unwrap();
+        assert_eq!(doc.layout.controls.len(), 1);
+        assert!(doc.dirty());
+        assert_eq!(doc.source().unwrap(), xml);
+        let invalid = "<HydrogenUI".to_owned();
+        assert!(doc.edit_source(invalid.clone()).is_err());
+        assert_eq!(doc.source().unwrap(), invalid);
+        assert_eq!(doc.layout.controls.len(), 1);
+        assert!(doc.save().is_err());
+        doc.edit_source(xml.clone()).unwrap();
+        doc.save().unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(), xml);
+        assert!(!doc.dirty());
+    }
+
+    #[test]
+    fn native_hydrogen_window_source_roundtrips_without_losing_events_or_nested_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Studio.hyui");
+        let source = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Window version="1" title="Studio" width="1120" height="900" theme="system">
+    <RowPanel gap="12">
+      <Button id="build" text="Create" onClick="Build" />
+      <Input id="name" text="Aurora" onChange="Preview" />
+    </RowPanel>
+</Window>"#;
+        fs::write(&path, source).unwrap();
+        let mut doc = LayoutDocument::open(&path).unwrap();
+        assert!(doc.native_window);
+        assert!(!doc.dirty());
+        assert_eq!(doc.source().unwrap(), source);
+        assert_eq!(doc.layout.title, "Studio");
+        assert_eq!(doc.layout.width, 1120.0);
+        assert!(doc.layout.controls.iter().any(|c| c.name == "build"));
+        assert!(doc.refresh_designer_xml().is_err());
+        doc.save().unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), source);
+        let edited = source.replace("Create", "Generate");
+        doc.edit_source(edited.clone()).unwrap();
+        assert!(doc.dirty());
+        doc.save().unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(), edited);
+    }
+
+    #[test]
+    fn source_draft_blocks_save_on_invalid_xml() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("Form.hyui");
+        fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
+        let mut doc = LayoutDocument::open(&path).unwrap();
+        assert!(doc.edit_source("<HydrogenUI/>".into()).is_err());
+        assert!(doc.save().is_err());
+        assert_ne!(doc.source().unwrap(), fs::read_to_string(path).unwrap());
     }
 
     #[test]
@@ -690,12 +809,8 @@ mod tests {
     #[test]
     fn layout_save_refuses_external_modification() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("Main.quarkui");
-        fs::write(
-            &path,
-            serde_json::to_string_pretty(&Layout::default()).unwrap(),
-        )
-        .unwrap();
+        let path = dir.path().join("Main.hyui");
+        fs::write(&path, crate::ui_xml::encode(&Layout::default()).unwrap()).unwrap();
         let mut document = LayoutDocument::open(&path).unwrap();
         document.layout.add(ControlKind::Label, 25.0, 35.0).unwrap();
         fs::write(&path, "external").unwrap();

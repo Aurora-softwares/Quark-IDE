@@ -55,15 +55,11 @@ pub const MENUS: &[(&str, &[&str])] = &[
     ("Help", &["About Quark"]),
 ];
 
-/// Compact, native-button side rail. naui 0.8 does not expose rotated
-/// text for buttons, so captions use vertical writing while retaining
-/// keyboard focus and native platform styling.
-pub const SIDE_RAIL_WIDTH: f64 = 46.0;
-pub const SIDE_TABS: &[(&str, &str, f64)] = &[
-    ("Toolbox", "T\nO\nO\nL\nB\nO\nX", 166.0),
-    ("Server Explorer", "S\nE\nR\nV\nE\nR", 148.0),
-    ("Data Sources", "D\nA\nT\nA", 104.0),
-];
+/// Text-only vertical rail; upright glyphs fit in a narrow 18px gutter.
+pub const SIDE_RAIL_WIDTH: f64 = 26.0;
+pub const SIDE_TAB_HEIGHTS: [f64; 3] = [100.0, 90.0, 70.0];
+pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
+pub const CODE_SIDE_TABS: [&str; 2] = ["SYMBOLS", "SEARCH"];
 
 /// Quark's palette: Hydrogen electron cyan, orbital blue, quark violet.
 pub const HYDROGEN_CYAN: (u8, u8, u8) = (50, 212, 226);
@@ -107,16 +103,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn professional_side_rail_is_compact_and_uses_native_focusable_tabs() {
-        assert_eq!(SIDE_RAIL_WIDTH, 46.0);
-        assert_eq!(SIDE_TABS.len(), 3);
-        assert_eq!(SIDE_TABS[0].0, "Toolbox");
-        for &(name, caption, height) in SIDE_TABS {
-            assert!(!name.is_empty());
-            assert!(height >= 90.0);
-            assert!(caption.contains('\n'));
-            assert!(caption.lines().all(|line| line.chars().count() == 1));
-        }
+    fn side_rail_presets_are_compact_and_context_sensitive() {
+        assert_eq!(SIDE_RAIL_WIDTH, 26.0);
+        assert_eq!(SIDE_TAB_HEIGHTS, [100.0, 90.0, 70.0]);
+        assert_eq!(DESIGN_SIDE_TABS, ["TOOLBOX", "SERVER", "DATA"]);
+        assert_eq!(CODE_SIDE_TABS, ["SYMBOLS", "SEARCH"]);
+        assert!(!CODE_SIDE_TABS.contains(&"TOOLBOX"));
+        assert!(!DESIGN_SIDE_TABS.contains(&"SYMBOLS"));
     }
 
     #[test]
