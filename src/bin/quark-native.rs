@@ -27,6 +27,10 @@ mod native_model;
 #[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
+#[path = "../native_portable_preview.rs"]
+mod native_portable_preview;
+#[path = "../native_ui_properties.rs"]
+mod native_ui_properties;
 #[path = "../native_start_window.rs"]
 mod native_start_window;
 #[path = "../problems.rs"]
@@ -944,24 +948,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
     canvas.set_sizing(Sizing::fill());
     let canvas_width = Rc::new(Cell::new(0.0_f64));
     design_surface.append(&canvas);
-    // Linux renders the document using real GTK4 controls inside a scroller.
-    #[cfg(target_os = "linux")]
-    let native_preview: Option<gtk4::ScrolledWindow> = {
-        use gtk4::prelude::*;
-        use naui::Widget as _;
-        design_surface
-            .native_widget()
-            .downcast::<gtk4::Box>()
-            .ok()
-            .map(|box_| {
-                let preview = gtk4::ScrolledWindow::new();
-                preview.set_hexpand(true);
-                preview.set_vexpand(true);
-                preview.set_visible(false);
-                box_.append(&preview);
-                preview
-            })
-    };
+    // Portable preview uses naui's actual native widgets on macOS (AppKit),
+    // Windows (WinUI 3) and Linux (GTK). The canvas remains for flat layouts.
+    let portable_preview = ui.stack(Orientation::Vertical)?;
+    portable_preview.set_spacing(6.0);
+    let portable_scroll = ui.scroll()?;
+    portable_scroll.set_sizing(Sizing::fill());
+    portable_scroll.set_child(&portable_preview);
+    let selected_xml_path = Rc::new(RefCell::new(Vec::<usize>::new()));
+    let reload_preview: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
     let xml_editor = ui.text_area("")?;
     xml_editor.set_sizing(Sizing::fill());
@@ -1006,8 +1001,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         let status = status.clone();
         let sync_xml = sync_xml.clone();
-        #[cfg(target_os = "linux")]
-        let native_preview = native_preview.clone();
+        let reload_preview = reload_preview.clone();
         move |text| {
             if sync_xml.get() {
                 return;
@@ -1017,28 +1011,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
                 match layout.edit_source(text.to_owned()) {
                     Ok(()) => {
                         status.set_text("Hydrogen UI XML valid · visual preview refreshed");
-                        let native_window = layout.native_window;
                         drop(ide);
-                        #[cfg(target_os = "linux")]
-                        {
-                            use gtk4::prelude::*;
-                            use naui::Widget as _;
-                            if let Some(host) = &native_preview {
-                                if native_window {
-                                    if let Ok(widget) = native_hydrogen_preview::build_preview(text)
-                                    {
-                                        host.set_child(Some(&widget));
-                                        host.set_visible(true);
-                                        canvas.native_widget().set_visible(false);
-                                    }
-                                } else {
-                                    host.set_visible(false);
-                                    canvas.native_widget().set_visible(true);
-                                }
-                            }
+                        if let Some(refresh) = reload_preview.borrow().as_ref() {
+                            refresh();
                         }
-                        #[cfg(not(target_os = "linux"))]
-                        let _ = native_window;
                         canvas.redraw();
                     }
                     Err(error) => {
@@ -1685,34 +1661,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>) -> naui::Result<()> {
         let canvas = canvas.clone();
         let design_heading = design_heading.clone();
         let design_mode = design_mode.clone();
-        #[cfg(target_os = "linux")]
-        let native_preview = native_preview.clone();
+        let reload_preview = reload_preview.clone();
         move |path| {
             let result = state.borrow_mut().open_design(&path);
             match result {
                 Ok(()) => {
-                    #[cfg(target_os = "linux")]
-                    {
-                        use gtk4::prelude::*;
-                        use naui::Widget as _;
-                        if let Some(host) = &native_preview {
-                            if let Some(layout) = state.borrow().layout.as_ref() {
-                                if layout.native_window {
-                                    if let Ok(xml) = layout.source() {
-                                        if let Ok(widget) =
-                                            native_hydrogen_preview::build_preview(&xml)
-                                        {
-                                            host.set_child(Some(&widget));
-                                            host.set_visible(true);
-                                            canvas.native_widget().set_visible(false);
-                                        }
-                                    }
-                                } else {
-                                    host.set_visible(false);
-                                    canvas.native_widget().set_visible(true);
-                                }
-                            }
-                        }
+                    if let Some(refresh) = reload_preview.borrow().as_ref() {
+                        refresh();
                     }
                     if state
                         .borrow()
