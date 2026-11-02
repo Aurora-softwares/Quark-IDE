@@ -896,6 +896,38 @@ fn apply_bottom_dock_order(
 #[cfg(target_os = "linux")]
 type DockRefreshHook = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
 
+/// Change the visible page of a naui Stack without invalidating GTK's
+/// parenting graph. naui 0.8 Stack::append/clear tracks SizeBins internally,
+/// while native docking must move those same SizeBins to other GtkBoxes.
+/// GTK therefore owns these tool-page children directly. Other platforms
+/// retain the portable Stack API.
+fn replace_tool_stack(host: &naui::Stack, selected: Option<&dyn naui::Widget>) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let Ok(parent) = host.native_widget().downcast::<gtk4::Box>() else {
+            return false;
+        };
+        if !native_dock_runtime::clear_box_children(&parent) {
+            return false;
+        }
+        if let Some(widget) = selected {
+            let mount: gtk4::Widget = widget.size_bin().upcast();
+            return native_dock_runtime::attach_box(&mount, &parent);
+        }
+        true
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        host.clear();
+        if let Some(widget) = selected {
+            host.append(widget);
+        }
+        true
+    }
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     #[cfg(not(target_os = "linux"))]
     native_preferences_portable::apply_saved_theme(
@@ -1251,7 +1283,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         native_dock_widgets::section_panel(ui, native_docking::DockId::Search)?;
     code_search_view.append(&ui.label("Search tools are ready for integration.")?);
     let left_content = ui.stack(Orientation::Vertical)?;
-    left_content.append(&toolbox);
+    // Native GTK tool panels are owned by their current GtkBox rather than
+    // recorded in naui's Stack children list; cross-zone moves are safe.
+    assert!(replace_tool_stack(&left_content, Some(&toolbox)));
     left_content.set_sizing(Sizing::fill());
     let left_side = ui.stack(Orientation::Horizontal)?;
     left_side.append(&left_rail);
@@ -2289,7 +2323,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let (find_section, find_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::FindResults)?;
     find_section.append(&find_view);
-    bottom_pages.append(&output_section);
+    assert!(replace_tool_stack(&bottom_pages, Some(&output_section)));
     bottom.append(&bottom_tabs);
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
@@ -4251,14 +4285,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
             }
-            bottom_pages.clear();
-            match page {
-                5 => bottom_pages.append(&terminal_view),
-                1 => bottom_pages.append(&errors_view),
-                2 => bottom_pages.append(&debug_view),
-                3 => bottom_pages.append(&tests_view),
-                4 => bottom_pages.append(&find_view),
-                _ => bottom_pages.append(&output_scroll),
+            let page_content: &dyn naui::Widget = match page {
+                5 => &terminal_view,
+                1 => &errors_view,
+                2 => &debug_view,
+                3 => &tests_view,
+                4 => &find_view,
+                _ => &output_scroll,
+            };
+            if !replace_tool_stack(&bottom_pages, Some(page_content)) {
+                eprintln!("Quark docking: cannot move the selected bottom tool into its host");
             }
         }
     });
@@ -4362,58 +4398,55 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let code_search_view = code_search_view.clone();
         let tab_mode = tab_mode.clone();
         move |index| {
-            left_content.clear();
-            if tab_mode.get() == Page::Code {
+            // Returning a panel from a different dock must not call naui's
+            // Stack::clear() on stale SizeBin children. Use the same checked
+            // native GTK host path as cross-zone docking.
+            let selected: Option<&dyn naui::Widget> = if tab_mode.get() == Page::Code {
                 match index {
-                    1 => {
-                        if dock_model
-                            .borrow()
-                            .section(native_docking::DockId::Search)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
-                        {
-                            left_content.append(&code_search_view);
-                        }
+                    1 if dock_model
+                        .borrow()
+                        .section(native_docking::DockId::Search)
+                        .is_some_and(|section| section.zone == native_docking::DockZone::Left) =>
+                    {
+                        Some(&code_search_view)
                     }
-                    _ => {
-                        if dock_model
-                            .borrow()
-                            .section(native_docking::DockId::Symbols)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
-                        {
-                            left_content.append(&symbols_section);
-                        }
+                    _ if dock_model
+                        .borrow()
+                        .section(native_docking::DockId::Symbols)
+                        .is_some_and(|section| section.zone == native_docking::DockZone::Left) =>
+                    {
+                        Some(&symbols_section)
                     }
+                    _ => None,
                 }
             } else {
                 match index {
-                    1 => {
-                        if dock_model
-                            .borrow()
-                            .section(native_docking::DockId::Server)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
-                        {
-                            left_content.append(&server_view);
-                        }
+                    1 if dock_model
+                        .borrow()
+                        .section(native_docking::DockId::Server)
+                        .is_some_and(|section| section.zone == native_docking::DockZone::Left) =>
+                    {
+                        Some(&server_view)
                     }
-                    2 => {
-                        if dock_model
-                            .borrow()
-                            .section(native_docking::DockId::Data)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
-                        {
-                            left_content.append(&data_view);
-                        }
+                    2 if dock_model
+                        .borrow()
+                        .section(native_docking::DockId::Data)
+                        .is_some_and(|section| section.zone == native_docking::DockZone::Left) =>
+                    {
+                        Some(&data_view)
                     }
-                    _ => {
-                        if dock_model
-                            .borrow()
-                            .section(native_docking::DockId::Toolbox)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
-                        {
-                            left_content.append(&toolbox);
-                        }
+                    _ if dock_model
+                        .borrow()
+                        .section(native_docking::DockId::Toolbox)
+                        .is_some_and(|section| section.zone == native_docking::DockZone::Left) =>
+                    {
+                        Some(&toolbox)
                     }
+                    _ => None,
                 }
+            };
+            if !replace_tool_stack(&left_content, selected) {
+                eprintln!("Quark docking: cannot move the selected left tool into its host");
             }
         }
     });
