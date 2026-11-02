@@ -805,10 +805,19 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
 }
 
 fn right_split_position(height: f64, preferred: f64, properties_first: bool) -> f64 {
-    if properties_first {
-        preferred.max(110.0)
+    // First use: pinned side sections split evenly. A user's explicitly
+    // resized Properties height is retained after pinning or reordering.
+    let properties_height = if (preferred - native_layout::PaneSizes::default().properties).abs()
+        < f64::EPSILON
+    {
+        (height - 6.0).max(0.0) / 2.0
     } else {
-        (height - preferred - 6.0).max(110.0)
+        preferred
+    };
+    if properties_first {
+        properties_height.max(110.0)
+    } else {
+        (height - properties_height - 6.0).max(110.0)
     }
 }
 
@@ -2060,7 +2069,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     inspector.set_sizing(Sizing::fill());
     inspector.set_start(&solution_pane);
     inspector.set_end(&properties_pane);
-    inspector.set_position(940.0 - preferred.properties - 145.0);
+    inspector.set_position(right_split_position(795.0, preferred.properties, false));
     inspector.set_min_sizes(110.0, 150.0);
     retain_trailing_size(&inspector);
 
@@ -3335,6 +3344,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         && !is_detached(*id)
                 });
             let remembered = sizes.get();
+            if right_solution && right_properties {
+                let right = layout.sections_in(native_docking::DockZone::Right);
+                let properties_first = right
+                    .iter()
+                    .position(|section| section.id == native_docking::DockId::Properties)
+                    < right
+                        .iter()
+                        .position(|section| section.id == native_docking::DockId::Solution);
+                inspector.set_position(right_split_position(
+                    split_extent(&inspector, 795.0),
+                    remembered.properties,
+                    properties_first,
+                ));
+            }
             #[cfg(target_os = "linux")]
             {
                 use gtk4::prelude::*;
@@ -3511,8 +3534,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     for (index, tab) in right_tabs.iter().enumerate() {
         let tabs = right_tabs.clone();
         let active = right_active.clone();
-        let inspector = inspector.clone();
-        let model = dock_model.clone();
         #[cfg(target_os = "linux")]
         let show_auto_hide = show_auto_hide.clone();
         #[cfg(target_os = "linux")]
@@ -3543,22 +3564,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 for tab in &tabs {
                     tab.redraw();
                 }
-                let height = split_extent(&inspector, 795.0);
-                let order = model.borrow();
-                let right = order.sections_in(native_docking::DockZone::Right);
-                let properties_first = right
-                    .iter()
-                    .position(|s| s.id == native_docking::DockId::Properties)
-                    < right
-                        .iter()
-                        .position(|s| s.id == native_docking::DockId::Solution);
-                let focused_first =
-                    (index == 0 && !properties_first) || (index == 1 && properties_first);
-                inspector.set_position(if focused_first {
-                    (height - 200.0).max(110.0)
-                } else {
-                    180.0
-                });
+                // Selecting a tab must never override a pinned divider or
+                // shrink another pinned section to a hard-coded 180 pixels.
+                // Native GtkPaned owns the resize gesture and saved position.
             }
         });
     }
@@ -5833,6 +5841,10 @@ mod tests {
         let preferred = 220.0;
         assert_eq!(right_split_position(height, preferred, true), 220.0);
         assert_eq!(right_split_position(height, preferred, false), 574.0);
+        // An unmodified side stack shares its height evenly; a resize retains
+        // its custom height and is never reset by selecting another tab.
+        assert_eq!(right_split_position(806.0, 260.0, true), 400.0);
+        assert_eq!(right_split_position(806.0, 260.0, false), 400.0);
     }
 
     #[test]
