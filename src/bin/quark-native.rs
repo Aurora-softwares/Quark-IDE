@@ -30,6 +30,9 @@ mod native_shell;
 mod native_start_window;
 #[path = "../native_ui_properties.rs"]
 mod native_ui_properties;
+#[cfg(target_os = "linux")]
+#[path = "../native_syntax.rs"]
+mod native_syntax;
 #[path = "../problems.rs"]
 mod problems;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
@@ -902,6 +905,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     code.set_row_track(0, Track::FILL);
     let editor = ui.text_area("")?;
     editor.set_sizing(Sizing::fill());
+    #[cfg(target_os = "linux")]
+    native_syntax::install(&editor, false);
     code.attach(&editor, GridCell::new(0, 0));
 
     // The first tab row selects documents; the second selects the editor
@@ -966,6 +971,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let xml_editor = ui.text_area("")?;
     xml_editor.set_sizing(Sizing::fill());
+    #[cfg(target_os = "linux")]
+    native_syntax::install(&xml_editor, true);
     let sync_xml = Rc::new(Cell::new(false));
     designer.append(&design_surface);
 
