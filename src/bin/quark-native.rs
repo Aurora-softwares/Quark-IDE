@@ -2015,18 +2015,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
             }
-            // Editors for choice-backed controls use the same labels the
-            // running Hydrogen application will display. The stored value
-            // remains a zero-based index in the XML.
-            let list_items = if matches!(kind.as_str(), "Select" | "RadioGroup" | "ListBox") {
-                fields
-                    .iter()
-                    .find(|field| field.name == "items")
-                    .map(|field| field.value.clone())
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let all_fields = fields.clone();
             let mut last_group = "";
             for field in fields {
                 if field.group != last_group {
@@ -2070,48 +2059,23 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 edit_row.set_spacing(4.0);
                 let draft = Rc::new(RefCell::new(display_value.clone()));
-                let mut choices = Vec::<String>::new();
-                let mut option_is_index = false;
-                if matches!(
-                    name.as_str(),
-                    "visible" | "enabled" | "fill" | "checked" | "running"
-                        | "primary" | "indeterminate" | "open"
-                ) {
-                    choices = vec!["false".to_owned(), "true".to_owned()];
-                } else if kind == "Window" && name == "theme" {
-                    choices = vec!["system".to_owned(), "light".to_owned(), "dark".to_owned()];
-                } else if name == "value"
-                    && matches!(kind.as_str(), "Select" | "RadioGroup" | "ListBox")
-                    && !list_items.is_empty()
-                {
-                    choices = list_items
-                        .split('|')
-                        .enumerate()
-                        .map(|(index, item)| format!("{index} · {item}"))
-                        .collect();
-                    option_is_index = true;
-                }
+                let choices = native_ui_properties::property_choices(&kind, &name, &all_fields);
                 if !choices.is_empty() {
                     if let Ok(selector) = ui.combo_box() {
-                        let labels = choices.iter().map(String::as_str).collect::<Vec<_>>();
+                        let labels = choices
+                            .iter()
+                            .map(|(label, _)| label.as_str())
+                            .collect::<Vec<_>>();
                         selector.set_items(&labels);
-                        let selected = if option_is_index {
-                            display_value.parse::<usize>().unwrap_or(0)
-                        } else {
-                            choices
-                                .iter()
-                                .position(|choice| choice == &display_value)
-                                .unwrap_or(0)
-                        };
-                        selector.set_selected(selected.min(choices.len() - 1));
+                        let selected = choices
+                            .iter()
+                            .position(|(_, value)| value == &display_value)
+                            .unwrap_or(0);
+                        selector.set_selected(selected);
                         let draft = draft.clone();
                         selector.on_select(move |index| {
-                            if let Some(value) = choices.get(index) {
-                                *draft.borrow_mut() = if option_is_index {
-                                    index.to_string()
-                                } else {
-                                    value.clone()
-                                };
+                            if let Some((_, value)) = choices.get(index) {
+                                *draft.borrow_mut() = value.clone();
                             }
                         });
                         edit_row.append(&selector);
