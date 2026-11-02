@@ -198,10 +198,14 @@ pub fn install_context_menu(tree: &gtk4::Widget, callback: MenuCallback) {
     gesture.set_button(3);
     gesture.set_propagation_phase(gtk4::PropagationPhase::Capture);
     gesture.connect_pressed(move |_, _, x, y| {
-        let clicked = list.row_at_y(y as i32).map(|row| row.index());
-        let selected = list.selected_row().map(|row| row.index());
-        if !crate::native_model::menu_targets_selected(clicked, selected) {
+        let Some(clicked_row) = list.row_at_y(y as i32) else {
             return;
+        };
+        let selected = list.selected_row().map(|row| row.index());
+        if !crate::native_model::menu_targets_selected(Some(clicked_row.index()), selected) {
+            // Context actions must target the row beneath the pointer,
+            // even when it was not previously selected.
+            list.select_row(Some(&clicked_row));
         }
         popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
         popover.popup();
