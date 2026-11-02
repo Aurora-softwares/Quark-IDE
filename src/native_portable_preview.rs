@@ -389,6 +389,7 @@ fn render_node(
         }
         "Select" => {
             let input = ui.combo_box().map_err(|e| e.to_string())?;
+            input.set_enabled(enabled);
             let choices: Vec<_> = node.attribute("items").unwrap_or("").split('|').collect();
             input.set_items(&choices);
             input.set_selected(
@@ -402,6 +403,7 @@ fn render_node(
         }
         "RadioGroup" => {
             let input = ui.radio_group().map_err(|e| e.to_string())?;
+            input.set_enabled(enabled);
             let choices: Vec<_> = node.attribute("items").unwrap_or("").split('|').collect();
             input.set_items(&choices);
             input.set_selected(
@@ -424,6 +426,7 @@ fn render_node(
                 .unwrap_or(100.0)
                 .max(min + 1.0);
             let slider = ui.slider(min, max).map_err(|e| e.to_string())?;
+            slider.set_enabled(enabled);
             slider.set_value(
                 node.attribute("value")
                     .and_then(|v| v.parse::<f64>().ok())
@@ -537,6 +540,7 @@ fn render_node(
             let button = ui
                 .button(node.attribute("text").unwrap_or("Choose file…"))
                 .map_err(|e| e.to_string())?;
+            button.set_enabled(enabled);
             let select = on_select.clone();
             button.on_click(move || select(path.clone()));
             row.append(&button);
@@ -669,6 +673,18 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn real_hydrogen_studio_default_tab_is_one_but_design_navigation_is_independent() {
+        let source = include_str!("../tests/fixtures/Studio.hyui");
+        let document = roxmltree::Document::parse(source).unwrap();
+        let tabs = document.descendants().find(|node| node.has_tag_name("Tabs")).unwrap();
+        let startup = tabs.attribute("value").unwrap_or("0").parse::<usize>().unwrap();
+        let count = tabs.children().filter(|node| node.has_tag_name("Tab")).count();
+        assert_eq!(design_tab_index(startup, None, count), Some(0));
+        assert_eq!(design_tab_index(startup, Some(1), count), Some(1));
+        assert_eq!(tabs.attribute("value"), Some("0"));
+    }
 
     #[test]
     fn first_tab_is_default_without_an_explicit_source_attribute() {
