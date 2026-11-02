@@ -4969,7 +4969,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 } else {
                     target.parent().unwrap_or(root.as_path()).to_path_buf()
                 };
-                match std::process::Command::new("xdg-open").arg(directory).spawn() {
+                match std::process::Command::new("xdg-open")
+                    .arg(directory)
+                    .spawn()
+                {
                     Ok(_) => status.set_text("Opened the selected folder in the file manager."),
                     Err(error) => status.set_text(&format!("Cannot open file manager: {error}")),
                 }
