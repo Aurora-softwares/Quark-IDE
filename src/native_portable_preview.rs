@@ -151,7 +151,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 (available_width - 2.0 * padding).max(80.0),
-                            document,
+                document,
             )?;
             row.append(&panel);
         }
@@ -171,7 +171,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 available_width,
-                            document,
+                document,
             )?;
             row.append(&children);
         }
@@ -194,7 +194,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 available_width,
-                            document,
+                document,
             )?;
             scroll.set_child(&children);
             let height = node
@@ -243,7 +243,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 child_width,
-                            document,
+                document,
             )?;
             row.append(&children);
         }
@@ -287,7 +287,7 @@ fn render_node(
                     on_select,
                     design_tabs,
                     (available_width - gap * (columns as f64 - 1.0)) / columns as f64,
-                                    document,
+                    document,
                 )?;
                 grid.attach(&cell, GridCell::new(index % columns, index / columns));
             }
@@ -314,7 +314,7 @@ fn render_node(
                     on_select,
                     design_tabs,
                     available_width,
-                                    document,
+                    document,
                 )?;
                 tabs.add_tab(tab.attribute("title").unwrap_or("Page"), &page);
                 count += 1;
@@ -621,7 +621,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 available_width,
-                            document,
+                document,
             )?;
             row.append(&children);
         }
@@ -740,13 +740,14 @@ mod tests {
 
     #[test]
     fn relative_ui_image_assets_resolve_from_document_directory() {
-        let document = Path::new("/projects/Studio/Studio.hyui");
+        let directory = tempfile::tempdir().unwrap();
+        let document = directory.path().join("Studio.hyui");
         assert_eq!(
-            image_source(document, "assets/logo.png"),
-            "/projects/Studio/assets/logo.png"
+            image_source(&document, "assets/logo.png"),
+            directory.path().join("assets/logo.png").to_string_lossy()
         );
-        assert_eq!(image_source(document, "data:image/png;base64,a"), "data:image/png;base64,a");
-        assert_eq!(image_source(document, "https://example.com/logo.png"), "https://example.com/logo.png");
+        assert_eq!(image_source(&document, "data:image/png;base64,a"), "data:image/png;base64,a");
+        assert_eq!(image_source(&document, "https://example.com/logo.png"), "https://example.com/logo.png");
     }
 
     #[test]
