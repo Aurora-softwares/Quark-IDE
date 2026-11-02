@@ -1,7 +1,10 @@
 //! Pure solution explorer projection: real folder hierarchy, compact list
 //! mode, file-type icons and stable selection paths for nested TreeItems.
 use naui::TreeItem;
-use std::{collections::{BTreeMap, HashMap}, path::{Path, PathBuf}};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::{Path, PathBuf},
+};
 
 #[derive(Default)]
 struct Folder {
@@ -18,19 +21,35 @@ fn icon(path: &Path) -> &'static str {
     }
 }
 fn label(path: &Path) -> String {
-    format!("{} {}", icon(path), path.file_name().unwrap_or_default().to_string_lossy())
+    format!(
+        "{} {}",
+        icon(path),
+        path.file_name().unwrap_or_default().to_string_lossy()
+    )
 }
 fn compare(left: &str, right: &str, descending: bool) -> std::cmp::Ordering {
-    let ordered = left.to_lowercase().cmp(&right.to_lowercase()).then_with(|| left.cmp(right));
-    if descending { ordered.reverse() } else { ordered }
+    let ordered = left
+        .to_lowercase()
+        .cmp(&right.to_lowercase())
+        .then_with(|| left.cmp(right));
+    if descending {
+        ordered.reverse()
+    } else {
+        ordered
+    }
 }
 fn insert(root: &mut Folder, base: &Path, path: &Path) {
     let relative = path.strip_prefix(base).unwrap_or(path);
-    let components = relative.components().filter_map(|part| match part {
-        std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
-        _ => None,
-    }).collect::<Vec<_>>();
-    if components.is_empty() { return; }
+    let components = relative
+        .components()
+        .filter_map(|part| match part {
+            std::path::Component::Normal(name) => Some(name.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if components.is_empty() {
+        return;
+    }
     let mut node = root;
     for segment in &components[..components.len() - 1] {
         node = node.folders.entry(segment.clone()).or_default();
@@ -59,9 +78,11 @@ fn subtree(
     for (name, nested) in folders {
         let mut path = ancestors.to_vec();
         path.push(children.len());
-        children.push(TreeItem::new(format!("📁 {name}")).expanded(true).children(
-            subtree(nested, &path, descending, index),
-        ));
+        children.push(
+            TreeItem::new(format!("📁 {name}"))
+                .expanded(true)
+                .children(subtree(nested, &path, descending, index)),
+        );
     }
     for path in files {
         let mut position = ancestors.to_vec();
@@ -83,9 +104,11 @@ pub fn project(
     list_mode: bool,
 ) -> (Vec<TreeItem>, HashMap<Vec<usize>, PathBuf>) {
     let query = query.trim().to_lowercase();
-    let filtered: Vec<PathBuf> = paths.iter().filter(|path| {
-        query.is_empty() || path.to_string_lossy().to_lowercase().contains(&query)
-    }).cloned().collect();
+    let filtered: Vec<PathBuf> = paths
+        .iter()
+        .filter(|path| query.is_empty() || path.to_string_lossy().to_lowercase().contains(&query))
+        .cloned()
+        .collect();
     let mut index = HashMap::new();
     let children = if list_mode {
         let mut ordered = filtered;
@@ -94,17 +117,28 @@ pub fn project(
             let right = b.strip_prefix(base).unwrap_or(b).to_string_lossy();
             compare(&left, &right, descending)
         });
-        ordered.into_iter().enumerate().map(|(number, path)| {
-            index.insert(vec![0, number], path.clone());
-            let relative = path.strip_prefix(base).unwrap_or(&path);
-            TreeItem::new(format!("{} {}", icon(&path), relative.display()))
-        }).collect()
+        ordered
+            .into_iter()
+            .enumerate()
+            .map(|(number, path)| {
+                index.insert(vec![0, number], path.clone());
+                let relative = path.strip_prefix(base).unwrap_or(&path);
+                TreeItem::new(format!("{} {}", icon(&path), relative.display()))
+            })
+            .collect()
     } else {
         let mut root = Folder::default();
-        for path in filtered { insert(&mut root, base, &path); }
+        for path in filtered {
+            insert(&mut root, base, &path);
+        }
         subtree(&root, &[0], descending, &mut index)
     };
-    (vec![TreeItem::new(title.to_owned()).expanded(true).children(children)], index)
+    (
+        vec![TreeItem::new(title.to_owned())
+            .expanded(true)
+            .children(children)],
+        index,
+    )
 }
 
 #[cfg(test)]
@@ -114,8 +148,10 @@ mod tests {
     fn nested_directory_selection_resolves_correct_file() {
         let base = Path::new("/project");
         let paths = vec![
-            base.join("src/main.hy"), base.join("src/ui/Main.hyui"),
-            base.join("src/Other.hy"), base.join("Australis.hyproj"),
+            base.join("src/main.hy"),
+            base.join("src/ui/Main.hyui"),
+            base.join("src/Other.hy"),
+            base.join("Australis.hyproj"),
         ];
         let (_, index) = project(&paths, base, "Solution", "", false, false);
         assert_eq!(index.len(), 4);

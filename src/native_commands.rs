@@ -176,7 +176,11 @@ fn launch_diagnostics(program: &str, cwd: &Path, args: &[String], error: &io::Er
     };
     let cwd_exists = cwd.is_dir();
     let explicit = candidate.is_absolute() || candidate.components().count() > 1;
-    let executable_exists = if explicit { Some(executable.is_file()) } else { None };
+    let executable_exists = if explicit {
+        Some(executable.is_file())
+    } else {
+        None
+    };
     let explanation = if !cwd_exists {
         "The project working directory does not exist or is not a directory."
     } else if executable_exists == Some(false) {
@@ -200,9 +204,16 @@ fn launch_diagnostics(program: &str, cwd: &Path, args: &[String], error: &io::Er
     )
 }
 
-fn invoke_hydrogen(program: &str, cwd: &Path, args: &[String]) -> Result<std::process::Output, String> {
+fn invoke_hydrogen(
+    program: &str,
+    cwd: &Path,
+    args: &[String],
+) -> Result<std::process::Output, String> {
     if !cwd.is_dir() {
-        return Err(format!("Hydrogen build working directory does not exist: {}", cwd.display()));
+        return Err(format!(
+            "Hydrogen build working directory does not exist: {}",
+            cwd.display()
+        ));
     }
     let path = Path::new(program);
     if path.is_absolute() && !path.is_file() {
@@ -305,7 +316,9 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     };
     let context = format!(
         "Hydrogen compiler: {}\nProject: {}\nWorking directory: {}\n",
-        plan.program, project.display(), plan.cwd.display(),
+        plan.program,
+        project.display(),
+        plan.cwd.display(),
     );
     match result {
         Ok(message) => ResultLog::ok(format!("{context}{message}")),
@@ -323,11 +336,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let missing = temp.path().join("does-not-exist").join("hydrogen-stage1");
         let args = vec!["build".into(), "src/australis.hyproj".into()];
-        let result = invoke_hydrogen(
-            &missing.to_string_lossy(),
-            temp.path(),
-            &args,
-        ).unwrap_err();
+        let result = invoke_hydrogen(&missing.to_string_lossy(), temp.path(), &args).unwrap_err();
         assert!(result.contains("Configured Hydrogen executable is missing"));
         assert!(result.contains(&missing.to_string_lossy().to_string()));
 
@@ -345,8 +354,11 @@ mod tests {
         std::fs::write(&executable, "#!/path/to/nonexistent/quark-interpreter\n").unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
         let result = invoke_hydrogen(
-            &executable.to_string_lossy(), temp.path(), &["--version".into()],
-        ).unwrap_err();
+            &executable.to_string_lossy(),
+            temp.path(),
+            &["--version".into()],
+        )
+        .unwrap_err();
         assert!(result.contains("interpreter or dynamic loader"));
         assert!(result.contains(&executable.to_string_lossy().to_string()));
     }

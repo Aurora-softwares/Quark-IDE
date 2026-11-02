@@ -15,8 +15,6 @@ mod hydrogen;
 mod native_commands;
 #[path = "../native_compiler.rs"]
 mod native_compiler;
-#[path = "../native_solution_explorer.rs"]
-mod native_solution_explorer;
 #[cfg(target_os = "linux")]
 #[path = "../native_dock_runtime.rs"]
 mod native_dock_runtime;
@@ -44,6 +42,8 @@ mod native_preferences;
 #[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
+#[path = "../native_solution_explorer.rs"]
+mod native_solution_explorer;
 #[path = "../native_start_window.rs"]
 mod native_start_window;
 #[cfg(target_os = "linux")]
@@ -434,18 +434,23 @@ fn solution_items(
     search: &str,
     descending: bool,
     list_mode: bool,
-) -> (Vec<TreeItem>, std::collections::HashMap<Vec<usize>, PathBuf>) {
+) -> (
+    Vec<TreeItem>,
+    std::collections::HashMap<Vec<usize>, PathBuf>,
+) {
     let (_, paths) = file_items(ide);
-    let root = ide.project.as_ref()
+    let root = ide
+        .project
+        .as_ref()
         .and_then(|project| project.path.parent())
         .or_else(|| ide.workspace.folders.last().map(PathBuf::as_path))
         .unwrap_or_else(|| Path::new("."));
-    let title = ide.project.as_ref()
+    let title = ide
+        .project
+        .as_ref()
         .map(|project| format!("◇ Solution '{}'", project.name))
         .unwrap_or_else(|| format!("📁 {}", root.display()));
-    native_solution_explorer::project(
-        &paths, root, &title, search, descending, list_mode,
-    )
+    native_solution_explorer::project(&paths, root, &title, search, descending, list_mode)
 }
 
 fn flatten_symbols(node: &symbols::SymbolNode, parent: &str, output: &mut Vec<ListItem>) {
@@ -3772,8 +3777,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move || {
             let ide = state.borrow();
             let (items, paths) = solution_items(
-                &ide, &solution_query.borrow(),
-                solution_descending.get(), solution_list_mode.get(),
+                &ide,
+                &solution_query.borrow(),
+                solution_descending.get(),
+                solution_list_mode.get(),
             );
             symbols_list.set_items(&project_symbols(&ide));
             tree.set_items(&items);
