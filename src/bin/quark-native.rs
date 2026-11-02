@@ -1167,6 +1167,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     type PropertyRefresh = Rc<dyn Fn()>;
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
+    // Deliver selection after native click callbacks return, avoiding removal
+    // of the active AppKit/WinUI/GTK control from within its own handler.
+    let select_element_later = ui.tasks().channel({
+        let selected_xml_path = selected_xml_path.clone();
+        let reload_properties = reload_properties.clone();
+        move |path: Vec<usize>| {
+            *selected_xml_path.borrow_mut() = path;
+            if let Some(refresh) = reload_properties.borrow().as_ref() {
+                refresh();
+            }
+        }
+    });
     let apply_xml_property: Rc<dyn Fn(String, String)> = Rc::new({
         let state = state.clone();
         let selected_xml_path = selected_xml_path.clone();
@@ -1219,6 +1231,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let native_property_content = native_property_content.clone();
         let selected_xml_path = selected_xml_path.clone();
         let apply_xml_property = apply_xml_property.clone();
+        let select_element_later = select_element_later.clone();
         move || {
             native_property_content.clear();
             let Some(xml) = state
@@ -1233,6 +1246,25 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let Ok((kind, fields)) = native_ui_properties::available_properties(&xml, &path) else {
                 return;
             };
+            // Select any node, including labels, hidden controls and tabs,
+            // without putting design-only selector buttons into the preview.
+            if let Ok(paths) = native_ui_properties::element_paths(&xml) {
+                if let Ok(navigator) = ui.combo_box() {
+                    let labels: Vec<_> = paths.iter().map(|(_, name)| name.as_str()).collect();
+                    navigator.set_items(&labels);
+                    if let Some(index) = paths.iter().position(|(candidate, _)| candidate == &path) {
+                        navigator.set_selected(index);
+                    }
+                    let paths: Vec<_> = paths.into_iter().map(|(path, _)| path).collect();
+                    let dispatch = select_element_later.clone();
+                    navigator.on_select(move |index| {
+                        if let Some(path) = paths.get(index) {
+                            let _ = dispatch.send(path.clone());
+                        }
+                    });
+                    native_property_content.append(&navigator);
+                }
+            }
             if let Ok(title) = ui.label(&format!("{kind} · Properties")) {
                 native_property_content.append(&title);
             }
@@ -1302,13 +1334,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }));
 
     let select_native_element: native_portable_preview::SelectElement = Rc::new({
-        let selected_xml_path = selected_xml_path.clone();
-        let reload_properties = reload_properties.clone();
+        let select_element_later = select_element_later.clone();
         move |path| {
-            *selected_xml_path.borrow_mut() = path;
-            if let Some(refresh) = reload_properties.borrow().as_ref() {
-                refresh();
-            }
+            let _ = select_element_later.send(path);
         }
     });
 
@@ -2147,9 +2175,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let canvas = canvas.clone();
         let design_heading = design_heading.clone();
         let design_mode = design_mode.clone();
+        let design_tab_selection = design_tab_selection.clone();
+        let selected_xml_path = selected_xml_path.clone();
         let reload_preview = reload_preview.clone();
         move |path| {
+            let different_document = state.borrow().layout.as_ref()
+                .is_none_or(|document| document.path != path);
             let result = state.borrow_mut().open_design(&path);
+            if result.is_ok() && different_document {
+                design_tab_selection.borrow_mut().clear();
+                selected_xml_path.borrow_mut().clear();
+            }
             match result {
                 Ok(()) => {
                     if let Some(refresh) = reload_preview.borrow().as_ref() {
