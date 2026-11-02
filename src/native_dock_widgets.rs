@@ -37,13 +37,11 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
             DockId::Output | DockId::TestResults => (0x70, 0xc3, 0x94),
             _ => (0x81, 0xae, 0xe6),
         };
-        painter.fill_rect(Rect::new(2.0, 3.0, 23.0, 24.0), Color::rgb(0x36, 0x39, 0x42));
-        painter.text(
-            id.glyph(),
-            Point::new(6.0, 8.0),
-            12.0,
-            Color::rgb(r, g, b),
+        painter.fill_rect(
+            Rect::new(2.0, 3.0, 23.0, 24.0),
+            Color::rgb(0x36, 0x39, 0x42),
         );
+        painter.text(id.glyph(), Point::new(6.0, 8.0), 12.0, Color::rgb(r, g, b));
     });
     row.append(&icon);
 
@@ -61,10 +59,7 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         // Grabber handles are visually distinct from panel content buttons.
         for row in [10.0_f64, 15.0, 20.0] {
             for x in [8.0_f64, 13.0, 18.0] {
-                painter.fill_rect(
-                    Rect::new(x, row, 2.0, 2.0),
-                    Color::rgb(0x8b, 0x8c, 0x96),
-                );
+                painter.fill_rect(Rect::new(x, row, 2.0, 2.0), Color::rgb(0x8b, 0x8c, 0x96));
             }
         }
     });
@@ -88,9 +83,14 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         pin.native_widget().set_tooltip_text(Some(
             "Pin this panel open, or auto-hide it when focus moves elsewhere.",
         ));
-        collapse.native_widget().set_tooltip_text(Some(
-            "Collapse or expand the panel content.",
-        ));
+        collapse
+            .native_widget()
+            .set_tooltip_text(Some("Collapse or expand the panel content."));
     }
-    Ok(DockHeader { row, pin, collapse, drag })
+    Ok(DockHeader {
+        row,
+        pin,
+        collapse,
+        drag,
+    })
 }
