@@ -522,7 +522,7 @@ fn run_task(
     output: naui::Label,
     test_output: naui::Label,
     status: naui::Label,
-    error_list: naui::List,
+    _error_list: naui::List,
     error_summary: naui::Label,
     current_errors: Rc<RefCell<Vec<problems::Problem>>>,
     refresh_errors: Rc<dyn Fn()>,
@@ -2128,7 +2128,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // exclusively owns the PTY handles, and UI input/output crosses channels.
     let (terminal_input_sender, terminal_input_receiver) =
         std::sync::mpsc::channel::<native_terminal::Input>();
-    let terminal_parser = Rc::new(RefCell::new(vt100::Parser::new(26, 100, 2000)));
+    let terminal_parser = Rc::new(RefCell::new(vt100::Parser::new(
+        std::num::NonZeroU16::new(26).unwrap(),
+        std::num::NonZeroU16::new(100).unwrap(),
+        2000,
+    )));
     let terminal_sender = ui.tasks().channel({
         let parser = terminal_parser.clone();
         let display = terminal_output.clone();
@@ -2136,7 +2140,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             match event {
                 native_terminal::Input::Bytes(bytes) => parser.borrow_mut().process(&bytes),
                 native_terminal::Input::Resize { rows, cols } => {
-                    parser.borrow_mut().set_size(rows, cols)
+                    parser.borrow_mut().set_size(
+                        std::num::NonZeroU16::new(rows.max(1)).unwrap(),
+                        std::num::NonZeroU16::new(cols.max(1)).unwrap(),
+                    )
                 }
             }
             let rendered = parser.borrow().screen().contents_formatted_basic();
@@ -3043,6 +3050,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     refresh_docks();
     #[cfg(target_os = "linux")]
     let show_auto_hide: Rc<dyn Fn(native_docking::DockId, gtk4::Widget)> = {
+        use gtk4::prelude::{PopoverExt, WidgetExt};
         let model = dock_model.clone();
         let widgets = dock_widgets.clone();
         let popovers = auto_hide_popovers.clone();
