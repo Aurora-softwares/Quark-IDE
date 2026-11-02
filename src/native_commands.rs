@@ -803,13 +803,11 @@ mod tests {
         .unwrap();
         std::fs::set_permissions(&compiler, std::fs::Permissions::from_mode(0o755)).unwrap();
         let mut displayed = Vec::new();
-        let result = invoke_hydrogen_terminal(
-            &compiler.to_string_lossy(),
-            dir.path(),
-            &[],
-            &mut |bytes| displayed.extend_from_slice(bytes),
-        )
-        .unwrap();
+        let result =
+            invoke_hydrogen_terminal(&compiler.to_string_lossy(), dir.path(), &[], &mut |bytes| {
+                displayed.extend_from_slice(bytes)
+            })
+            .unwrap();
         assert!(!result.success);
         assert_eq!(result.exit_code, Some(7));
         assert_eq!(displayed, result.stdout);
