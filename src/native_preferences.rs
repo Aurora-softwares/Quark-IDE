@@ -1,7 +1,7 @@
 //! GTK platform settings editor backed by the cross-platform preferences schema.
+use crate::native_settings::{load, Preferences, ThemeChoice};
 use gtk4::prelude::*;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
-use crate::native_settings::{load, Preferences, ThemeChoice};
 fn save(path: &std::path::Path, preferences: &Preferences) -> Result<(), String> {
     crate::native_settings::save(path, preferences)
 }
