@@ -53,6 +53,34 @@ fn rgb(number: u16) -> String {
     let shade = 8 + 10 * (number - 232).min(23);
     format!("#{shade:02x}{shade:02x}{shade:02x}")
 }
+/// Turn stdout/stderr pipe line endings into the CRLF normally produced by
+/// an interactive terminal's ONLCR line discipline. A VT100 LF only moves the
+/// cursor down; without CR, each Hydrogen progress message starts farther to
+/// the right, producing a staircase across the Output pane.
+///
+/// The state crosses chunk boundaries so an already valid CRLF is left
+/// untouched even when the two bytes arrive in separate reads. Bare CR
+/// (spinners, progress overwrites), ANSI escapes, and UTF-8 bytes are
+/// preserved exactly. This is for compiler *pipes*, never the real PTY.
+#[derive(Default)]
+pub struct PipeLineEndings {
+    previous_was_cr: bool,
+}
+
+impl PipeLineEndings {
+    pub fn normalize(&mut self, chunk: &[u8]) -> Vec<u8> {
+        let mut output = Vec::with_capacity(chunk.len() + chunk.len() / 32 + 1);
+        for &byte in chunk {
+            if byte == b'\n' && !self.previous_was_cr {
+                output.push(b'\r');
+            }
+            output.push(byte);
+            self.previous_was_cr = byte == b'\r';
+        }
+        output
+    }
+}
+
 /// Discard formatting/control escape sequences while preserving readable
 /// UTF-8 text. Used for non-GTK fallback and pass/fail classification.
 pub fn remove_escape_sequences(raw: &str) -> String {
@@ -214,6 +242,43 @@ pub fn markup(raw: &str, palette: Palette) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pipe_line_endings_keep_terminal_columns_aligned() {
+        use std::num::NonZeroU16;
+        let mut endings = PipeLineEndings::default();
+        let mut screen = vt100::Parser::new(
+            NonZeroU16::new(8).unwrap(),
+            NonZeroU16::new(80).unwrap(),
+            10,
+        );
+        for chunk in [
+            &b"Compiled 590 methods\nCompiled 600 methods\n"[..],
+            &b"Compiled 610 methods\n"[..],
+        ] {
+            screen.process(&endings.normalize(chunk));
+        }
+        assert_eq!(screen.screen().cell(0, 0).unwrap().contents(), "C");
+        assert_eq!(screen.screen().cell(1, 0).unwrap().contents(), "C");
+        assert_eq!(screen.screen().cell(2, 0).unwrap().contents(), "C");
+        assert_eq!(screen.screen().cursor_position().1, 0);
+        assert!(screen.screen().contents().contains("Compiled 610 methods"));
+    }
+
+    #[test]
+    fn pipe_line_endings_preserve_spinner_overwrites_ansi_and_split_crlf() {
+        let mut endings = PipeLineEndings::default();
+        assert_eq!(
+            endings.normalize(b"Building 10%\r\x1b[2KBuilding 20%"),
+            b"Building 10%\r\x1b[2KBuilding 20%"
+        );
+        assert_eq!(endings.normalize(b"\r"), b"\r");
+        assert_eq!(endings.normalize(b"\nNext\n"), b"\nNext\r\n");
+        assert_eq!(endings.normalize(b"\x1b[31mERROR\x1b[0m"), b"\x1b[31mERROR\x1b[0m");
+        // A partial UTF-8 scalar is never decoded or altered.
+        assert_eq!(endings.normalize(&[0xe2, 0x98]), vec![0xe2, 0x98]);
+        assert_eq!(endings.normalize(&[0x83, b'\n']), vec![0x83, b'\r', b'\n']);
+    }
+
     #[test]
     fn sgr_colours_and_markup_escape_are_safe() {
         let m = markup("a <b>\x1b[31mERROR & more\x1b[0m", Palette::Output);
