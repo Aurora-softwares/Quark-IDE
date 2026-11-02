@@ -998,8 +998,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use gtk4::prelude::*;
         use naui::Widget as _;
         design_heading.native_widget().set_tooltip_text(Some(
-            "Click the preview window frame or a diamond handle to select it. \
-             Edit the selected element in Properties or switch to XML Source.",
+            "Interact with native controls to select them. Use the Properties hierarchy \
+             to select containers, hidden elements and static text.",
         ));
     }
     let canvas = ui.canvas()?;
@@ -1014,6 +1014,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     portable_scroll.set_sizing(Sizing::fill());
     portable_scroll.set_child(&portable_preview);
     let selected_xml_path = Rc::new(RefCell::new(Vec::<usize>::new()));
+    // A private design-session selection, never written to Tabs.value in XML.
+    let design_tab_selection: native_portable_preview::DesignTabs =
+        Rc::new(RefCell::new(std::collections::HashMap::new()));
     type PreviewRefresh = Rc<dyn Fn()>;
     let reload_preview: Rc<RefCell<Option<PreviewRefresh>>> = Rc::new(RefCell::new(None));
 
@@ -1321,6 +1324,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let flat_properties = flat_properties.clone();
         let native_property_scroll = native_property_scroll.clone();
         let select_native_element = select_native_element.clone();
+        let design_tab_selection = design_tab_selection.clone();
         let reload_properties = reload_properties.clone();
         let status = status.clone();
         move || {
@@ -1338,7 +1342,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 property_editor.append(&native_property_scroll);
                 portable_preview.clear();
                 if let Some(xml) = xml {
-                    match native_portable_preview::render(&ui, &xml, select_native_element.clone())
+                    match native_portable_preview::render(
+                        &ui, &xml, select_native_element.clone(),
+                        design_tab_selection.clone(),
+                    )
                     {
                         Ok(view) => portable_preview.append(&view),
                         Err(error) => {
