@@ -1,6 +1,6 @@
 # Quark feature testing
 
-Every current user-facing behaviour is recorded in [tests/feature-coverage.json](tests/feature-coverage.json). The register contains **185 features**. Each applicable feature must reference at least **two distinct, meaningful, runnable tests**. Tests may cover several connected behaviours when they actually assert those outcomes. Duplicate references and ignored tests do not satisfy the minimum.
+Every current user-facing behaviour is recorded in [tests/feature-coverage.json](tests/feature-coverage.json). The feature count is maintained in the JSON register. Each applicable feature must reference at least **two distinct, meaningful, runnable tests**. Tests may cover several connected behaviours when they actually assert those outcomes. Duplicate references and ignored tests do not satisfy the minimum.
 
 The release check runs formatting, clippy with warnings denied, Rust tests, the coverage-gate regressions, the feature-register validator and an optimized build:
 
@@ -12,11 +12,13 @@ The checks can also run separately (use `python` where Python 3 is installed und
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all-targets
+cargo clippy --no-default-features --features legacy-ui --all-targets -- -D warnings
+cargo test --no-default-features --features legacy-ui --all-targets
+cargo clippy --no-default-features --features native-ui --bin quark-native -- -D warnings
+cargo test --no-default-features --features native-ui --bin quark-native
 python3 -m unittest discover -s scripts -p test_feature_coverage.py
 python3 scripts/check-feature-coverage.py
-cargo build --release
+cargo build --release --no-default-features --features native-ui --bin quark-native
 ```
 
 The validator asks Cargo for its actual test inventory, including a separate inventory of ignored tests. It rejects missing names, fewer than two distinct runnable tests, invalid metadata and duplicate feature IDs. Eight Python regressions exercise the validator itself. CI runs it on Linux, macOS and Windows. Unix-specific real-PTY/process-group features are explicitly marked in the register; they do not claim ConPTY coverage.
