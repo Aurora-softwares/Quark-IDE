@@ -11,6 +11,20 @@ pub type DesignTabs = Rc<RefCell<HashMap<Vec<usize>, usize>>>;
 
 pub type SelectElement = Rc<dyn Fn(Vec<usize>)>;
 
+/// The compiled application's startup tab is zero-based, while its
+/// displayed first page is page 1. Moving around the designer must never
+/// mutate that startup value.
+pub fn design_tab_index(
+    source_default: usize,
+    design_override: Option<usize>,
+    number_of_pages: usize,
+) -> Option<usize> {
+    number_of_pages.checked_sub(1).map(|last| {
+        design_override.unwrap_or(source_default).min(last)
+    })
+}
+
+
 fn render_children(
     ui: &Ui,
     parent: &naui::Stack,
@@ -232,13 +246,10 @@ fn render_node(
                     .attribute("value")
                     .and_then(|v| v.parse::<usize>().ok())
                     .unwrap_or(0);
-                let selection = design_tabs
-                    .borrow()
-                    .get(&path)
-                    .copied()
-                    .unwrap_or(runtime_default)
-                    .min(count - 1);
-                tabs.set_selected(selection);
+                let design_override = design_tabs.borrow().get(&path).copied();
+                if let Some(selection) = design_tab_index(runtime_default, design_override, count) {
+                    tabs.set_selected(selection);
+                }
                 let design_tabs = design_tabs.clone();
                 let select = on_select.clone();
                 tabs.on_select(move |index| {
@@ -599,4 +610,25 @@ pub fn render(
     )?;
     outer.append(&window);
     Ok(outer)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_tab_is_default_without_an_explicit_source_attribute() {
+        assert_eq!(design_tab_index(0, None, 3), Some(0));
+        assert_eq!(design_tab_index(0, None, 1), Some(0));
+        assert_eq!(design_tab_index(0, None, 0), None);
+    }
+
+    #[test]
+    fn navigating_design_tabs_does_not_change_compiled_startup_page() {
+        let source = r#"<Window version="1"><Tabs value="0"><Tab title="First"/><Tab title="Second"/></Tabs></Window>"#;
+        let override_selection = design_tab_index(0, Some(1), 2);
+        assert_eq!(override_selection, Some(1));
+        assert!(source.contains("value=\"0\""));
+        assert_eq!(design_tab_index(0, None, 2), Some(0));
+    }
 }
