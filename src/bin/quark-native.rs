@@ -3722,6 +3722,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     ] {
         let show_bottom = show_bottom.clone();
         #[cfg(target_os = "linux")]
+        let terminal_focus = {
+            use naui::Widget as _;
+            terminal_output.native_widget()
+        };
+        #[cfg(target_os = "linux")]
         let show_auto_hide = show_auto_hide.clone();
         #[cfg(target_os = "linux")]
         let anchor = {
@@ -3732,6 +3737,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             show_bottom(page);
             #[cfg(target_os = "linux")]
             {
+                if page == 5 {
+                    use gtk4::prelude::*;
+                    let focus = terminal_focus.clone();
+                    gtk4::glib::idle_add_local_once(move || { focus.grab_focus(); });
+                }
                 if page != 5 {
                     let id = match page {
                         1 => native_docking::DockId::ErrorList,
