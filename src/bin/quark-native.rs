@@ -1586,6 +1586,147 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    // Shared dock headers now own pin and collapse state. Persist settings
+    // separately from sizes, so moving and hiding never destroys a user's
+    // previous preferred dimensions.
+    for (id, header) in [
+        (native_docking::DockId::Toolbox, &toolbox_controls),
+        (native_docking::DockId::Solution, &solution_controls),
+        (native_docking::DockId::Properties, &properties_controls),
+        (native_docking::DockId::Output, &output_controls),
+    ] {
+        let (pinned, collapsed) = dock_model
+            .borrow()
+            .section(id)
+            .map(|s| (s.pinned, s.collapsed))
+            .unwrap_or((true, false));
+        header.pin.set_text(if pinned { "◆" } else { "◇" });
+        header.collapse.set_text(if collapsed { "▸" } else { "▾" });
+        header.pin.on_click({
+            let model = dock_model.clone();
+            let path = dock_path.clone();
+            let status = status.clone();
+            let pin = header.pin.clone();
+            move || {
+                let pinned = {
+                    let mut layout = model.borrow_mut();
+                    let next = !layout.section(id).is_some_and(|s| s.pinned);
+                    layout.pin(id, next);
+                    if let Err(error) = layout.save(&path) {
+                        status.set_text(&format!("Cannot save dock layout: {error}"));
+                    }
+                    next
+                };
+                pin.set_text(if pinned { "◆" } else { "◇" });
+                status.set_text(if pinned {
+                    "Section pinned. Pinned sections reserve space in their dock."
+                } else {
+                    "Section unpinned. The docking renderer will auto-hide it."
+                });
+            }
+        });
+    }
+    toolbox_controls.collapse.on_click({
+        let model = dock_model.clone();
+        let path = dock_path.clone();
+        let toolbox = toolbox.clone();
+        let header = toolbox_heading.clone();
+        let search = toolbox_search.clone();
+        let items = toolbox_scroll.clone();
+        let control = toolbox_controls.collapse.clone();
+        move || {
+            let collapsed = {
+                let mut layout = model.borrow_mut();
+                let next = !layout.section(native_docking::DockId::Toolbox)
+                    .is_some_and(|s| s.collapsed);
+                layout.collapse(native_docking::DockId::Toolbox, next);
+                let _ = layout.save(&path);
+                next
+            };
+            toolbox.clear();
+            toolbox.append(&header);
+            if !collapsed {
+                toolbox.append(&search);
+                toolbox.append(&items);
+            }
+            control.set_text(if collapsed { "▸" } else { "▾" });
+        }
+    });
+    collapse_solution.on_click({
+        let model = dock_model.clone();
+        let path = dock_path.clone();
+        let pane = solution_pane.clone();
+        let heading = solution_heading.clone();
+        let search = solution_search.clone();
+        let tree = tree.clone();
+        let control = collapse_solution.clone();
+        move || {
+            let collapsed = {
+                let mut layout = model.borrow_mut();
+                let next = !layout.section(native_docking::DockId::Solution)
+                    .is_some_and(|s| s.collapsed);
+                layout.collapse(native_docking::DockId::Solution, next);
+                let _ = layout.save(&path);
+                next
+            };
+            pane.clear();
+            pane.append(&heading);
+            if !collapsed {
+                pane.append(&search);
+                pane.append(&tree);
+            }
+            control.set_text(if collapsed { "▸" } else { "▾" });
+        }
+    });
+    properties_controls.collapse.on_click({
+        let model = dock_model.clone();
+        let path = dock_path.clone();
+        let pane = properties_pane.clone();
+        let heading = properties_toolbar.clone();
+        let body = property_editor.clone();
+        let control = properties_controls.collapse.clone();
+        move || {
+            let collapsed = {
+                let mut layout = model.borrow_mut();
+                let next = !layout.section(native_docking::DockId::Properties)
+                    .is_some_and(|s| s.collapsed);
+                layout.collapse(native_docking::DockId::Properties, next);
+                let _ = layout.save(&path);
+                next
+            };
+            pane.clear();
+            pane.append(&heading);
+            if !collapsed {
+                pane.append(&body);
+            }
+            control.set_text(if collapsed { "▸" } else { "▾" });
+        }
+    });
+    output_controls.collapse.on_click({
+        let model = dock_model.clone();
+        let path = dock_path.clone();
+        let pane = bottom.clone();
+        let heading = bottom_tabs.clone();
+        let body = bottom_pages.clone();
+        let control = output_controls.collapse.clone();
+        move || {
+            let collapsed = {
+                let mut layout = model.borrow_mut();
+                let next = !layout.section(native_docking::DockId::Output)
+                    .is_some_and(|s| s.collapsed);
+                layout.collapse(native_docking::DockId::Output, next);
+                let _ = layout.save(&path);
+                next
+            };
+            pane.clear();
+            pane.append(&heading);
+            if !collapsed {
+                pane.append(&body);
+            }
+            control.set_text(if collapsed { "▸" } else { "▾" });
+        }
+    });
+
     let status_bar = ui.stack(Orientation::Horizontal)?;
     status_bar.append(&ui.label("✦ QUARK · HYDROGEN")?);
     status_bar.append(&status);
@@ -1887,23 +2028,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             show_page(Page::Design);
         });
     }
-    collapse_solution.on_click({
-        let solution_pane = solution_pane.clone();
-        let solution_heading = solution_heading.clone();
-        let tree = tree.clone();
-        let solution_search = solution_search.clone();
-        let collapsed = Rc::new(std::cell::Cell::new(false));
-        move || {
-            let hidden = !collapsed.get();
-            collapsed.set(hidden);
-            solution_pane.clear();
-            solution_pane.append(&solution_heading);
-            if !hidden {
-                solution_pane.append(&solution_search);
-                solution_pane.append(&tree);
-            }
-        }
-    });
 
     editor.on_change({
         let state = state.clone();
