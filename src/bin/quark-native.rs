@@ -571,12 +571,7 @@ enum BuildEvent {
 }
 /// Keep a running compiler's newest progress visible, without stealing
 /// the scrollbar from someone who has deliberately scrolled up to read logs.
-fn set_live_output(
-    label: &naui::Label,
-    scroll: &naui::Scroll,
-    text: &str,
-    force_follow: bool,
-) {
+fn set_live_output(label: &naui::Label, scroll: &naui::Scroll, text: &str, force_follow: bool) {
     #[cfg(target_os = "linux")]
     {
         use gtk4::prelude::*;
@@ -601,8 +596,6 @@ fn set_live_output(
     let _ = (scroll, force_follow);
     set_console_text(label, text, native_console::Palette::Output);
 }
-
-
 
 // The latest launched task owns the Output pane; earlier tasks may finish
 // in the background, but must not overwrite a newer build's progress.
@@ -643,7 +636,12 @@ fn run_task(
         .and_then(|path| path.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("."));
     status.set_text(&format!("{}…", task.label()));
-    set_live_output(&output, &output_scroll, &format!("Running {}…", task.label()), true);
+    set_live_output(
+        &output,
+        &output_scroll,
+        &format!("Running {}…", task.label()),
+        true,
+    );
     // A real terminal parser, rather than appending raw lines, is essential:
     // carriage returns, erase-in-line and spinner frames replace their own
     // cell positions. It also buffers partial UTF-8 and ANSI sequences.
