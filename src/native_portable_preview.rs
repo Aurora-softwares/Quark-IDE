@@ -103,6 +103,59 @@ fn design_press_claims_activation(kind: &str) -> bool {
     )
 }
 
+/// Width hints for the children of a horizontal RowPanel. Explicit
+/// preferredWidth is a constraint, not a suggestion to split all children
+/// into equal-size cells. The runtime keeps those fixed widths while its
+/// native FlowBox handles wrapping at narrow window sizes.
+fn row_child_widths(node: Node<'_, '_>, available_width: f64, gap: f64) -> Vec<f64> {
+    let children = node
+        .children()
+        .filter(|child| child.is_element())
+        .collect::<Vec<_>>();
+    let widths = children
+        .iter()
+        .map(|child| {
+            if child.attribute("visible") == Some("false") {
+                return None;
+            }
+            child
+                .attribute("preferredWidth")
+                .and_then(|width| width.parse::<f64>().ok())
+                .filter(|width| width.is_finite() && *width >= 20.0)
+        })
+        .collect::<Vec<_>>();
+    let visible_count = children
+        .iter()
+        .filter(|child| child.attribute("visible") != Some("false"))
+        .count();
+    let fixed_total: f64 = widths.iter().flatten().sum();
+    let flexible_count = children
+        .iter()
+        .zip(widths.iter())
+        .filter(|(child, width)| child.attribute("visible") != Some("false") && width.is_none())
+        .count();
+    let remaining = (available_width
+        - gap * visible_count.saturating_sub(1) as f64
+        - fixed_total)
+        .max(0.0);
+    let flexible_width = if flexible_count == 0 {
+        0.0
+    } else {
+        (remaining / flexible_count as f64).max(80.0)
+    };
+    children
+        .iter()
+        .zip(widths)
+        .map(|(child, fixed)| {
+            if child.attribute("visible") == Some("false") {
+                0.0
+            } else {
+                fixed.unwrap_or(flexible_width)
+            }
+        })
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)] // Recursive renderer forwards native UI, selection state and document context.
 fn render_children(
     ui: &Ui,
@@ -162,14 +215,20 @@ fn render_node(
     row.set_spacing(0.0);
     // Honor the same common layout attributes as the Hydrogen runtime.
     // These are design-time measurements, not changes to the XML source.
-    if node.attribute("fill") == Some("true") {
-        row.set_sizing(Sizing::fill_width());
-    } else if let Some(width) = node
+    if let Some(width) = node
         .attribute("preferredWidth")
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
         row.set_sizing(Sizing::new().width(Length::Fixed(width.min(2400.0))));
+    } else if node.attribute("fill") == Some("true")
+        || (node.attribute("fill") != Some("false")
+            && !matches!(kind, "Button" | "MenuItem" | "ToolButton" | "Spinner" | "Spacer"))
+    {
+        // Hydrogen defaults fill=true for ordinary content. A non-filling
+        // wrapper lets otherwise correct GTK controls collapse to natural
+        // sizes inside a much wider panel (notably multi-line text editors).
+        row.set_sizing(Sizing::fill_width());
     }
     #[cfg(target_os = "linux")]
     if let Some(tip) = node.attribute("tooltip").filter(|value| !value.is_empty()) {
@@ -233,6 +292,10 @@ fn render_node(
                 .unwrap_or(20.0)
                 .clamp(0.0, 80.0);
             panel.set_padding(Padding::all(padding));
+            // The panel's preferredWidth belongs to the outer row. Its native
+            // card must occupy the entire row rather than remain centred at
+            // a narrow natural width.
+            panel.set_sizing(Sizing::fill_width());
             panel.set_spacing(
                 node.attribute("gap")
                     .and_then(|v| v.parse::<f64>().ok())
@@ -336,22 +399,32 @@ fn render_node(
                 .unwrap_or(12.0)
                 .clamp(0.0, 48.0);
             children.set_spacing(gap);
-            let count = node.children().filter(|n| n.is_element()).count().max(1);
-            let child_width = if direction == Orientation::Horizontal {
-                ((available_width - (count as f64 - 1.0) * gap) / count as f64).max(80.0)
-            } else {
-                available_width
-            };
-            render_children(
-                ui,
-                &children,
-                node,
-                &path,
-                on_select,
-                design_tabs,
-                child_width,
-                document,
-            )?;
+            // Preserve the specified widths of individual panels. In the
+            // Studio fixture this must remain 600px + 340px, not 50/50.
+            let widths = row_child_widths(node, available_width, gap);
+            for (index, child) in node
+                .children()
+                .filter(|child| child.is_element())
+                .enumerate()
+            {
+                let mut child_path = path.clone();
+                child_path.push(index);
+                let child_width = if direction == Orientation::Horizontal {
+                    widths[index]
+                } else {
+                    available_width
+                };
+                render_node(
+                    ui,
+                    &children,
+                    child,
+                    child_path,
+                    on_select,
+                    design_tabs,
+                    child_width,
+                    document,
+                )?;
+            }
             row.append(&children);
         }
         "GridPanel" => {
@@ -384,6 +457,7 @@ fn render_node(
             }
             for (index, child) in node.children().filter(|n| n.is_element()).enumerate() {
                 let cell = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+                cell.set_sizing(Sizing::fill_width());
                 let mut child_path = path.clone();
                 child_path.push(index);
                 render_node(
@@ -492,6 +566,15 @@ fn render_node(
             let label = ui
                 .label(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                if let Ok(native) = label.native_widget().downcast::<gtk4::Label>() {
+                    // Hydrogen's gtk.cpp always sets label xalign=0.
+                    native.set_xalign(0.0);
+                }
+            }
             match node.attribute("role").unwrap_or("") {
                 "title" => label.set_style(naui::TextStyle::LargeTitle),
                 "heading" => label.set_style(naui::TextStyle::Heading),
@@ -1089,6 +1172,34 @@ mod tests {
         assert!(DESIGN_FRAME_CSS.contains("currentColor"));
         assert!(!DESIGN_FRAME_CSS.contains("#"));
         assert!(!DESIGN_FRAME_CSS.contains("background:"));
+    }
+
+    #[test]
+    fn row_preferred_widths_follow_hydrogen_studio_not_even_distribution() {
+        let xml = include_str!("../tests/fixtures/Studio.hyui");
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let row = parsed
+            .descendants()
+            .find(|node| {
+                node.has_tag_name("RowPanel")
+                    && node
+                        .children()
+                        .filter(|child| child.is_element() && child.has_tag_name("Panel"))
+                        .count() == 2
+                    && node.attribute("gap") == Some("20")
+            })
+            .unwrap();
+        let widths = row_child_widths(row, 1072.0, 20.0);
+        assert_eq!(widths, vec![600.0, 340.0]);
+        assert_ne!(widths, vec![526.0, 526.0]);
+    }
+
+    #[test]
+    fn row_widths_distribute_remaining_space_and_skip_hidden_children() {
+        let xml = r#"<RowPanel><Panel preferredWidth="240"/><Label/><Panel visible="false" preferredWidth="350"/><Panel/></RowPanel>"#;
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let widths = row_child_widths(parsed.root_element(), 720.0, 20.0);
+        assert_eq!(widths, vec![240.0, 220.0, 0.0, 220.0]);
     }
 
     #[test]
