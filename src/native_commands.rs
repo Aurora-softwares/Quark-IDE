@@ -476,6 +476,156 @@ fn invoke_hydrogen_streaming(
     })
 }
 
+/// A native PTY reports its own cross-platform status and combines stdout
+/// and stderr into one terminal screen. Keep that outcome separate from
+/// std::process::Output so exit codes work on Linux, macOS and Windows.
+#[derive(Debug)]
+struct CompilerProcess {
+    success: bool,
+    exit_code: Option<i32>,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+impl From<std::process::Output> for CompilerProcess {
+    fn from(output: std::process::Output) -> Self {
+        Self {
+            success: output.status.success(),
+            exit_code: output.status.code(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        }
+    }
+}
+
+/// Hydrogen's BuildProgress checks Console.IsTerminal() before displaying its
+/// spinner. Streaming stdout/stderr pipes alone suppresses that feature and
+/// prints progress logs instead. Running with a real PTY restores the terminal
+/// contract (including ONLCR, carriage-return overwrite and SGR colours).
+///
+/// The reader runs on its own thread, while this worker invokes the UI
+/// callback for each chunk. This avoids terminal buffer deadlocks and never
+/// touches the GUI thread. A PTY setup/spawn failure falls back to pipes.
+fn invoke_hydrogen_terminal(
+    program: &str,
+    cwd: &Path,
+    args: &[String],
+    emit: &mut dyn FnMut(&[u8]),
+) -> Result<CompilerProcess, String> {
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use std::time::{Duration, Instant};
+
+    if !cwd.is_dir() {
+        return Err(format!(
+            "Hydrogen build working directory does not exist: {}",
+            cwd.display()
+        ));
+    }
+    let executable = Path::new(program);
+    if executable.is_absolute() && !executable.is_file() {
+        return Err(format!(
+            "Configured Hydrogen executable is missing: {}\nChoose it again in Tools → Options → Hydrogen.",
+            executable.display()
+        ));
+    }
+    let pair = match native_pty_system().openpty(PtySize {
+        rows: 30,
+        cols: 140,
+        pixel_width: 0,
+        pixel_height: 0,
+    }) {
+        Ok(pair) => pair,
+        Err(_) => return invoke_hydrogen_streaming(program, cwd, args, emit).map(Into::into),
+    };
+    let mut command = CommandBuilder::new(program);
+    command.args(args);
+    command.cwd(cwd);
+    command.env("TERM", "xterm-256color");
+    command.env("CLICOLOR_FORCE", "1");
+    command.env("FORCE_COLOR", "1");
+    let mut child = match pair.slave.spawn_command(command) {
+        Ok(child) => child,
+        Err(_) => return invoke_hydrogen_streaming(program, cwd, args, emit).map(Into::into),
+    };
+    drop(pair.slave);
+
+    let mut reader = match pair.master.try_clone_reader() {
+        Ok(reader) => reader,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("Cannot read Hydrogen build PTY: {error}"));
+        }
+    };
+    let (sender, receiver) = mpsc::channel::<Vec<u8>>();
+    let reader_thread = thread::spawn(move || {
+        let mut buffer = [0_u8; 8192];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(size) => {
+                    if sender.send(buffer[..size].to_vec()).is_err() {
+                        break;
+                    }
+                }
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                // Linux and macOS PTYs often return EIO after the slave exits.
+                #[cfg(unix)]
+                Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
+                Err(_) => break,
+            }
+        }
+    });
+    // Closing the writer sends EOF to commands that try to read stdin. On
+    // macOS, allow the reader to start before releasing it (portable-pty's
+    // documented very-short-lived-process race).
+    if let Ok(writer) = pair.master.take_writer() {
+        #[cfg(target_os = "macos")]
+        thread::sleep(Duration::from_millis(20));
+        drop(writer);
+    }
+    let mut master = Some(pair.master);
+    let mut exit = None;
+    let mut exited_at: Option<Instant> = None;
+    let mut reader_done = false;
+    let mut captured = Vec::new();
+    while !reader_done || exit.is_none() {
+        match receiver.recv_timeout(Duration::from_millis(40)) {
+            Ok(bytes) => {
+                emit(&bytes);
+                captured.extend_from_slice(&bytes);
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => reader_done = true,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        if exit.is_none() {
+            exit = child
+                .try_wait()
+                .map_err(|error| format!("Cannot check Hydrogen build status: {error}"))?;
+            if exit.is_some() {
+                // Drop the master only after the child has terminated; the
+                // reader holds its own clone to drain any remaining bytes.
+                drop(master.take());
+                exited_at = Some(Instant::now());
+            }
+        }
+        // A broken ConPTY reader must never leave the build task hanging.
+        if exited_at.is_some_and(|time| time.elapsed() >= Duration::from_secs(3)) {
+            break;
+        }
+    }
+    if reader_done {
+        let _ = reader_thread.join();
+    }
+    let status = exit.ok_or_else(|| "Hydrogen PTY exited without a process status".to_owned())?;
+    Ok(CompilerProcess {
+        success: status.success(),
+        exit_code: i32::try_from(status.exit_code()).ok(),
+        stdout: captured,
+        stderr: Vec::new(),
+    })
+}
+
 /// Existing one-shot callers retain their exact result contract; native UI
 /// callers can subscribe to raw output chunks without waiting for exit.
 type OutputCallback<'a> = Option<&'a mut dyn FnMut(&[u8])>;
@@ -485,11 +635,11 @@ fn invoke_hydrogen_maybe_streaming(
     cwd: &Path,
     args: &[String],
     emit: &mut OutputCallback<'_>,
-) -> Result<std::process::Output, String> {
+) -> Result<CompilerProcess, String> {
     if let Some(emit) = emit.as_deref_mut() {
-        invoke_hydrogen_streaming(program, cwd, args, emit)
+        invoke_hydrogen_terminal(program, cwd, args, emit)
     } else {
-        invoke_hydrogen(program, cwd, args)
+        invoke_hydrogen(program, cwd, args).map(Into::into)
     }
 }
 
@@ -539,7 +689,7 @@ fn run_with_output(
                         &plan.args,
                         &mut emit,
                     )?;
-                    if !built.status.success() {
+                    if !built.success {
                         return Err(format!(
                             "Build failed; nothing was published.\n{}\n{}",
                             String::from_utf8_lossy(&built.stdout),
@@ -605,9 +755,9 @@ fn run_with_output(
                         project.display(),
                         String::from_utf8_lossy(&process.stdout),
                         String::from_utf8_lossy(&process.stderr),
-                        process.status.code().unwrap_or(-1),
+                        process.exit_code.unwrap_or(-1),
                     );
-                    if process.status.success() {
+                    if process.success {
                         if let Some((artifact, ui)) = target {
                             launch_built(&artifact, &plan.cwd, ui)
                                 .map(|launch| format!("{message}\n{launch}"))
@@ -639,6 +789,35 @@ fn run_with_output(
 mod tests {
     use super::*;
     use std::io::Read;
+
+    #[cfg(unix)]
+    #[test]
+    fn terminal_build_stream_enables_real_tty_spinner_and_reports_exit_status() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let compiler = dir.path().join("tty-hydrogen");
+        std::fs::write(
+            &compiler,
+            "#!/bin/sh\nif [ -t 1 ]; then printf 'PTY-SPINNER\\r\\033[2KPTY-UPDATED\\n'; else printf 'PIPES-NO-SPINNER\\n'; fi\nexit 7\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&compiler, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut displayed = Vec::new();
+        let result = invoke_hydrogen_terminal(
+            &compiler.to_string_lossy(),
+            dir.path(),
+            &[],
+            &mut |bytes| displayed.extend_from_slice(bytes),
+        )
+        .unwrap();
+        assert!(!result.success);
+        assert_eq!(result.exit_code, Some(7));
+        assert_eq!(displayed, result.stdout);
+        let output = String::from_utf8_lossy(&result.stdout);
+        assert!(output.contains("PTY-SPINNER"), "{output}");
+        assert!(output.contains("PTY-UPDATED"), "{output}");
+        assert!(!output.contains("PIPES-NO-SPINNER"), "{output}");
+    }
 
     #[cfg(unix)]
     #[test]
