@@ -432,7 +432,9 @@ fn invoke_hydrogen_streaming(
         .take()
         .ok_or_else(|| "Hydrogen error pipe is unavailable".to_owned())?;
     let (sender, receiver) = mpsc::channel::<(bool, Vec<u8>)>();
-    let read_stream = |mut source: Box<dyn Read + Send>, error_stream: bool, sender: mpsc::Sender<(bool, Vec<u8>)>| {
+    let read_stream = |mut source: Box<dyn Read + Send>,
+                       error_stream: bool,
+                       sender: mpsc::Sender<(bool, Vec<u8>)>| {
         thread::spawn(move || {
             let mut buf = [0_u8; 8192];
             loop {
@@ -658,8 +660,12 @@ mod tests {
         assert!(result.status.success());
         assert!(!chunks.is_empty());
         let merged = chunks.concat();
-        assert!(merged.windows(b"compiling\r".len()).any(|part| part == b"compiling\r"));
-        assert!(merged.windows(b"done\x1b[2K".len()).any(|part| part == b"done\x1b[2K"));
+        assert!(merged
+            .windows(b"compiling\r".len())
+            .any(|part| part == b"compiling\r"));
+        assert!(merged
+            .windows(b"done\x1b[2K".len())
+            .any(|part| part == b"done\x1b[2K"));
         assert!(String::from_utf8_lossy(&result.stderr).contains("warning: sample"));
     }
 
@@ -672,13 +678,11 @@ mod tests {
         std::fs::write(&compiler, "#!/bin/sh\nprintf 'broken\\r' >&2\nexit 7\n").unwrap();
         std::fs::set_permissions(&compiler, std::fs::Permissions::from_mode(0o755)).unwrap();
         let mut displayed = Vec::new();
-        let result = invoke_hydrogen_streaming(
-            &compiler.to_string_lossy(),
-            dir.path(),
-            &[],
-            &mut |bytes| displayed.extend_from_slice(bytes),
-        )
-        .unwrap();
+        let result =
+            invoke_hydrogen_streaming(&compiler.to_string_lossy(), dir.path(), &[], &mut |bytes| {
+                displayed.extend_from_slice(bytes)
+            })
+            .unwrap();
         assert_eq!(result.status.code(), Some(7));
         assert_eq!(displayed, b"broken\r");
     }

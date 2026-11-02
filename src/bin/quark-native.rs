@@ -647,7 +647,11 @@ fn run_task(
                 refresh_errors();
                 if had_chunks.get() {
                     let rendered = parser.borrow().screen().contents_formatted_basic();
-                    let outcome = if result.success { "completed successfully" } else { "failed" };
+                    let outcome = if result.success {
+                        "completed successfully"
+                    } else {
+                        "failed"
+                    };
                     set_console_text(
                         &output,
                         &format!("{rendered}\n\n{} {outcome}.", task.label()),
