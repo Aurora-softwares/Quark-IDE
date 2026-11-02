@@ -77,10 +77,22 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
     root.append(&ui.label("Build & Run")?);
     let build_preferences = crate::native_settings::load(&preferences_file).build;
     for (label, field, enabled) in [
-        ("Save modified files before building", "save_before_build", build_preferences.save_before_build),
-        ("Show output after building", "show_output", build_preferences.show_output),
+        (
+            "Save modified files before building",
+            "save_before_build",
+            build_preferences.save_before_build,
+        ),
+        (
+            "Show output after building",
+            "show_output",
+            build_preferences.show_output,
+        ),
     ] {
-        let button = ui.button(if enabled { &format!("✓ {label}") } else { label })?;
+        let button = ui.button(if enabled {
+            &format!("✓ {label}")
+        } else {
+            label
+        })?;
         let file = preferences_file.clone();
         let button_clone = button.clone();
         let current = Rc::new(RefCell::new(enabled));
@@ -99,10 +111,18 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
     root.append(&ui.label("Editor")?);
     let editor_preferences = crate::native_settings::load(&preferences_file).editor;
     for (label, field, enabled) in [
-        ("Show line numbers", "show_line_numbers", editor_preferences.show_line_numbers),
+        (
+            "Show line numbers",
+            "show_line_numbers",
+            editor_preferences.show_line_numbers,
+        ),
         ("Word wrap", "word_wrap", editor_preferences.word_wrap),
     ] {
-        let button = ui.button(if enabled { &format!("✓ {label}") } else { label })?;
+        let button = ui.button(if enabled {
+            &format!("✓ {label}")
+        } else {
+            label
+        })?;
         let file = preferences_file.clone();
         let button_clone = button.clone();
         let current = Rc::new(RefCell::new(enabled));
