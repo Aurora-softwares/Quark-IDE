@@ -1905,9 +1905,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         widget.set_can_focus(true);
         widget.set_hexpand(true);
         widget.set_vexpand(true);
-        let key = gtk4::EventControllerKey::new();
-        key.set_propagation_phase(gtk4::PropagationPhase::Capture);
-        widget.add_controller(key);
     }
     // Each bottom tool is a complete dock section. Tabs only choose which
     // section is shown in the bottom host; they never own its content.
@@ -2022,15 +2019,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             std::thread::sleep(std::time::Duration::from_millis(28));
         }
     });
+    let terminal_line = Rc::new(RefCell::new(String::new()));
+    terminal_input.on_change({
+        let line = terminal_line.clone();
+        move |value| *line.borrow_mut() = value.to_owned()
+    });
     terminal_send.on_click({
         let send = terminal_input_sender.clone();
         let entry = terminal_input.clone();
+        let line = terminal_line.clone();
         move || {
-            let value = entry.text();
-            if !value.is_empty() {
-                let _ = send.send(format!("{value}\r").into_bytes());
-                entry.set_text("");
-            }
+            let value = std::mem::take(&mut *line.borrow_mut());
+            let _ = send.send(format!("{value}\r").into_bytes());
+            entry.set_text("");
         }
     });
     #[cfg(target_os = "linux")]
@@ -3508,6 +3509,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let debug_view = debug_section.clone();
         let tests_view = test_section.clone();
         let find_view = find_section.clone();
+        let terminal_view = terminal_section.clone();
         let dock_model = dock_model.clone();
         move |page| {
             active_dock.set(Some(match page {
@@ -3525,7 +3527,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 4 => native_docking::DockId::FindResults,
                 _ => native_docking::DockId::Output,
             };
-            if dock_model
+            if page != 5 && dock_model
                 .borrow()
                 .section(id)
                 .is_some_and(|section| section.zone != native_docking::DockZone::Bottom)
@@ -3534,6 +3536,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
             bottom_pages.clear();
             match page {
+                5 => bottom_pages.append(&terminal_view),
                 1 => bottom_pages.append(&errors_view),
                 2 => bottom_pages.append(&debug_view),
                 3 => bottom_pages.append(&tests_view),
@@ -3592,6 +3595,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         (&debug_tab, 2),
         (&test_tab, 3),
         (&find_tab, 4),
+        (&terminal_tab, 5),
     ] {
         let show_bottom = show_bottom.clone();
         #[cfg(target_os = "linux")]
@@ -3605,14 +3609,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             show_bottom(page);
             #[cfg(target_os = "linux")]
             {
-                let id = match page {
-                    1 => native_docking::DockId::ErrorList,
-                    2 => native_docking::DockId::Debug,
-                    3 => native_docking::DockId::TestResults,
-                    4 => native_docking::DockId::FindResults,
-                    _ => native_docking::DockId::Output,
-                };
-                show_auto_hide(id, anchor.clone());
+                if page != 5 {
+                    let id = match page {
+                        1 => native_docking::DockId::ErrorList,
+                        2 => native_docking::DockId::Debug,
+                        3 => native_docking::DockId::TestResults,
+                        4 => native_docking::DockId::FindResults,
+                        _ => native_docking::DockId::Output,
+                    };
+                    show_auto_hide(id, anchor.clone());
+                }
             }
         });
     }
