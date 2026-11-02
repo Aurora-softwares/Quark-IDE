@@ -518,6 +518,7 @@ fn run_task(
     task: native_commands::Task,
     state: Rc<RefCell<Ide>>,
     output: naui::Label,
+    test_output: naui::Label,
     status: naui::Label,
     error_list: naui::List,
     error_summary: naui::Label,
@@ -553,6 +554,9 @@ fn run_task(
             *current_errors.borrow_mut() = parsed;
             refresh_errors();
             set_console_text(&output, &result.text, native_console::Palette::Output);
+            if task == native_commands::Task::Test {
+                set_console_text(&test_output, &result.text, native_console::Palette::Tests);
+            }
             status.set_text(if result.success {
                 "Operation completed successfully"
             } else {
@@ -4599,6 +4603,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let task_action: Rc<dyn Fn(native_commands::Task)> = Rc::new({
         let state = state.clone();
         let output = output.clone();
+        let tests_view = tests_view.clone();
         let status = status.clone();
         let error_list = error_list.clone();
         let error_summary = error_summary.clone();
@@ -4607,11 +4612,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let ui = ui.clone();
         let show_bottom = show_bottom.clone();
         move |task| {
-            show_bottom(0);
+            show_bottom(if task == native_commands::Task::Test { 3 } else { 0 });
             run_task(
                 task,
                 state.clone(),
                 output.clone(),
+                tests_view.clone(),
                 status.clone(),
                 error_list.clone(),
                 error_summary.clone(),
@@ -4891,7 +4897,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (6, 1) => task_action(native_commands::Task::RunWithoutDebugging),
             (6, 2) => status.set_text("No native debug session is running."),
             (7, 0) => show_bottom(3),
-            (7, 1) => status.set_text("Test execution integration is planned."),
+            (7, 1) => task_action(native_commands::Task::Test),
             (8, 0) => task_action(native_commands::Task::Check),
             (9, 0) => {
                 #[cfg(target_os = "linux")]
