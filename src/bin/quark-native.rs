@@ -2092,12 +2092,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     terminal_section.append(&terminal_scroll);
     let terminal_input_row = ui.stack(Orientation::Horizontal)?;
     let terminal_input = ui.text_input("")?;
-    terminal_input.set_placeholder("Shell input (press Send on non-GTK platforms)");
+    terminal_input.set_placeholder("Live shell input — typing goes straight to the PTY");
     let terminal_send = ui.button("Send ↵")?;
     terminal_input_row.append(&terminal_input);
     terminal_input_row.append(&terminal_send);
     #[cfg(not(target_os = "linux"))]
     terminal_section.append(&terminal_input_row);
+    #[cfg(not(target_os = "linux"))]
+    let terminal_keys = ui.stack(Orientation::Horizontal)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        terminal_keys.set_spacing(3.0);
+        terminal_section.append(&terminal_keys);
+    }
     #[cfg(target_os = "linux")]
     {
         use gtk4::prelude::*;
@@ -2329,22 +2336,69 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     let terminal_line = Rc::new(RefCell::new(String::new()));
+    // Windows TextBox may fire on_change even for set_text(), so avoid
+    // treating a programmatic clear as repeated Backspace keystrokes.
+    let terminal_programmatic_change = Rc::new(Cell::new(false));
     terminal_input.on_change({
         let line = terminal_line.clone();
-        move |value| *line.borrow_mut() = value.to_owned()
+        let send = terminal_input_sender.clone();
+        let programmatic = terminal_programmatic_change.clone();
+        move |value| {
+            if programmatic.get() {
+                *line.borrow_mut() = value.to_owned();
+                return;
+            }
+            let input = native_terminal::typed_input_delta(&line.borrow(), value);
+            *line.borrow_mut() = value.to_owned();
+            if !input.is_empty() {
+                let _ = send.send(native_terminal::Input::Bytes(input));
+            }
+        }
     });
     terminal_send.on_click({
         let send = terminal_input_sender.clone();
         let entry = terminal_input.clone();
         let line = terminal_line.clone();
+        let programmatic = terminal_programmatic_change.clone();
         move || {
-            let value = std::mem::take(&mut *line.borrow_mut());
-            let _ = send.send(native_terminal::Input::Bytes(
-                format!("{value}\r").into_bytes(),
-            ));
+            // All ordinary characters have already been sent to the live
+            // PTY. Submit only Return, then reset the portable input buffer.
+            let _ = send.send(native_terminal::Input::Bytes(vec![b'\r']));
+            programmatic.set(true);
+            *line.borrow_mut() = String::new();
             entry.set_text("");
+            programmatic.set(false);
         }
     });
+    #[cfg(not(target_os = "linux"))]
+    {
+        for (caption, bytes) in [
+            ("Esc", vec![0x1b]),
+            ("Tab", vec![b'\t']),
+            ("⌫", vec![0x7f]),
+            ("←", b"\x1b[D".to_vec()),
+            ("↓", b"\x1b[B".to_vec()),
+            ("↑", b"\x1b[A".to_vec()),
+            ("→", b"\x1b[C".to_vec()),
+            ("Ctrl+C", vec![0x03]),
+            ("Ctrl+D", vec![0x04]),
+        ] {
+            let button = ui.button(caption)?;
+            let send = terminal_input_sender.clone();
+            button.on_click(move || {
+                let _ = send.send(native_terminal::Input::Bytes(bytes.clone()));
+            });
+            terminal_keys.append(&button);
+        }
+        for (caption, cols, rows) in [("80×24", 80, 24), ("120×36", 120, 36)] {
+            let button = ui.button(caption)?;
+            let send = terminal_input_sender.clone();
+            button.on_click(move || {
+                let _ = send.send(native_terminal::Input::Resize { rows, cols });
+            });
+            terminal_keys.append(&button);
+        }
+    }
     #[cfg(target_os = "linux")]
     {
         use gtk4::prelude::*;
