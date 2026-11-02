@@ -58,7 +58,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
             "Stop Debugging (coming soon)",
         ],
     ),
-    ("Test", &["Test Explorer", "Run Tests (coming soon)"]),
+    ("Test", &["Test Explorer", "Run Hydrogen Tests"]),
     ("Analyze", &["Check Solution"]),
     ("Tools", &["Options"]),
     ("Extensions", &["Manage Extensions"]),
