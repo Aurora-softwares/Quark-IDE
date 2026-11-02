@@ -101,6 +101,18 @@ fn design_press_claims_activation(kind: &str) -> bool {
     )
 }
 
+/// Runtime GTK expansion defaults from Hydrogen's native renderer.
+fn runtime_fills(node: Node<'_, '_>) -> bool {
+    match node.attribute("fill") {
+        Some("true") => true,
+        Some("false") => false,
+        _ => !matches!(
+            node.tag_name().name(),
+            "Button" | "MenuItem" | "ToolButton" | "FilePicker" | "Spinner"
+        ),
+    }
+}
+
 /// Width hints for the children of a horizontal RowPanel. Explicit
 /// preferredWidth is a constraint, not a suggestion to split all children
 /// into equal-size cells. The runtime keeps those fixed widths while its
@@ -219,10 +231,7 @@ fn render_node(
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
         row.set_sizing(Sizing::new().width(Length::Fixed(width.min(2400.0))));
-    } else if node.attribute("fill") == Some("true")
-        || (node.attribute("fill") != Some("false")
-            && !matches!(kind, "Button" | "MenuItem" | "ToolButton" | "Spinner" | "Spacer"))
-    {
+    } else if runtime_fills(node) {
         // Hydrogen defaults fill=true for ordinary content. A non-filling
         // wrapper lets otherwise correct GTK controls collapse to natural
         // sizes inside a much wider panel (notably multi-line text editors).
@@ -644,6 +653,9 @@ fn render_node(
                     native.set_xalign(0.0);
                 }
             }
+            if runtime_fills(node) {
+                label.set_sizing(Sizing::fill_width());
+            }
             match node.attribute("role").unwrap_or("") {
                 "title" => label.set_style(naui::TextStyle::LargeTitle),
                 "heading" => label.set_style(naui::TextStyle::Heading),
@@ -672,7 +684,11 @@ fn render_node(
                 .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
             input.set_enabled(enabled);
-            input.set_sizing(Sizing::new().width(Length::Fixed(190.0)));
+            if runtime_fills(node) {
+                input.set_sizing(Sizing::fill_width());
+            } else {
+                input.set_sizing(Sizing::new().width(Length::Fixed(190.0)));
+            }
             let select = on_select.clone();
             input.on_change(move |_| select(path.clone()));
             row.append(&input);
@@ -754,6 +770,9 @@ fn render_node(
             input.set_enabled(enabled);
             let choices: Vec<_> = node.attribute("items").unwrap_or("").split('|').collect();
             input.set_items(&choices);
+            if runtime_fills(node) {
+                input.set_sizing(Sizing::fill_width());
+            }
             input.set_selected(
                 node.attribute("value")
                     .and_then(|v| v.parse::<usize>().ok())
@@ -789,6 +808,9 @@ fn render_node(
                 .max(min + 1.0);
             let slider = ui.slider(min, max).map_err(|e| e.to_string())?;
             slider.set_enabled(enabled);
+            if runtime_fills(node) {
+                slider.set_sizing(Sizing::fill_width());
+            }
             slider.set_value(
                 node.attribute("value")
                     .and_then(|v| v.parse::<f64>().ok())
@@ -801,6 +823,9 @@ fn render_node(
         }
         "ProgressBar" => {
             let progress = ui.progress_bar().map_err(|e| e.to_string())?;
+            if runtime_fills(node) {
+                progress.set_sizing(Sizing::fill_width());
+            }
             let min = node
                 .attribute("minimum")
                 .and_then(|v| v.parse::<f64>().ok())
@@ -1292,6 +1317,31 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn hydrogen_default_control_expansion_matches_runtime_except_buttons() {
+        let xml = r#"<Window><Panel><Label/><Input/><Slider/><ProgressBar/><Button/><Spinner/><Button fill="true"/><Label fill="false"/></Panel></Window>"#;
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let elements = parsed.descendants().filter(|node| node.is_element()).collect::<Vec<_>>();
+        for index in 0..6 {
+            assert!(runtime_fills(elements[index]), "element {index} should fill");
+        }
+        assert!(!runtime_fills(elements[6]));
+        assert!(!runtime_fills(elements[7]));
+        assert!(runtime_fills(elements[8]));
+        assert!(!runtime_fills(elements[9]));
+    }
+
+    #[test]
+    fn runtime_expansion_respects_opt_out_and_explicit_overrides() {
+        let xml = r#"<Window><FilePicker/><ToolButton/><Spinner fill="true"/><Input fill="false"/></Window>"#;
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let elements = parsed.root_element().children().filter(|node| node.is_element()).collect::<Vec<_>>();
+        assert!(!runtime_fills(elements[0]));
+        assert!(!runtime_fills(elements[1]));
+        assert!(runtime_fills(elements[2]));
+        assert!(!runtime_fills(elements[3]));
     }
 
     #[test]
