@@ -142,20 +142,21 @@ pub fn format_document(compiler: &str, source: &Path) -> ResultLog {
         .current_dir(source.parent().unwrap_or_else(|| Path::new(".")))
         .output();
     match output {
-        Ok(process) if process.status.success() => ResultLog::ok(
-            format!("Hydrogen formatting succeeded: {}\n{}{}",
-                source.display(),
-                String::from_utf8_lossy(&process.stdout),
-                String::from_utf8_lossy(&process.stderr)),
-        ),
-        Ok(process) => ResultLog::error(
-            format!("Hydrogen formatting failed ({}):\n{}{}",
-                process.status,
-                String::from_utf8_lossy(&process.stdout),
-                String::from_utf8_lossy(&process.stderr)),
-        ),
+        Ok(process) if process.status.success() => ResultLog::ok(format!(
+            "Hydrogen formatting succeeded: {}\n{}{}",
+            source.display(),
+            String::from_utf8_lossy(&process.stdout),
+            String::from_utf8_lossy(&process.stderr)
+        )),
+        Ok(process) => ResultLog::error(format!(
+            "Hydrogen formatting failed ({}):\n{}{}",
+            process.status,
+            String::from_utf8_lossy(&process.stdout),
+            String::from_utf8_lossy(&process.stderr)
+        )),
         Err(error) => ResultLog::error(format!(
-            "Cannot run Hydrogen formatter '{}': {error}", compiler
+            "Cannot run Hydrogen formatter '{}': {error}",
+            compiler
         )),
     }
 }
@@ -208,7 +209,9 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                 }
             }
             let args = match task {
-                Task::RunWithoutDebugging => vec!["run".into(), project.to_string_lossy().into_owned()],
+                Task::RunWithoutDebugging => {
+                    vec!["run".into(), project.to_string_lossy().into_owned()]
+                }
                 Task::Check => vec!["check".into(), project.to_string_lossy().into_owned()],
                 _ => plan.args.clone(),
             };

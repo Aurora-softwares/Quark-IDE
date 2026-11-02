@@ -86,7 +86,10 @@ pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHead
         use gtk4::prelude::*;
         use naui::Widget as _;
         panel.native_widget().add_css_class("quark-dock-panel");
-        header.row.native_widget().add_css_class("quark-dock-header");
+        header
+            .row
+            .native_widget()
+            .add_css_class("quark-dock-header");
         thread_local! {
             static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
         }
@@ -148,7 +151,9 @@ pub fn enable_widget_drag(
     widget.add_controller(source);
     let target = gtk4::DropTarget::new(String::static_type(), gtk4::gdk::DragAction::MOVE);
     target.connect_drop(move |_, value, _, _| {
-        value.get::<String>().ok()
+        value
+            .get::<String>()
+            .ok()
             .and_then(|token| parse_drag_token(&token))
             .is_some_and(|source| on_drop(source))
     });
@@ -173,10 +178,7 @@ pub fn set_section_collapsed(panel: &naui::Stack, collapsed: bool) {
 /// Rails switch between Code and Design labels; resolve their dock ID
 /// when a drag starts, not when the window is initially constructed.
 #[cfg(target_os = "linux")]
-pub fn enable_dynamic_drag(
-    widget: &gtk4::Widget,
-    resolve: impl Fn() -> DockId + 'static,
-) {
+pub fn enable_dynamic_drag(widget: &gtk4::Widget, resolve: impl Fn() -> DockId + 'static) {
     use gtk4::prelude::*;
     let source = gtk4::DragSource::new();
     source.set_actions(gtk4::gdk::DragAction::MOVE);
@@ -213,7 +215,8 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        grab.native_widget().set_tooltip_text(Some("Drag the panel header to reorder its dock position."));
+        grab.native_widget()
+            .set_tooltip_text(Some("Drag the panel header to reorder its dock position."));
     }
     row.append(&grab);
 
@@ -243,9 +246,16 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         collapse
             .native_widget()
             .set_tooltip_text(Some("Collapse or expand the panel content."));
-        float.native_widget().set_tooltip_text(Some("Detach this tool to a native window."));
+        float
+            .native_widget()
+            .set_tooltip_text(Some("Detach this tool to a native window."));
     }
-    Ok(DockHeader { row, pin, collapse, float })
+    Ok(DockHeader {
+        row,
+        pin,
+        collapse,
+        float,
+    })
 }
 
 #[cfg(test)]

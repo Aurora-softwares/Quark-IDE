@@ -242,13 +242,21 @@ impl DockLayout {
     /// Move a section before a sibling within the requested dock zone.
     /// Reassign dense order values to prevent overflow after many drags.
     pub fn reorder_before(&mut self, id: DockId, sibling: DockId) -> bool {
-        if id == sibling { return false; }
+        if id == sibling {
+            return false;
+        }
         let Some(zone) = self.section(sibling).map(|section| section.zone) else {
             return false;
         };
-        if self.section(id).is_none() { return false; }
-        let mut ordered: Vec<DockId> = self.sections_in(zone).iter()
-            .map(|section| section.id).filter(|entry| *entry != id).collect();
+        if self.section(id).is_none() {
+            return false;
+        }
+        let mut ordered: Vec<DockId> = self
+            .sections_in(zone)
+            .iter()
+            .map(|section| section.id)
+            .filter(|entry| *entry != id)
+            .collect();
         let Some(index) = ordered.iter().position(|entry| *entry == sibling) else {
             return false;
         };
@@ -498,11 +506,20 @@ mod tests {
     fn dragging_order_within_zone_preserves_unique_sections() {
         let mut layout = DockLayout::default();
         assert!(layout.reorder_before(DockId::Properties, DockId::Solution));
-        assert_eq!(layout.sections_in(DockZone::Right)[0].id, DockId::Properties);
+        assert_eq!(
+            layout.sections_in(DockZone::Right)[0].id,
+            DockId::Properties
+        );
         assert!(!layout.reorder_before(DockId::Properties, DockId::Properties));
         assert!(layout.reorder_before(DockId::Output, DockId::Solution));
-        assert_eq!(layout.section(DockId::Output).unwrap().zone, DockZone::Right);
-        assert_eq!(layout.sections_in(DockZone::Right)[0].id, DockId::Properties);
+        assert_eq!(
+            layout.section(DockId::Output).unwrap().zone,
+            DockZone::Right
+        );
+        assert_eq!(
+            layout.sections_in(DockZone::Right)[0].id,
+            DockId::Properties
+        );
         assert_eq!(layout.sections_in(DockZone::Right)[1].id, DockId::Output);
     }
 
@@ -524,7 +541,11 @@ mod tests {
                 assert_eq!(loaded.section(id).unwrap().zone, zone);
                 assert!(loaded.visible(id, None));
                 assert_eq!(
-                    loaded.sections.iter().filter(|section| section.id == id).count(),
+                    loaded
+                        .sections
+                        .iter()
+                        .filter(|section| section.id == id)
+                        .count(),
                     1,
                 );
             }

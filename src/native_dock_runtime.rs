@@ -3,16 +3,18 @@
 //! positions, event subscriptions and open documents survive the relocation.
 //! The serializable DockLayout remains the only persisted authority.
 #![cfg(target_os = "linux")]
+use crate::native_dock_widgets::parse_drag_token;
+use crate::native_docking::{DockId, DockZone};
 use gtk4::prelude::*;
 use gtk4::{self, gdk};
 use std::rc::Rc;
-use crate::native_docking::{DockId, DockZone};
-use crate::native_dock_widgets::parse_drag_token;
 
 /// GTK widgets can only belong to one parent. Explicitly remove them from
 /// supported native host containers before moving to another docking area.
 pub fn detach(widget: &gtk4::Widget) -> bool {
-    let Some(parent) = widget.parent() else { return true };
+    let Some(parent) = widget.parent() else {
+        return true;
+    };
     if let Ok(box_) = parent.clone().downcast::<gtk4::Box>() {
         box_.remove(widget);
         return true;
@@ -46,30 +48,43 @@ pub fn attach_box(widget: &gtk4::Widget, host: &gtk4::Box) -> bool {
     if widget.parent().as_ref() == Some(&host.clone().upcast::<gtk4::Widget>()) {
         return true;
     }
-    if !detach(widget) { return false; }
+    if !detach(widget) {
+        return false;
+    }
     host.append(widget);
     true
 }
 
-pub fn attach_paned(
-    widget: &gtk4::Widget,
-    host: &gtk4::Paned,
-    start: bool,
-) -> bool {
-    let occupied = if start { host.start_child() } else { host.end_child() };
-    if occupied.as_ref() == Some(widget) { return true; }
+pub fn attach_paned(widget: &gtk4::Widget, host: &gtk4::Paned, start: bool) -> bool {
+    let occupied = if start {
+        host.start_child()
+    } else {
+        host.end_child()
+    };
+    if occupied.as_ref() == Some(widget) {
+        return true;
+    }
     if occupied.is_some() {
         // The user may have swapped Solution and Properties. Redocking one
         // must use the free sibling slot rather than silently rejecting it.
-        let alternate = if start { host.end_child() } else { host.start_child() };
+        let alternate = if start {
+            host.end_child()
+        } else {
+            host.start_child()
+        };
         if alternate.is_none() {
             return attach_paned(widget, host, !start);
         }
         return false;
     }
-    if !detach(widget) { return false; }
-    if start { host.set_start_child(Some(widget)); }
-    else { host.set_end_child(Some(widget)); }
+    if !detach(widget) {
+        return false;
+    }
+    if start {
+        host.set_start_child(Some(widget));
+    } else {
+        host.set_end_child(Some(widget));
+    }
     true
 }
 
@@ -92,7 +107,11 @@ pub fn install_zone_target(
     let highlighted = host.clone();
     target.connect_drop(move |_, value, _, _| {
         highlighted.remove_css_class("quark-dock-drop-preview");
-        let Some(id) = value.get::<String>().ok().and_then(|v| parse_drag_token(&v)) else {
+        let Some(id) = value
+            .get::<String>()
+            .ok()
+            .and_then(|v| parse_drag_token(&v))
+        else {
             return false;
         };
         drop(id, zone)
@@ -107,15 +126,19 @@ pub fn install_preview_css() {
         static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
     INSTALLED.with(|installed| {
-        if installed.replace(true) { return; }
+        if installed.replace(true) {
+            return;
+        }
         if let Some(display) = gdk::Display::default() {
             let provider = gtk4::CssProvider::new();
             provider.load_from_data(
                 ".quark-dock-drop-preview { outline: 3px solid @accent_color; \
-                 outline-offset: -4px; background: alpha(@accent_color, 0.08); }"
+                 outline-offset: -4px; background: alpha(@accent_color, 0.08); }",
             );
             gtk4::style_context_add_provider_for_display(
-                &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
     });
@@ -139,14 +162,20 @@ pub fn open_auto_hide(
         popup.set_has_arrow(false);
         popup.set_position(position);
         popup.set_size_request(
-            if position == gtk4::PositionType::Top { 460 } else { 340 },
+            if position == gtk4::PositionType::Top {
+                460
+            } else {
+                340
+            },
             360,
         );
         popup.set_parent(anchor);
         popup.connect_closed(move |_| on_closed());
         popup
     };
-    if !detach(panel) { return None; }
+    if !detach(panel) {
+        return None;
+    }
     popover.set_child(Some(panel));
     popover.popup();
     // The side rail uses a native drawing area rather than a MenuButton.
@@ -162,7 +191,9 @@ pub fn float_panel(
     widget: &gtk4::Widget,
     redock: Rc<dyn Fn(DockId)>,
 ) -> Option<gtk4::Window> {
-    if !detach(widget) { return None; }
+    if !detach(widget) {
+        return None;
+    }
     let floating = gtk4::Window::builder()
         .title(format!("Quark — {}", id.title()))
         .default_width(420)

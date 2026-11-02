@@ -1,7 +1,10 @@
 //! Cross-platform Hydrogen executable resolution for Quark's native IDE.
 //! Settings are stored alongside native preferences, without requiring GTK
 //! on macOS or Windows. All command paths share the same precedence.
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub fn preferences_file() -> PathBuf {
     crate::workspace_file().with_file_name("native-preferences.json")
@@ -13,16 +16,26 @@ pub fn validate_explicit(raw: &str) -> Result<(), String> {
     if !path.is_absolute() {
         return Err("Choose an absolute path to the Hydrogen executable.".into());
     }
-    let metadata = fs::metadata(path)
-        .map_err(|error| format!("Hydrogen executable not found at {}: {error}", path.display()))?;
+    let metadata = fs::metadata(path).map_err(|error| {
+        format!(
+            "Hydrogen executable not found at {}: {error}",
+            path.display()
+        )
+    })?;
     if !metadata.is_file() {
-        return Err(format!("Hydrogen executable must be a file: {}", path.display()));
+        return Err(format!(
+            "Hydrogen executable must be a file: {}",
+            path.display()
+        ));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         if metadata.permissions().mode() & 0o111 == 0 {
-            return Err(format!("Hydrogen executable is not marked executable: {}", path.display()));
+            return Err(format!(
+                "Hydrogen executable is not marked executable: {}",
+                path.display()
+            ));
         }
     }
     Ok(())
@@ -69,7 +82,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("preferences.json");
         let expected = std::env::var("QUARK_HYDROGEN_COMPILER")
-            .ok().filter(|s| !s.trim().is_empty())
+            .ok()
+            .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| "hy".into());
         assert_eq!(resolve_at(&path).unwrap(), expected);
     }
@@ -78,9 +92,14 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let config = temp.path().join("preferences.json");
         let missing = temp.path().join("does-not-exist-hy");
-        fs::write(&config, serde_json::json!({
-            "hydrogen": {"executable": missing.to_string_lossy()}
-        }).to_string()).unwrap();
+        fs::write(
+            &config,
+            serde_json::json!({
+                "hydrogen": {"executable": missing.to_string_lossy()}
+            })
+            .to_string(),
+        )
+        .unwrap();
         assert!(resolve_at(&config).unwrap_err().contains("not found"));
     }
     #[cfg(unix)]
@@ -92,9 +111,14 @@ mod tests {
         fs::write(&binary, "#!/bin/sh\necho hydrogen\n").unwrap();
         fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
         let config = temp.path().join("preferences.json");
-        fs::write(&config, serde_json::json!({
-            "hydrogen": {"executable": binary.to_string_lossy()}
-        }).to_string()).unwrap();
+        fs::write(
+            &config,
+            serde_json::json!({
+                "hydrogen": {"executable": binary.to_string_lossy()}
+            })
+            .to_string(),
+        )
+        .unwrap();
         assert_eq!(resolve_at(&config).unwrap(), binary.to_string_lossy());
     }
 }

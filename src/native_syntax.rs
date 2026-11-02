@@ -213,9 +213,12 @@ pub fn install(area: &naui::TextArea, xml: bool) {
         buffer.connect_changed(move |buffer| apply_highlight(buffer, xml));
         apply_highlight(&buffer, xml);
         if let Some(settings) = gtk4::Settings::default() {
-            settings.connect_notify_local(Some("gtk-application-prefer-dark-theme"), move |_, _| {
-                apply_highlight(&buffer, xml);
-            });
+            settings.connect_notify_local(
+                Some("gtk-application-prefer-dark-theme"),
+                move |_, _| {
+                    apply_highlight(&buffer, xml);
+                },
+            );
         }
     }
 }

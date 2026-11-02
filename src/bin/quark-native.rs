@@ -15,12 +15,12 @@ mod hydrogen;
 mod native_commands;
 #[path = "../native_compiler.rs"]
 mod native_compiler;
-#[allow(dead_code)] // Header widget factory shared by all native tool windows.
-#[path = "../native_dock_widgets.rs"]
-mod native_dock_widgets;
 #[cfg(target_os = "linux")]
 #[path = "../native_dock_runtime.rs"]
 mod native_dock_runtime;
+#[allow(dead_code)] // Header widget factory shared by all native tool windows.
+#[path = "../native_dock_widgets.rs"]
+mod native_dock_widgets;
 #[allow(dead_code)] // Runtime docking model is introduced progressively to every pane.
 #[path = "../native_docking.rs"]
 mod native_docking;
@@ -686,8 +686,11 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
 }
 
 fn right_split_position(height: f64, preferred: f64, properties_first: bool) -> f64 {
-    if properties_first { preferred.max(110.0) }
-    else { (height - preferred - 6.0).max(110.0) }
+    if properties_first {
+        preferred.max(110.0)
+    } else {
+        (height - preferred - 6.0).max(110.0)
+    }
 }
 
 /// Physically reorder GTK's existing native tool widgets without recreating
@@ -706,16 +709,26 @@ fn apply_right_dock_order(
     };
     let solution_widget = solution.native_widget();
     let properties_widget = properties.native_widget();
-    let wanted_first = if properties_first { &properties_widget } else { &solution_widget };
-    let wanted_second = if properties_first { &solution_widget } else { &properties_widget };
+    let wanted_first = if properties_first {
+        &properties_widget
+    } else {
+        &solution_widget
+    };
+    let wanted_second = if properties_first {
+        &solution_widget
+    } else {
+        &properties_widget
+    };
     if paned.start_child().as_ref() == Some(wanted_first)
-        && paned.end_child().as_ref() == Some(wanted_second) {
+        && paned.end_child().as_ref() == Some(wanted_second)
+    {
         return true;
     }
     // Both children must be detached from *whatever* dock currently owns
     // them. GTK rejects assigning a widget that already has another parent.
     if !native_dock_runtime::detach(&solution_widget)
-        || !native_dock_runtime::detach(&properties_widget) {
+        || !native_dock_runtime::detach(&properties_widget)
+    {
         return false;
     }
     if properties_first {
@@ -986,8 +999,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let dark = gtk4::Settings::default()
                     .map(|settings| settings.is_gtk_application_prefer_dark_theme())
                     .unwrap_or(false);
-                if dark { cairo.set_source_rgb(0.84, 0.84, 0.88); }
-                else { cairo.set_source_rgb(0.28, 0.29, 0.36); }
+                if dark {
+                    cairo.set_source_rgb(0.84, 0.84, 0.88);
+                } else {
+                    cairo.set_source_rgb(0.28, 0.29, 0.36);
+                }
                 cairo.select_font_face(
                     "Sans",
                     gtk4::cairo::FontSlant::Normal,
@@ -1042,8 +1058,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let mode = tab_mode.clone();
             native_dock_widgets::enable_dynamic_drag(&tab.native_widget(), move || {
                 if mode.get() == Page::Code {
-                    if index == 1 { native_docking::DockId::Search }
-                    else { native_docking::DockId::Symbols }
+                    if index == 1 {
+                        native_docking::DockId::Search
+                    } else {
+                        native_docking::DockId::Symbols
+                    }
                 } else {
                     match index {
                         1 => native_docking::DockId::Server,
@@ -1892,8 +1911,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let dark = gtk4::Settings::default()
                     .map(|settings| settings.is_gtk_application_prefer_dark_theme())
                     .unwrap_or(false);
-                if dark { cairo.set_source_rgb(0.84, 0.84, 0.88); }
-                else { cairo.set_source_rgb(0.28, 0.29, 0.36); }
+                if dark {
+                    cairo.set_source_rgb(0.84, 0.84, 0.88);
+                } else {
+                    cairo.set_source_rgb(0.28, 0.29, 0.36);
+                }
                 cairo.select_font_face(
                     "Sans",
                     gtk4::cairo::FontSlant::Normal,
@@ -1936,8 +1958,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 "Focus or drag Properties to a different dock."
             }));
             native_dock_widgets::enable_dynamic_drag(&tab.native_widget(), move || {
-                if index == 0 { native_docking::DockId::Solution }
-                else { native_docking::DockId::Properties }
+                if index == 0 {
+                    native_docking::DockId::Solution
+                } else {
+                    native_docking::DockId::Properties
+                }
             });
         }
         right_rail.append(&tab);
@@ -1967,11 +1992,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let left = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         let right = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         let bottom_host = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
-        let left_parent = left_side.native_widget().downcast::<gtk4::Box>()
+        let left_parent = left_side
+            .native_widget()
+            .downcast::<gtk4::Box>()
             .expect("native left dock must be a GTK Box");
-        let right_parent = right_region.native_widget().downcast::<gtk4::Box>()
+        let right_parent = right_region
+            .native_widget()
+            .downcast::<gtk4::Box>()
             .expect("native right dock must be a GTK Box");
-        let bottom_parent = bottom.native_widget().downcast::<gtk4::Box>()
+        let bottom_parent = bottom
+            .native_widget()
+            .downcast::<gtk4::Box>()
             .expect("native bottom dock must be a GTK Box");
         left_parent.append(&left);
         right_parent.append(&right);
@@ -1979,7 +2010,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         bottom_parent.append(&bottom_host);
         (left, right, bottom_host)
     };
-
 
     let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
         let left_split = left_split.clone();
@@ -1997,10 +2027,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
             let order = model.borrow();
             let right = order.sections_in(native_docking::DockZone::Right);
-            let first = right.iter().position(|s| s.id == native_docking::DockId::Properties)
-                < right.iter().position(|s| s.id == native_docking::DockId::Solution);
+            let first = right
+                .iter()
+                .position(|s| s.id == native_docking::DockId::Properties)
+                < right
+                    .iter()
+                    .position(|s| s.id == native_docking::DockId::Solution);
             inspector.set_position(right_split_position(
-                split_extent(&inspector, 795.0), sizes.properties, first,
+                split_extent(&inspector, 795.0),
+                sizes.properties,
+                first,
             ));
         }
     });
@@ -2012,11 +2048,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_dock.clone();
         move |position| {
             let has_open_left = [
-                native_docking::DockId::Toolbox, native_docking::DockId::Symbols,
-                native_docking::DockId::Search, native_docking::DockId::Server,
+                native_docking::DockId::Toolbox,
+                native_docking::DockId::Symbols,
+                native_docking::DockId::Search,
+                native_docking::DockId::Server,
                 native_docking::DockId::Data,
-            ].iter().any(|id| model.borrow().visible(*id, active.get()));
-            if !has_open_left || position < 100.0 { return; }
+            ]
+            .iter()
+            .any(|id| model.borrow().visible(*id, active.get()));
+            if !has_open_left || position < 100.0 {
+                return;
+            }
             let mut next = sizes.get();
             next.toolbox = position;
             next = next.sanitize();
@@ -2031,8 +2073,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let model = dock_model.clone();
         let active = active_dock.clone();
         move |position| {
-            if ![native_docking::DockId::Solution, native_docking::DockId::Properties]
-                .iter().any(|id| model.borrow().visible(*id, active.get())) {
+            if ![
+                native_docking::DockId::Solution,
+                native_docking::DockId::Properties,
+            ]
+            .iter()
+            .any(|id| model.borrow().visible(*id, active.get()))
+            {
                 return;
             }
             let mut next = sizes.get();
@@ -2050,10 +2097,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_dock.clone();
         move |position| {
             if ![
-                native_docking::DockId::Output, native_docking::DockId::ErrorList,
-                native_docking::DockId::Debug, native_docking::DockId::TestResults,
+                native_docking::DockId::Output,
+                native_docking::DockId::ErrorList,
+                native_docking::DockId::Debug,
+                native_docking::DockId::TestResults,
                 native_docking::DockId::FindResults,
-            ].iter().any(|id| model.borrow().visible(*id, active.get())) {
+            ]
+            .iter()
+            .any(|id| model.borrow().visible(*id, active.get()))
+            {
                 return;
             }
             let mut next = sizes.get();
@@ -2072,10 +2124,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let mut next = sizes.get();
             let order = model.borrow();
             let right = order.sections_in(native_docking::DockZone::Right);
-            let first = right.iter().position(|s| s.id == native_docking::DockId::Properties)
-                < right.iter().position(|s| s.id == native_docking::DockId::Solution);
-            next.properties = if first { position.max(0.0) }
-                else { (split_extent(&inspector, 795.0) - position - 6.0).max(0.0) };
+            let first = right
+                .iter()
+                .position(|s| s.id == native_docking::DockId::Properties)
+                < right
+                    .iter()
+                    .position(|s| s.id == native_docking::DockId::Solution);
+            next.properties = if first {
+                position.max(0.0)
+            } else {
+                (split_extent(&inspector, 795.0) - position - 6.0).max(0.0)
+            };
             next = next.sanitize();
             sizes.set(next);
             let _ = next.save(&path);
@@ -2085,11 +2144,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     #[cfg(target_os = "linux")]
     {
         // Rehydrate the live native order from the user's saved layout.
-        let ids = dock_model.borrow().sections_in(native_docking::DockZone::Right)
-            .iter().map(|entry| entry.id).collect::<Vec<_>>();
-        let properties_first = ids.iter().position(|id| *id == native_docking::DockId::Properties)
-            < ids.iter().position(|id| *id == native_docking::DockId::Solution);
-        apply_right_dock_order(&inspector, &solution_pane, &properties_pane, properties_first);
+        let ids = dock_model
+            .borrow()
+            .sections_in(native_docking::DockZone::Right)
+            .iter()
+            .map(|entry| entry.id)
+            .collect::<Vec<_>>();
+        let properties_first = ids
+            .iter()
+            .position(|id| *id == native_docking::DockId::Properties)
+            < ids
+                .iter()
+                .position(|id| *id == native_docking::DockId::Solution);
+        apply_right_dock_order(
+            &inspector,
+            &solution_pane,
+            &properties_pane,
+            properties_first,
+        );
     }
 
     // Cross-zone routing uses the existing live GTK widgets. The right split
@@ -2114,12 +2186,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let debug = debug_section.native_widget();
         let tests = test_section.native_widget();
         let find = find_section.native_widget();
-        let bottom_home = bottom_pages.native_widget()
-            .downcast::<gtk4::Box>().expect("bottom view GTK Box");
-        let left_home = left_content.native_widget()
-            .downcast::<gtk4::Box>().expect("left content GTK Box");
-        let inspector_home = inspector.native_widget()
-            .downcast::<gtk4::Paned>().expect("right inspector GTK Paned");
+        let bottom_home = bottom_pages
+            .native_widget()
+            .downcast::<gtk4::Box>()
+            .expect("bottom view GTK Box");
+        let left_home = left_content
+            .native_widget()
+            .downcast::<gtk4::Box>()
+            .expect("left content GTK Box");
+        let inspector_home = inspector
+            .native_widget()
+            .downcast::<gtk4::Paned>()
+            .expect("right inspector GTK Paned");
         let left_host = left_dock_host.clone();
         let right_host = right_dock_host.clone();
         let bottom_host = bottom_dock_host.clone();
@@ -2141,17 +2219,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             };
             if id.default_zone() == zone {
                 match id {
-                    DockId::Toolbox | DockId::Symbols | DockId::Search
-                    | DockId::Server | DockId::Data =>
-                        native_dock_runtime::attach_box(widget, &left_home),
-                    DockId::Output | DockId::ErrorList | DockId::Debug
-                    | DockId::TestResults | DockId::FindResults =>
-                        native_dock_runtime::attach_box(widget, &bottom_home),
+                    DockId::Toolbox
+                    | DockId::Symbols
+                    | DockId::Search
+                    | DockId::Server
+                    | DockId::Data => native_dock_runtime::attach_box(widget, &left_home),
+                    DockId::Output
+                    | DockId::ErrorList
+                    | DockId::Debug
+                    | DockId::TestResults
+                    | DockId::FindResults => native_dock_runtime::attach_box(widget, &bottom_home),
                     DockId::Solution | DockId::Properties => {
                         let slot_start = id == DockId::Solution;
-                        native_dock_runtime::attach_paned(
-                            widget, &inspector_home, slot_start,
-                        )
+                        native_dock_runtime::attach_paned(widget, &inspector_home, slot_start)
                     }
                     _ => false,
                 }
@@ -2172,9 +2252,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // builds. Apply the saved coordinates to the real native widget tree.
         // Rehydrate relocated panels in saved visual order, not enum order.
         // GTK Box.append keeps this ordering for each sidecar zone.
-        let restored = native_docking::DockZone::ALL.into_iter()
+        let restored = native_docking::DockZone::ALL
+            .into_iter()
             .flat_map(|zone| {
-                dock_model.borrow().sections_in(zone).iter()
+                dock_model
+                    .borrow()
+                    .sections_in(zone)
+                    .iter()
                     .map(|section| (section.id, section.zone))
                     .collect::<Vec<_>>()
             })
@@ -2187,7 +2271,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
         for (zone, widget) in [
             (native_docking::DockZone::Left, left_side.native_widget()),
-            (native_docking::DockZone::Right, right_region.native_widget()),
+            (
+                native_docking::DockZone::Right,
+                right_region.native_widget(),
+            ),
             (native_docking::DockZone::Bottom, bottom.native_widget()),
         ] {
             let route = route_dock.clone();
@@ -2196,17 +2283,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let status = status.clone();
             let refresh = dock_refresh_hook.clone();
             native_dock_runtime::install_zone_target(
-                &widget, zone, Rc::new(move |source, destination| {
+                &widget,
+                zone,
+                Rc::new(move |source, destination| {
                     let previous = model.borrow().section(source).map(|s| s.zone);
-                    if previous == Some(destination) { return false; }
-                    if !route(source, destination) { return false; }
+                    if previous == Some(destination) {
+                        return false;
+                    }
+                    if !route(source, destination) {
+                        return false;
+                    }
                     model.borrow_mut().move_to(source, destination);
-                    if let Some(refresh) = refresh.borrow().as_ref() { refresh(); }
+                    if let Some(refresh) = refresh.borrow().as_ref() {
+                        refresh();
+                    }
                     if let Err(error) = model.borrow().save(&path) {
                         status.set_text(&format!("Cannot save dock move: {error}"));
                     } else {
                         status.set_text(&format!(
-                            "{} moved to {} dock", source.title(), destination.title(),
+                            "{} moved to {} dock",
+                            source.title(),
+                            destination.title(),
                         ));
                     }
                     true
@@ -2233,29 +2330,53 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // pane visibility. Auto-hidden regions retain narrow native tab rails;
     // restoring one reads its last saved user size rather than overwriting it.
     #[cfg(target_os = "linux")]
-    let floating_windows: Rc<RefCell<std::collections::HashMap<
-        native_docking::DockId, gtk4::Window,
-    >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
+    let floating_windows: Rc<
+        RefCell<std::collections::HashMap<native_docking::DockId, gtk4::Window>>,
+    > = Rc::new(RefCell::new(std::collections::HashMap::new()));
     #[cfg(target_os = "linux")]
-    let auto_hide_popovers: Rc<RefCell<std::collections::HashMap<
-        native_docking::DockId, gtk4::Popover,
-    >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
+    let auto_hide_popovers: Rc<
+        RefCell<std::collections::HashMap<native_docking::DockId, gtk4::Popover>>,
+    > = Rc::new(RefCell::new(std::collections::HashMap::new()));
     #[cfg(target_os = "linux")]
     let dock_widgets = {
         use naui::Widget as _;
         [
             (native_docking::DockId::Toolbox, toolbox.native_widget()),
-            (native_docking::DockId::Symbols, symbols_section.native_widget()),
-            (native_docking::DockId::Search, code_search_view.native_widget()),
+            (
+                native_docking::DockId::Symbols,
+                symbols_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::Search,
+                code_search_view.native_widget(),
+            ),
             (native_docking::DockId::Server, server_view.native_widget()),
             (native_docking::DockId::Data, data_view.native_widget()),
-            (native_docking::DockId::Solution, solution_pane.native_widget()),
-            (native_docking::DockId::Properties, properties_pane.native_widget()),
-            (native_docking::DockId::Output, output_section.native_widget()),
-            (native_docking::DockId::ErrorList, error_section.native_widget()),
+            (
+                native_docking::DockId::Solution,
+                solution_pane.native_widget(),
+            ),
+            (
+                native_docking::DockId::Properties,
+                properties_pane.native_widget(),
+            ),
+            (
+                native_docking::DockId::Output,
+                output_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::ErrorList,
+                error_section.native_widget(),
+            ),
             (native_docking::DockId::Debug, debug_section.native_widget()),
-            (native_docking::DockId::TestResults, test_section.native_widget()),
-            (native_docking::DockId::FindResults, find_section.native_widget()),
+            (
+                native_docking::DockId::TestResults,
+                test_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::FindResults,
+                find_section.native_widget(),
+            ),
         ]
     };
     #[cfg(target_os = "linux")]
@@ -2290,7 +2411,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let layout = model.borrow();
             #[cfg(target_os = "linux")]
             let in_popover = |id: native_docking::DockId| {
-                auto_hide_popovers.borrow().get(&id)
+                auto_hide_popovers
+                    .borrow()
+                    .get(&id)
                     .is_some_and(|popover| popover.is_visible())
             };
             #[cfg(target_os = "linux")]
@@ -2314,66 +2437,100 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             };
             let left_open = layout.visible(selected_left, active.get())
                 && !is_detached(selected_left)
-                && layout.section(selected_left).is_some_and(|s| s.zone == native_docking::DockZone::Left);
-            let right_solution = layout.section(native_docking::DockId::Solution)
+                && layout
+                    .section(selected_left)
+                    .is_some_and(|s| s.zone == native_docking::DockZone::Left);
+            let right_solution = layout
+                .section(native_docking::DockId::Solution)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Solution, active.get())
                 && !is_detached(native_docking::DockId::Solution);
-            let right_properties = layout.section(native_docking::DockId::Properties)
+            let right_properties = layout
+                .section(native_docking::DockId::Properties)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Properties, active.get())
                 && !is_detached(native_docking::DockId::Properties);
-            let has_right_guests = native_docking::DockId::ALL.iter()
-                .any(|id| id.default_zone() != native_docking::DockZone::Right
-                    && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
+            let has_right_guests = native_docking::DockId::ALL.iter().any(|id| {
+                id.default_zone() != native_docking::DockZone::Right
+                    && layout
+                        .section(*id)
+                        .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                     && layout.visible(*id, active.get())
-                    && !is_detached(*id));
-            let has_left_guests = native_docking::DockId::ALL.iter()
-                .any(|id| id.default_zone() != native_docking::DockZone::Left
-                    && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
+                    && !is_detached(*id)
+            });
+            let has_left_guests = native_docking::DockId::ALL.iter().any(|id| {
+                id.default_zone() != native_docking::DockZone::Left
+                    && layout
+                        .section(*id)
+                        .is_some_and(|s| s.zone == native_docking::DockZone::Left)
                     && layout.visible(*id, active.get())
-                    && !is_detached(*id));
-            let has_bottom_guests = native_docking::DockId::ALL.iter()
-                .any(|id| id.default_zone() != native_docking::DockZone::Bottom
-                    && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
+                    && !is_detached(*id)
+            });
+            let has_bottom_guests = native_docking::DockId::ALL.iter().any(|id| {
+                id.default_zone() != native_docking::DockZone::Bottom
+                    && layout
+                        .section(*id)
+                        .is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
                     && layout.visible(*id, active.get())
-                    && !is_detached(*id));
+                    && !is_detached(*id)
+            });
             let right_open = right_solution || right_properties || has_right_guests;
-            let bottom_open = has_bottom_guests || [
-                native_docking::DockId::Output,
-                native_docking::DockId::ErrorList,
-                native_docking::DockId::Debug,
-                native_docking::DockId::TestResults,
-                native_docking::DockId::FindResults,
-            ].iter().any(|id| layout.section(*id).is_some_and(|s|
-                s.zone == native_docking::DockZone::Bottom)
-                && layout.visible(*id, active.get())
-                && !is_detached(*id));
+            let bottom_open = has_bottom_guests
+                || [
+                    native_docking::DockId::Output,
+                    native_docking::DockId::ErrorList,
+                    native_docking::DockId::Debug,
+                    native_docking::DockId::TestResults,
+                    native_docking::DockId::FindResults,
+                ]
+                .iter()
+                .any(|id| {
+                    layout
+                        .section(*id)
+                        .is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
+                        && layout.visible(*id, active.get())
+                        && !is_detached(*id)
+                });
             let remembered = sizes.get();
             #[cfg(target_os = "linux")]
             {
                 use gtk4::prelude::*;
                 use naui::Widget as _;
                 left_content.native_widget().set_visible(left_open);
-                solution_pane.native_widget().set_visible(
-                    layout.visible(native_docking::DockId::Solution, active.get()));
-                properties_pane.native_widget().set_visible(
-                    layout.visible(native_docking::DockId::Properties, active.get()));
-                inspector.native_widget().set_visible(right_solution || right_properties);
+                solution_pane
+                    .native_widget()
+                    .set_visible(layout.visible(native_docking::DockId::Solution, active.get()));
+                properties_pane
+                    .native_widget()
+                    .set_visible(layout.visible(native_docking::DockId::Properties, active.get()));
+                inspector
+                    .native_widget()
+                    .set_visible(right_solution || right_properties);
                 let bottom_original_visible = [
-                    native_docking::DockId::Output, native_docking::DockId::ErrorList,
-                    native_docking::DockId::Debug, native_docking::DockId::TestResults,
+                    native_docking::DockId::Output,
+                    native_docking::DockId::ErrorList,
+                    native_docking::DockId::Debug,
+                    native_docking::DockId::TestResults,
                     native_docking::DockId::FindResults,
-                ].iter().any(|id| layout.section(*id).is_some_and(|s|
-                    s.zone == native_docking::DockZone::Bottom)
-                    && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id)
-                    && !in_popover(*id));
-                bottom_pages.native_widget().set_visible(bottom_original_visible);
+                ]
+                .iter()
+                .any(|id| {
+                    layout
+                        .section(*id)
+                        .is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
+                        && layout.visible(*id, active.get())
+                        && !floating_windows.borrow().contains_key(id)
+                        && !in_popover(*id)
+                });
+                bottom_pages
+                    .native_widget()
+                    .set_visible(bottom_original_visible);
                 for (id, widget) in &dock_widgets {
-                    widget.set_visible(layout.visible(*id, active.get())
-                        || floating_windows.borrow().contains_key(id)
-                        || in_popover(*id));
+                    widget.set_visible(
+                        layout.visible(*id, active.get())
+                            || floating_windows.borrow().contains_key(id)
+                            || in_popover(*id),
+                    );
                 }
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
@@ -2393,7 +2550,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             main_workspace.set_position((main_width - right_width - 6.0).max(300.0));
             let height = split_extent(&document_workspace, 860.0);
             document_workspace.set_position(
-                (height - if bottom_open { remembered.output.max(100.0) } else { 40.0 } - 6.0)
+                (height
+                    - if bottom_open {
+                        remembered.output.max(100.0)
+                    } else {
+                        40.0
+                    }
+                    - 6.0)
                     .max(160.0),
             );
         }
@@ -2421,11 +2584,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let refresh = refresh_docks.clone();
         let active = active_dock.clone();
         Rc::new(move |id, anchor| {
-            if model.borrow().section(id).is_some_and(|s| s.pinned) { return; }
+            if model.borrow().section(id).is_some_and(|s| s.pinned) {
+                return;
+            }
             let Some((_, widget)) = widgets.iter().find(|(entry, _)| *entry == id) else {
                 return;
             };
-            let zone = model.borrow().section(id).map(|s| s.zone)
+            let zone = model
+                .borrow()
+                .section(id)
+                .map(|s| s.zone)
                 .unwrap_or(id.default_zone());
             let position = match zone {
                 native_docking::DockZone::Left => gtk4::PositionType::Right,
@@ -2438,15 +2606,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let route = route.clone();
                 let refresh = refresh.clone();
                 Rc::new(move || {
-                    let current = model.borrow().section(id).map(|s| s.zone)
+                    let current = model
+                        .borrow()
+                        .section(id)
+                        .map(|s| s.zone)
                         .unwrap_or(id.default_zone());
                     route(id, current);
                     refresh();
                 })
             };
-            if let Some(popover) = native_dock_runtime::open_auto_hide(
-                &anchor, widget, old.as_ref(), position, redock,
-            ) {
+            if let Some(popover) =
+                native_dock_runtime::open_auto_hide(&anchor, widget, old.as_ref(), position, redock)
+            {
                 popovers.borrow_mut().insert(id, popover);
                 active.set(None);
                 refresh();
@@ -2459,8 +2630,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use naui::Widget as _;
         for (id, pane) in [
             (native_docking::DockId::Toolbox, toolbox.native_widget()),
-            (native_docking::DockId::Solution, solution_pane.native_widget()),
-            (native_docking::DockId::Properties, properties_pane.native_widget()),
+            (
+                native_docking::DockId::Solution,
+                solution_pane.native_widget(),
+            ),
+            (
+                native_docking::DockId::Properties,
+                properties_pane.native_widget(),
+            ),
             (native_docking::DockId::Output, bottom.native_widget()),
         ] {
             let focus = gtk4::EventControllerFocus::new();
@@ -2513,8 +2690,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 refresh_docks();
                 #[cfg(target_os = "linux")]
                 show_auto_hide(
-                    if index == 0 { native_docking::DockId::Solution }
-                    else { native_docking::DockId::Properties },
+                    if index == 0 {
+                        native_docking::DockId::Solution
+                    } else {
+                        native_docking::DockId::Properties
+                    },
                     anchor.clone(),
                 );
                 for tab in &tabs {
@@ -2523,10 +2703,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let height = split_extent(&inspector, 795.0);
                 let order = model.borrow();
                 let right = order.sections_in(native_docking::DockZone::Right);
-                let properties_first = right.iter().position(|s| s.id == native_docking::DockId::Properties)
-                    < right.iter().position(|s| s.id == native_docking::DockId::Solution);
-                let focused_first = (index == 0 && !properties_first)
-                    || (index == 1 && properties_first);
+                let properties_first = right
+                    .iter()
+                    .position(|s| s.id == native_docking::DockId::Properties)
+                    < right
+                        .iter()
+                        .position(|s| s.id == native_docking::DockId::Solution);
+                let focused_first =
+                    (index == 0 && !properties_first) || (index == 1 && properties_first);
                 inspector.set_position(if focused_first {
                     (height - 200.0).max(110.0)
                 } else {
@@ -2558,9 +2742,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         return false;
                     }
                     let properties_first = source == DockId::Properties;
-                    if !apply_right_dock_order(
-                        &inspector, &solution, &properties, properties_first,
-                    ) {
+                    if !apply_right_dock_order(&inspector, &solution, &properties, properties_first)
+                    {
                         status.set_text("Cannot reorder this native panel.");
                         return false;
                     }
@@ -2572,7 +2755,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         }
                     }
                     inspector.set_position(right_split_position(
-                        split_extent(&inspector, 795.0), pane_sizes.get().properties, properties_first,
+                        split_extent(&inspector, 795.0),
+                        pane_sizes.get().properties,
+                        properties_first,
                     ));
                     refresh();
                     status.set_text("Tool panels reordered. Layout saved.");
@@ -2580,12 +2765,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             });
         native_dock_widgets::enable_header_drag(
-            &solution_controls, native_docking::DockId::Solution,
-            { let reorder = reorder.clone();
-              move |source| reorder(source, native_docking::DockId::Solution) },
+            &solution_controls,
+            native_docking::DockId::Solution,
+            {
+                let reorder = reorder.clone();
+                move |source| reorder(source, native_docking::DockId::Solution)
+            },
         );
         native_dock_widgets::enable_header_drag(
-            &properties_controls, native_docking::DockId::Properties,
+            &properties_controls,
+            native_docking::DockId::Properties,
             move |source| reorder(source, native_docking::DockId::Properties),
         );
     }
@@ -2598,18 +2787,66 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     {
         use naui::Widget as _;
         for (id, header, widget) in [
-            (native_docking::DockId::Toolbox, &toolbox_controls, toolbox.native_widget()),
-            (native_docking::DockId::Symbols, &symbols_controls, symbols_section.native_widget()),
-            (native_docking::DockId::Search, &search_controls, code_search_view.native_widget()),
-            (native_docking::DockId::Server, &server_controls, server_view.native_widget()),
-            (native_docking::DockId::Data, &data_controls, data_view.native_widget()),
-            (native_docking::DockId::Solution, &solution_controls, solution_pane.native_widget()),
-            (native_docking::DockId::Properties, &properties_controls, properties_pane.native_widget()),
-            (native_docking::DockId::Output, &output_page_controls, output_section.native_widget()),
-            (native_docking::DockId::ErrorList, &error_controls, error_section.native_widget()),
-            (native_docking::DockId::Debug, &debug_controls, debug_section.native_widget()),
-            (native_docking::DockId::TestResults, &test_controls, test_section.native_widget()),
-            (native_docking::DockId::FindResults, &find_controls, find_section.native_widget()),
+            (
+                native_docking::DockId::Toolbox,
+                &toolbox_controls,
+                toolbox.native_widget(),
+            ),
+            (
+                native_docking::DockId::Symbols,
+                &symbols_controls,
+                symbols_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::Search,
+                &search_controls,
+                code_search_view.native_widget(),
+            ),
+            (
+                native_docking::DockId::Server,
+                &server_controls,
+                server_view.native_widget(),
+            ),
+            (
+                native_docking::DockId::Data,
+                &data_controls,
+                data_view.native_widget(),
+            ),
+            (
+                native_docking::DockId::Solution,
+                &solution_controls,
+                solution_pane.native_widget(),
+            ),
+            (
+                native_docking::DockId::Properties,
+                &properties_controls,
+                properties_pane.native_widget(),
+            ),
+            (
+                native_docking::DockId::Output,
+                &output_page_controls,
+                output_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::ErrorList,
+                &error_controls,
+                error_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::Debug,
+                &debug_controls,
+                debug_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::TestResults,
+                &test_controls,
+                test_section.native_widget(),
+            ),
+            (
+                native_docking::DockId::FindResults,
+                &find_controls,
+                find_section.native_widget(),
+            ),
         ] {
             let model = dock_model.clone();
             let route = route_dock.clone();
@@ -2622,7 +2859,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     existing.present();
                     return;
                 }
-                let source_zone = model.borrow().section(id).map(|section| section.zone)
+                let source_zone = model
+                    .borrow()
+                    .section(id)
+                    .map(|section| section.zone)
                     .unwrap_or(id.default_zone());
                 let redock = {
                     let open = Rc::downgrade(&open);
@@ -2703,7 +2943,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 {
                     use gtk4::prelude::*;
                     if let Some(popup) = auto_hide_popovers.borrow().get(&id).cloned() {
-                        if popup.is_visible() { popup.popdown(); }
+                        if popup.is_visible() {
+                            popup.popdown();
+                        }
                     }
                 }
                 refresh_docks();
@@ -2720,15 +2962,47 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // existing specialised callbacks.
     #[cfg(target_os = "linux")]
     for (id, header, section) in [
-        (native_docking::DockId::Symbols, &symbols_controls, &symbols_section),
-        (native_docking::DockId::Search, &search_controls, &code_search_view),
-        (native_docking::DockId::Server, &server_controls, &server_view),
+        (
+            native_docking::DockId::Symbols,
+            &symbols_controls,
+            &symbols_section,
+        ),
+        (
+            native_docking::DockId::Search,
+            &search_controls,
+            &code_search_view,
+        ),
+        (
+            native_docking::DockId::Server,
+            &server_controls,
+            &server_view,
+        ),
         (native_docking::DockId::Data, &data_controls, &data_view),
-        (native_docking::DockId::Output, &output_page_controls, &output_section),
-        (native_docking::DockId::ErrorList, &error_controls, &error_section),
-        (native_docking::DockId::Debug, &debug_controls, &debug_section),
-        (native_docking::DockId::TestResults, &test_controls, &test_section),
-        (native_docking::DockId::FindResults, &find_controls, &find_section),
+        (
+            native_docking::DockId::Output,
+            &output_page_controls,
+            &output_section,
+        ),
+        (
+            native_docking::DockId::ErrorList,
+            &error_controls,
+            &error_section,
+        ),
+        (
+            native_docking::DockId::Debug,
+            &debug_controls,
+            &debug_section,
+        ),
+        (
+            native_docking::DockId::TestResults,
+            &test_controls,
+            &test_section,
+        ),
+        (
+            native_docking::DockId::FindResults,
+            &find_controls,
+            &find_section,
+        ),
     ] {
         let stored = dock_model.borrow().section(id).is_some_and(|s| s.collapsed);
         native_dock_widgets::set_section_collapsed(section, stored);
@@ -2876,7 +3150,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (native_docking::DockId::Server, server_controls.clone()),
             (native_docking::DockId::Data, data_controls.clone()),
             (native_docking::DockId::Solution, solution_controls.clone()),
-            (native_docking::DockId::Properties, properties_controls.clone()),
+            (
+                native_docking::DockId::Properties,
+                properties_controls.clone(),
+            ),
             (native_docking::DockId::Output, output_page_controls.clone()),
             (native_docking::DockId::ErrorList, error_controls.clone()),
             (native_docking::DockId::Debug, debug_controls.clone()),
@@ -2927,22 +3204,33 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             {
                 use gtk4::prelude::*;
                 // Dismiss temporary overlays and close detached tools first.
-                let popups = auto_hide_popovers.borrow().values().cloned().collect::<Vec<_>>();
-                for popup in popups { popup.popdown(); }
-                let windows = floating_windows.borrow().values().cloned().collect::<Vec<_>>();
-                for window in windows { window.close(); }
+                let popups = auto_hide_popovers
+                    .borrow()
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for popup in popups {
+                    popup.popdown();
+                }
+                let windows = floating_windows
+                    .borrow()
+                    .values()
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for window in windows {
+                    window.close();
+                }
                 // Restore every live panel to its original native parent.
                 for id in native_docking::DockId::ALL {
                     if id == native_docking::DockId::Solution
-                        || id == native_docking::DockId::Properties { continue; }
+                        || id == native_docking::DockId::Properties
+                    {
+                        continue;
+                    }
                     route_dock(id, id.default_zone());
                 }
-                apply_right_dock_order(
-                    &inspector, &solution_pane, &properties_pane, false,
-                );
-                apply_bottom_dock_order(
-                    &bottom_tabs, &bottom_anchor, &bottom_buttons, &new_layout,
-                );
+                apply_right_dock_order(&inspector, &solution_pane, &properties_pane, false);
+                apply_bottom_dock_order(&bottom_tabs, &bottom_anchor, &bottom_buttons, &new_layout);
             }
             *dock_model.borrow_mut() = new_layout;
             for (id, header) in &reset_headers {
@@ -2961,11 +3249,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let sizes_result = defaults.save(&pane_path);
             let dock_result = dock_model.borrow().save(&dock_path);
             match (sizes_result, dock_result) {
-                (Ok(()), Ok(())) =>
-                    status.set_text("Panel positions, order and sizes reset to defaults."),
+                (Ok(()), Ok(())) => {
+                    status.set_text("Panel positions, order and sizes reset to defaults.")
+                }
                 (a, b) => status.set_text(&format!(
                     "Window reset could not be saved: {} {}",
-                    a.err().unwrap_or_default(), b.err().unwrap_or_default(),
+                    a.err().unwrap_or_default(),
+                    b.err().unwrap_or_default(),
                 )),
             }
         }
@@ -2998,8 +3288,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 4 => native_docking::DockId::FindResults,
                 _ => native_docking::DockId::Output,
             };
-            if dock_model.borrow().section(id)
-                .is_some_and(|section| section.zone != native_docking::DockZone::Bottom) {
+            if dock_model
+                .borrow()
+                .section(id)
+                .is_some_and(|section| section.zone != native_docking::DockZone::Bottom)
+            {
                 return; // This tool already lives in another dock host.
             }
             bottom_pages.clear();
@@ -3023,7 +3316,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (native_docking::DockId::FindResults, find_tab.clone()),
         ];
         apply_bottom_dock_order(
-            &bottom_tabs, &output_controls.collapse, &tabs, &dock_model.borrow(),
+            &bottom_tabs,
+            &output_controls.collapse,
+            &tabs,
+            &dock_model.borrow(),
         );
         for (target, button) in &tabs {
             let destination = *target;
@@ -3034,9 +3330,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let anchor = output_controls.collapse.clone();
             let status = status.clone();
             native_dock_widgets::enable_widget_drag(
-                &button.native_widget(), destination, move |source| {
-                    if source == destination ||
-                        !tabs.iter().any(|(id, _)| *id == source) {
+                &button.native_widget(),
+                destination,
+                move |source| {
+                    if source == destination || !tabs.iter().any(|(id, _)| *id == source) {
                         return false;
                     }
                     let mut layout = model.borrow_mut();
@@ -3053,7 +3350,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         status.set_text("Bottom tool tabs reordered.");
                     }
                     true
-                }
+                },
             );
         }
     }
@@ -3103,38 +3400,53 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if tab_mode.get() == Page::Code {
                 match index {
                     1 => {
-                        if dock_model.borrow().section(native_docking::DockId::Search)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                        if dock_model
+                            .borrow()
+                            .section(native_docking::DockId::Search)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
+                        {
                             left_content.append(&code_search_view);
                         }
                     }
                     _ => {
-                        if dock_model.borrow().section(native_docking::DockId::Symbols)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                        if dock_model
+                            .borrow()
+                            .section(native_docking::DockId::Symbols)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
+                        {
                             left_content.append(&symbols_section);
                         }
-                    },
+                    }
                 }
             } else {
                 match index {
                     1 => {
-                        if dock_model.borrow().section(native_docking::DockId::Server)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                        if dock_model
+                            .borrow()
+                            .section(native_docking::DockId::Server)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
+                        {
                             left_content.append(&server_view);
                         }
                     }
                     2 => {
-                        if dock_model.borrow().section(native_docking::DockId::Data)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                        if dock_model
+                            .borrow()
+                            .section(native_docking::DockId::Data)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
+                        {
                             left_content.append(&data_view);
                         }
-                    },
+                    }
                     _ => {
-                        if dock_model.borrow().section(native_docking::DockId::Toolbox)
-                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                        if dock_model
+                            .borrow()
+                            .section(native_docking::DockId::Toolbox)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left)
+                        {
                             left_content.append(&toolbox);
                         }
-                    },
+                    }
                 }
             }
         }
@@ -3164,8 +3476,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
                 left_panel(index);
                 let id = if tab_mode.get() == Page::Code {
-                    if index == 1 { native_docking::DockId::Search }
-                    else { native_docking::DockId::Symbols }
+                    if index == 1 {
+                        native_docking::DockId::Search
+                    } else {
+                        native_docking::DockId::Symbols
+                    }
                 } else {
                     match index {
                         1 => native_docking::DockId::Server,
@@ -4026,38 +4341,50 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let result_status = status.clone();
             let result_output = output.clone();
             let worker_path = path.clone();
-            let sender = ui.tasks().channel(move |(log, formatted): (native_commands::ResultLog, Option<String>)| {
-                result_output.set_text(&log.text);
-                if !log.success {
-                    result_status.set_text("Hydrogen format failed — see Output.");
-                    return;
-                }
-                let Some(formatted) = formatted else {
-                    result_status.set_text("Formatter succeeded but the document could not be reloaded.");
-                    return;
-                };
-                let still_open = {
-                    let mut ide = result_state.borrow_mut();
-                    if let Some(doc) = ide.document.as_mut() {
-                        if doc.path == path && doc.saved == saved && !doc.dirty() {
-                            doc.saved = formatted.clone();
-                            doc.text = formatted.clone();
-                            true
-                        } else { false }
-                    } else { false }
-                };
-                if still_open {
-                    result_editor.set_text(&formatted);
-                    result_status.set_text("Hydrogen formatting completed.");
-                } else {
-                    result_status.set_text("Document changed while formatting; reopen it to see the result.");
-                }
-            });
+            let sender = ui.tasks().channel(
+                move |(log, formatted): (native_commands::ResultLog, Option<String>)| {
+                    result_output.set_text(&log.text);
+                    if !log.success {
+                        result_status.set_text("Hydrogen format failed — see Output.");
+                        return;
+                    }
+                    let Some(formatted) = formatted else {
+                        result_status.set_text(
+                            "Formatter succeeded but the document could not be reloaded.",
+                        );
+                        return;
+                    };
+                    let still_open = {
+                        let mut ide = result_state.borrow_mut();
+                        if let Some(doc) = ide.document.as_mut() {
+                            if doc.path == path && doc.saved == saved && !doc.dirty() {
+                                doc.saved = formatted.clone();
+                                doc.text = formatted.clone();
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    };
+                    if still_open {
+                        result_editor.set_text(&formatted);
+                        result_status.set_text("Hydrogen formatting completed.");
+                    } else {
+                        result_status.set_text(
+                            "Document changed while formatting; reopen it to see the result.",
+                        );
+                    }
+                },
+            );
             std::thread::spawn(move || {
                 let log = native_commands::format_document(&compiler, &worker_path);
                 let formatted = if log.success {
                     std::fs::read_to_string(&worker_path).ok()
-                } else { None };
+                } else {
+                    None
+                };
                 let _ = sender.send((log, formatted));
             });
         }
@@ -4250,10 +4577,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (8, 0) => task_action(native_commands::Task::Check),
             (9, 0) => {
                 #[cfg(target_os = "linux")]
-                native_preferences::show(workspace_file().with_file_name("native-preferences.json"));
+                native_preferences::show(
+                    workspace_file().with_file_name("native-preferences.json"),
+                );
                 #[cfg(not(target_os = "linux"))]
                 status.set_text("Native settings are currently available on GTK/Linux.");
-            },
+            }
             (10, 0) => status.set_text("Native extension management is planned."),
             (11, 0) => reset_window_layout(),
             (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
@@ -4290,7 +4619,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
 fn build(ui: &Ui) -> naui::Result<()> {
     #[cfg(target_os = "linux")]
-    native_preferences::apply_theme(&native_preferences::load(&workspace_file().with_file_name("native-preferences.json")));
+    native_preferences::apply_theme(&native_preferences::load(
+        &workspace_file().with_file_name("native-preferences.json"),
+    ));
     let state = Rc::new(RefCell::new(Ide::load()));
     let existing = state.borrow().workspace.recent.clone();
     let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;

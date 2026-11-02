@@ -2,7 +2,12 @@
 //! Keep application preferences separate from workspace and docking state.
 use gtk4::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, fs, path::{Path, PathBuf}, rc::Rc};
+use std::{
+    cell::RefCell,
+    fs,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -15,31 +20,66 @@ pub struct Preferences {
 }
 impl Default for Preferences {
     fn default() -> Self {
-        Self { appearance: Appearance::default(), editor: Editor::default(),
-               debugging: Debugging::default(), build: Build::default(),
-               hydrogen: Hydrogen::default() }
+        Self {
+            appearance: Appearance::default(),
+            editor: Editor::default(),
+            debugging: Debugging::default(),
+            build: Build::default(),
+            hydrogen: Hydrogen::default(),
+        }
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct Appearance { pub theme: ThemeChoice, pub compact_controls: bool }
+pub struct Appearance {
+    pub theme: ThemeChoice,
+    pub compact_controls: bool,
+}
 impl Default for Appearance {
-    fn default() -> Self { Self { theme: ThemeChoice::System, compact_controls: false } }
+    fn default() -> Self {
+        Self {
+            theme: ThemeChoice::System,
+            compact_controls: false,
+        }
+    }
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
-pub enum ThemeChoice { #[default] System, Light, Dark }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Editor { pub tab_width: u8, pub show_line_numbers: bool, pub word_wrap: bool }
-impl Default for Editor {
-    fn default() -> Self { Self { tab_width: 4, show_line_numbers: true, word_wrap: false } }
+pub enum ThemeChoice {
+    #[default]
+    System,
+    Light,
+    Dark,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct Debugging { pub stop_on_exception: bool, pub show_debug_output: bool }
+pub struct Editor {
+    pub tab_width: u8,
+    pub show_line_numbers: bool,
+    pub word_wrap: bool,
+}
+impl Default for Editor {
+    fn default() -> Self {
+        Self {
+            tab_width: 4,
+            show_line_numbers: true,
+            word_wrap: false,
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Debugging {
+    pub stop_on_exception: bool,
+    pub show_debug_output: bool,
+}
 impl Default for Debugging {
-    fn default() -> Self { Self { stop_on_exception: true, show_debug_output: true } }
+    fn default() -> Self {
+        Self {
+            stop_on_exception: true,
+            show_debug_output: true,
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -51,12 +91,21 @@ pub struct Hydrogen {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
-pub struct Build { pub save_before_build: bool, pub show_output: bool }
+pub struct Build {
+    pub save_before_build: bool,
+    pub show_output: bool,
+}
 impl Default for Build {
-    fn default() -> Self { Self { save_before_build: true, show_output: true } }
+    fn default() -> Self {
+        Self {
+            save_before_build: true,
+            show_output: true,
+        }
+    }
 }
 pub fn load(path: &Path) -> Preferences {
-    fs::read(path).ok()
+    fs::read(path)
+        .ok()
         .and_then(|data| serde_json::from_slice::<Preferences>(&data).ok())
         .unwrap_or_default()
 }
@@ -72,7 +121,10 @@ fn save(path: &Path, preferences: &Preferences) -> Result<(), String> {
 pub fn apply_theme(preferences: &Preferences) {
     if let Some(settings) = gtk4::Settings::default() {
         // System uses the platform's GTK theme; do not force dark/light.
-        settings.set_gtk_application_prefer_dark_theme(matches!(preferences.appearance.theme, ThemeChoice::Dark));
+        settings.set_gtk_application_prefer_dark_theme(matches!(
+            preferences.appearance.theme,
+            ThemeChoice::Dark
+        ));
     }
 }
 fn section() -> gtk4::Box {
@@ -133,14 +185,20 @@ pub fn show(path: PathBuf) {
     notebook.set_vexpand(true);
 
     let appearance = section();
-    heading(&appearance, "Appearance", "Make Quark feel at home on your desktop.");
+    heading(
+        &appearance,
+        "Appearance",
+        "Make Quark feel at home on your desktop.",
+    );
     let label = gtk4::Label::new(Some("Colour scheme"));
     label.set_xalign(0.0);
     appearance.append(&label);
     // GTK 4.10+ replaces the deprecated ComboBoxText with DropDown.
     let themes = gtk4::DropDown::from_strings(&["Follow system", "Light", "Dark"]);
     let selected = match preferences.appearance.theme {
-        ThemeChoice::System => 0, ThemeChoice::Light => 1, ThemeChoice::Dark => 2,
+        ThemeChoice::System => 0,
+        ThemeChoice::Light => 1,
+        ThemeChoice::Dark => 2,
     };
     themes.set_selected(selected);
     appearance.append(&themes);
@@ -150,7 +208,9 @@ pub fn show(path: PathBuf) {
         themes.connect_selected_notify(move |combo| {
             let mut prefs = state.borrow_mut();
             prefs.appearance.theme = match combo.selected() {
-                1 => ThemeChoice::Light, 2 => ThemeChoice::Dark, _ => ThemeChoice::System,
+                1 => ThemeChoice::Light,
+                2 => ThemeChoice::Dark,
+                _ => ThemeChoice::System,
             };
             apply_theme(&prefs);
             if let Err(error) = save(&path, &prefs) {
@@ -158,28 +218,71 @@ pub fn show(path: PathBuf) {
             }
         });
     }
-    let compact = checkbox(&appearance, "Compact toolbar and controls (planned)", preferences.appearance.compact_controls, false);
+    let compact = checkbox(
+        &appearance,
+        "Compact toolbar and controls (planned)",
+        preferences.appearance.compact_controls,
+        false,
+    );
     compact.set_tooltip_text(Some("Reserved for the native layout density integration."));
     notebook.append_page(&appearance, Some(&gtk4::Label::new(Some("Appearance"))));
 
     let editor = section();
-    heading(&editor, "Editor", "Editor behaviour will become configurable as native editing features are integrated.");
-    let line_numbers = checkbox(&editor, "Show line numbers (planned)", preferences.editor.show_line_numbers, false);
+    heading(
+        &editor,
+        "Editor",
+        "Editor behaviour will become configurable as native editing features are integrated.",
+    );
+    let line_numbers = checkbox(
+        &editor,
+        "Show line numbers (planned)",
+        preferences.editor.show_line_numbers,
+        false,
+    );
     line_numbers.set_tooltip_text(Some("Not yet connected to the native code editor."));
-    let wrap = checkbox(&editor, "Word wrap (planned)", preferences.editor.word_wrap, false);
+    let wrap = checkbox(
+        &editor,
+        "Word wrap (planned)",
+        preferences.editor.word_wrap,
+        false,
+    );
     wrap.set_tooltip_text(Some("Not yet connected to the native code editor."));
     notebook.append_page(&editor, Some(&gtk4::Label::new(Some("Editor"))));
 
     let debugging = section();
     heading(&debugging, "Debugging", "Source-level Hydrogen debugging is not yet implemented. These options will be enabled with the debugger adapter.");
-    checkbox(&debugging, "Break on unhandled exceptions", preferences.debugging.stop_on_exception, false);
-    checkbox(&debugging, "Show debug session output", preferences.debugging.show_debug_output, false);
+    checkbox(
+        &debugging,
+        "Break on unhandled exceptions",
+        preferences.debugging.stop_on_exception,
+        false,
+    );
+    checkbox(
+        &debugging,
+        "Show debug session output",
+        preferences.debugging.show_debug_output,
+        false,
+    );
     notebook.append_page(&debugging, Some(&gtk4::Label::new(Some("Debugging"))));
 
     let build = section();
-    heading(&build, "Build & Run", "Build preferences will be enabled when they are connected to the build runner.");
-    checkbox(&build, "Save modified files before building", preferences.build.save_before_build, false);
-    checkbox(&build, "Show output after building", preferences.build.show_output, false);
+    heading(
+        &build,
+        "Build & Run",
+        "Build preferences will be enabled when they are connected to the build runner.",
+    );
+    checkbox(
+        &build,
+        "Save modified files before building",
+        preferences.build.save_before_build,
+        false,
+    );
+    checkbox(
+        &build,
+        "Show output after building",
+        preferences.build.show_output,
+        false,
+    );
     notebook.append_page(&build, Some(&gtk4::Label::new(Some("Build & Run"))));
 
     let hydrogen = section();
@@ -248,8 +351,11 @@ pub fn show(path: PathBuf) {
             let mut prefs = state.borrow_mut();
             prefs.hydrogen.executable = candidate;
             match save(&file, &prefs) {
-                Ok(()) => feedback.set_text("Compiler preference saved. New builds will use this executable."),
-                Err(error) => feedback.set_text(&format!("Could not save compiler preference: {error}")),
+                Ok(()) => feedback
+                    .set_text("Compiler preference saved. New builds will use this executable."),
+                Err(error) => {
+                    feedback.set_text(&format!("Could not save compiler preference: {error}"))
+                }
             }
         }
     });
@@ -266,7 +372,9 @@ pub fn show(path: PathBuf) {
                     entry.set_text("");
                     feedback.set_text("Automatic compiler discovery enabled.");
                 }
-                Err(error) => feedback.set_text(&format!("Could not save compiler preference: {error}")),
+                Err(error) => {
+                    feedback.set_text(&format!("Could not save compiler preference: {error}"))
+                }
             }
         }
     });
@@ -296,9 +404,13 @@ pub fn show(path: PathBuf) {
                     .arg("--version")
                     .output()
                     .map(|output| {
-                        let detail = String::from_utf8_lossy(
-                            if !output.stdout.is_empty() { &output.stdout } else { &output.stderr },
-                        ).trim().to_owned();
+                        let detail = String::from_utf8_lossy(if !output.stdout.is_empty() {
+                            &output.stdout
+                        } else {
+                            &output.stderr
+                        })
+                        .trim()
+                        .to_owned();
                         if output.status.success() {
                             format!("Compiler started successfully: {detail}")
                         } else {
@@ -309,27 +421,29 @@ pub fn show(path: PathBuf) {
                 let _ = sender.send(result);
             });
             let feedback = feedback.clone();
-            gtk4::glib::timeout_add_local(
-                std::time::Duration::from_millis(80),
-                move || match receiver.try_recv() {
+            gtk4::glib::timeout_add_local(std::time::Duration::from_millis(80), move || {
+                match receiver.try_recv() {
                     Ok(result) => {
                         feedback.set_text(&result);
                         gtk4::glib::ControlFlow::Break
                     }
-                    Err(std::sync::mpsc::TryRecvError::Empty) =>
-                        gtk4::glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => gtk4::glib::ControlFlow::Continue,
                     Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                         feedback.set_text("Compiler check did not return a result.");
                         gtk4::glib::ControlFlow::Break
                     }
-                },
-            );
+                }
+            });
         }
     });
     notebook.append_page(&hydrogen, Some(&gtk4::Label::new(Some("Hydrogen"))));
 
     let general = section();
-    heading(&general, "Application", "Settings are stored separately from project and workspace files.");
+    heading(
+        &general,
+        "Application",
+        "Settings are stored separately from project and workspace files.",
+    );
     let path_label = gtk4::Label::new(Some(&format!("Preferences file:\n{}", path.display())));
     path_label.set_wrap(true);
     path_label.set_selectable(true);
