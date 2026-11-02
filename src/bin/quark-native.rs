@@ -1781,7 +1781,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let debug_view = ui.label("No debugger attached")?;
     let tests_view = ui.label("No test run selected")?;
     let find_view = ui.label("No search results")?;
-    bottom_pages.append(&output_scroll);
+    // Each bottom tool is a complete dock section. Tabs only choose which
+    // section is shown in the bottom host; they never own its content.
+    let (output_section, output_page_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Output)?;
+    output_section.append(&output_scroll);
+    let (error_section, error_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::ErrorList)?;
+    error_section.append(&errors_view);
+    let (debug_section, debug_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Debug)?;
+    debug_section.append(&debug_view);
+    let (test_section, test_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::TestResults)?;
+    test_section.append(&tests_view);
+    let (find_section, find_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::FindResults)?;
+    find_section.append(&find_view);
+    bottom_pages.append(&output_section);
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
 
@@ -2060,6 +2077,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let data = data_view.native_widget();
         let solution = solution_pane.native_widget();
         let properties = properties_pane.native_widget();
+        let output = output_section.native_widget();
+        let errors = error_section.native_widget();
+        let debug = debug_section.native_widget();
+        let tests = test_section.native_widget();
+        let find = find_section.native_widget();
+        let bottom_home = bottom_pages.native_widget()
+            .downcast::<gtk4::Box>().expect("bottom view GTK Box");
         let left_home = left_content.native_widget()
             .downcast::<gtk4::Box>().expect("left content GTK Box");
         let inspector_home = inspector.native_widget()
@@ -2077,13 +2101,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 DockId::Data => &data,
                 DockId::Solution => &solution,
                 DockId::Properties => &properties,
-                _ => return false,
+                DockId::Output => &output,
+                DockId::ErrorList => &errors,
+                DockId::Debug => &debug,
+                DockId::TestResults => &tests,
+                DockId::FindResults => &find,
             };
             if id.default_zone() == zone {
                 match id {
                     DockId::Toolbox | DockId::Symbols | DockId::Search
                     | DockId::Server | DockId::Data =>
                         native_dock_runtime::attach_box(widget, &left_home),
+                    DockId::Output | DockId::ErrorList | DockId::Debug
+                    | DockId::TestResults | DockId::FindResults =>
+                        native_dock_runtime::attach_box(widget, &bottom_home),
                     DockId::Solution | DockId::Properties => {
                         let slot_start = id == DockId::Solution;
                         native_dock_runtime::attach_paned(
@@ -2115,6 +2146,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             native_docking::DockId::Data,
             native_docking::DockId::Solution,
             native_docking::DockId::Properties,
+            native_docking::DockId::Output,
+            native_docking::DockId::ErrorList,
+            native_docking::DockId::Debug,
+            native_docking::DockId::TestResults,
+            native_docking::DockId::FindResults,
         ] {
             if let Some(zone) = dock_model.borrow().section(id).map(|s| s.zone) {
                 if zone != id.default_zone() { route_dock(id, zone); }
@@ -2154,6 +2190,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (&search_controls, native_docking::DockId::Search),
             (&server_controls, native_docking::DockId::Server),
             (&data_controls, native_docking::DockId::Data),
+            (&output_page_controls, native_docking::DockId::Output),
+            (&error_controls, native_docking::DockId::ErrorList),
+            (&debug_controls, native_docking::DockId::Debug),
+            (&test_controls, native_docking::DockId::TestResults),
+            (&find_controls, native_docking::DockId::FindResults),
         ] {
             native_dock_widgets::enable_header_drag(header, id, |_source| false);
         }
@@ -2667,11 +2708,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active_dock = active_dock.clone();
         let refresh_docks = refresh_docks.clone();
         let bottom_pages = bottom_pages.clone();
-        let output_scroll = output_scroll.clone();
-        let errors_view = errors_view.clone();
-        let debug_view = debug_view.clone();
-        let tests_view = tests_view.clone();
-        let find_view = find_view.clone();
+        let output_scroll = output_section.clone();
+        let errors_view = error_section.clone();
+        let debug_view = debug_section.clone();
+        let tests_view = test_section.clone();
+        let find_view = find_section.clone();
+        let dock_model = dock_model.clone();
         move |page| {
             active_dock.set(Some(match page {
                 1 => native_docking::DockId::ErrorList,
@@ -2681,6 +2723,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 _ => native_docking::DockId::Output,
             }));
             refresh_docks();
+            let id = match page {
+                1 => native_docking::DockId::ErrorList,
+                2 => native_docking::DockId::Debug,
+                3 => native_docking::DockId::TestResults,
+                4 => native_docking::DockId::FindResults,
+                _ => native_docking::DockId::Output,
+            };
+            if dock_model.borrow().section(id)
+                .is_some_and(|section| section.zone != native_docking::DockZone::Bottom) {
+                return; // This tool already lives in another dock host.
+            }
             bottom_pages.clear();
             match page {
                 1 => bottom_pages.append(&errors_view),
