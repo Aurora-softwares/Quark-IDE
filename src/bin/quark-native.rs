@@ -989,8 +989,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // tab relayout until after native draw callbacks return.
     let document_width = Rc::new(Cell::new(620.0_f64));
     type DocumentRelayout = Rc<dyn Fn()>;
-    let document_relayout: Rc<RefCell<Option<DocumentRelayout>>> =
-        Rc::new(RefCell::new(None));
+    let document_relayout: Rc<RefCell<Option<DocumentRelayout>>> = Rc::new(RefCell::new(None));
     let width_signal = ui.tasks().channel({
         let width = document_width.clone();
         let relayout = document_relayout.clone();
@@ -2243,11 +2242,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if !tabs.is_empty() {
                 document_bar.set_column_track(
                     1,
-                    Track::Fixed(if native_shell::document_overflow(tabs.len(), visible_tabs) {
-                        native_shell::DOCUMENT_OVERFLOW_WIDTH
-                    } else {
-                        0.0
-                    }),
+                    Track::Fixed(
+                        if native_shell::document_overflow(tabs.len(), visible_tabs) {
+                            native_shell::DOCUMENT_OVERFLOW_WIDTH
+                        } else {
+                            0.0
+                        },
+                    ),
                 );
                 centre.append(&document_bar);
                 centre.append(&tab_accent);
