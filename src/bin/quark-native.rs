@@ -1610,6 +1610,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             };
             let is_native = layout.native_window;
             let xml = layout.source().ok();
+            let document = layout.path.clone();
             drop(doc);
             design_surface.clear();
             design_surface.attach(&design_header, GridCell::new(0, 0));
@@ -1621,6 +1622,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     match native_portable_preview::render(
                         &ui,
                         &xml,
+                        &document,
                         select_native_element.clone(),
                         design_tab_selection.clone(),
                     ) {
