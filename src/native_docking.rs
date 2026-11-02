@@ -620,8 +620,10 @@ mod tests {
     fn old_saved_docks_gain_pinned_side_defaults_and_a_single_bottom_strip() {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("old-layout.json");
-        let mut layout = DockLayout::default();
-        layout.layout_version = 0;
+        let mut layout = DockLayout {
+            layout_version: 0,
+            ..DockLayout::default()
+        };
         layout.pin(DockId::Toolbox, false);
         layout.pin(DockId::Symbols, false);
         layout.pin(DockId::Output, false);
