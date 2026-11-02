@@ -2651,6 +2651,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 native_docking::DockZone::Right => gtk4::PositionType::Left,
                 native_docking::DockZone::Bottom => gtk4::PositionType::Top,
             };
+            for (other, popup) in popovers.borrow().iter() {
+                if *other != id && popup.is_visible() {
+                    popup.popdown();
+                }
+            }
             let old = popovers.borrow().get(&id).cloned();
             let redock = {
                 let model = model.clone();
@@ -2679,36 +2684,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        for (id, pane) in [
-            (native_docking::DockId::Toolbox, toolbox.native_widget()),
-            (
-                native_docking::DockId::Solution,
-                solution_pane.native_widget(),
-            ),
-            (
-                native_docking::DockId::Properties,
-                properties_pane.native_widget(),
-            ),
-            (native_docking::DockId::Output, bottom.native_widget()),
-        ] {
-            let focus = gtk4::EventControllerFocus::new();
-            let active = active_dock.clone();
-            let refresh = refresh_docks.clone();
-            focus.connect_leave(move |_| {
-                if active.get() == Some(id) {
-                    active.set(None);
-                    refresh();
-                }
-            });
-            pane.add_controller(focus);
-        }
+        // Do not dismiss a tool when keyboard focus shifts between its rail,
+        // buttons, search box and panel contents. Only explicit editor clicks
+        // or a different tool selection close temporary overlays.
         // Clicking the document closes any temporary tool pane.
         let dismiss = gtk4::GestureClick::new();
         dismiss.set_button(0);
         dismiss.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let active = active_dock.clone();
         let refresh = refresh_docks.clone();
+        let popovers = auto_hide_popovers.clone();
         dismiss.connect_pressed(move |_, _, _, _| {
+            // Close genuine popovers as well: their activation no longer
+            // relies on a transient focus state.
+            for popup in popovers.borrow().values().cloned().collect::<Vec<_>>() {
+                popup.popdown();
+            }
             if active.take().is_some() {
                 refresh();
             }
