@@ -5746,8 +5746,10 @@ mod tests {
             ui_xml::encode(&Layout::default()).unwrap().into_bytes(),
         )
         .unwrap();
-        let mut workspace = Workspace::default();
-        workspace.selected = Some(manifest.clone());
+        let mut workspace = Workspace {
+            selected: Some(manifest.clone()),
+            ..Workspace::default()
+        };
         workspace.projects.push(manifest.clone());
         let ide = Ide::from_workspace(workspace);
         assert!(ide.project.is_some());
@@ -5766,8 +5768,10 @@ mod tests {
         fs::create_dir_all(dir.path().join("views/dialogs")).unwrap();
         let layout = dir.path().join("views/dialogs/Main.hyui");
         fs::write(&layout, ui_xml::encode(&Layout::default()).unwrap()).unwrap();
-        let mut workspace = Workspace::default();
-        workspace.selected = Some(manifest);
+        let workspace = Workspace {
+            selected: Some(manifest),
+            ..Workspace::default()
+        };
         let ide = Ide::from_workspace(workspace);
         let (_, files) = file_items(&ide);
         assert!(files.contains(&layout.canonicalize().unwrap()));
