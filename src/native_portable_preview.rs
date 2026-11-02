@@ -117,6 +117,22 @@ fn render_node(
         use naui::Widget as _;
         row.native_widget().set_tooltip_text(Some(tip));
     }
+    // Capture the press before it reaches an interactive child, but do not
+    // claim the GTK event sequence. Clicking labels, panels, sliders, fields
+    // and whitespace selects the XML node without changing runtime values.
+    // The innermost captured node wins as GTK traverses the ancestor chain.
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let capture = gtk4::GestureClick::new();
+        capture.set_button(0);
+        capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let selected = on_select.clone();
+        let selected_path = path.clone();
+        capture.connect_pressed(move |_, _, _, _| selected(selected_path.clone()));
+        row.native_widget().add_controller(capture);
+    }
     let enabled = node.attribute("enabled") != Some("false");
 
     match kind {
