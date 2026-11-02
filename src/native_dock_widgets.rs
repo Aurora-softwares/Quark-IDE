@@ -9,7 +9,6 @@ pub struct DockHeader {
     pub row: naui::Stack,
     pub pin: naui::Button,
     pub collapse: naui::Button,
-    pub drag: naui::Canvas,
 }
 
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
@@ -49,22 +48,6 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     title.set_style(naui::TextStyle::Heading);
     row.append(&title);
 
-    let drag = ui.canvas()?;
-    drag.set_sizing(
-        Sizing::new()
-            .width(Length::Fixed(26.0))
-            .height(Length::Fixed(30.0)),
-    );
-    drag.on_draw(|painter| {
-        // Grabber handles are visually distinct from panel content buttons.
-        for row in [10.0_f64, 15.0, 20.0] {
-            for x in [8.0_f64, 13.0, 18.0] {
-                painter.fill_rect(Rect::new(x, row, 2.0, 2.0), Color::rgb(0x8b, 0x8c, 0x96));
-            }
-        }
-    });
-    row.append(&drag);
-
     let pin = ui.button("♢")?;
     pin.set_sizing(Sizing::new().width(Length::Fixed(34.0)));
     row.append(&pin);
@@ -77,20 +60,12 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        drag.native_widget().set_tooltip_text(Some(
-            "Drag the header to move this panel between Left, Right and Bottom docks.",
-        ));
         pin.native_widget().set_tooltip_text(Some(
-            "Pin this panel open, or auto-hide it when focus moves elsewhere.",
+            "Save this section's pinned preference. Auto-hide docking is being integrated.",
         ));
         collapse
             .native_widget()
             .set_tooltip_text(Some("Collapse or expand the panel content."));
     }
-    Ok(DockHeader {
-        row,
-        pin,
-        collapse,
-        drag,
-    })
+    Ok(DockHeader { row, pin, collapse })
 }
