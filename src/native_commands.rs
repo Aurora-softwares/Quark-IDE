@@ -161,6 +161,63 @@ pub fn format_document(compiler: &str, source: &Path) -> ResultLog {
     }
 }
 
+/// Explain a failed process launch in terms of the exact executable,
+/// arguments and working directory rather than attributing ENOENT to the
+/// Hydrogen project. ENOENT also occurs when a binary's dynamic loader is
+/// missing, even if the binary itself exists.
+fn launch_diagnostics(program: &str, cwd: &Path, args: &[String], error: &io::Error) -> String {
+    let candidate = Path::new(program);
+    let executable = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else if candidate.components().count() > 1 {
+        cwd.join(candidate)
+    } else {
+        PathBuf::from(program)
+    };
+    let cwd_exists = cwd.is_dir();
+    let explicit = candidate.is_absolute() || candidate.components().count() > 1;
+    let executable_exists = if explicit { Some(executable.is_file()) } else { None };
+    let explanation = if !cwd_exists {
+        "The project working directory does not exist or is not a directory."
+    } else if executable_exists == Some(false) {
+        "The configured Hydrogen executable cannot be found at this path."
+    } else if error.kind() == io::ErrorKind::NotFound && executable_exists == Some(true) {
+        "The executable exists, but its interpreter or dynamic loader may be missing (check its shebang, file type and shared-library dependencies)."
+    } else if error.kind() == io::ErrorKind::NotFound {
+        "The compiler command could not be found on PATH. Select the full executable path in Tools → Options → Hydrogen."
+    } else {
+        "The operating system refused to start the compiler."
+    };
+    format!(
+        "Could not start Hydrogen compiler.\nExecutable: {}\nWorking directory: {}\nArguments: {:?}\nExecutable exists: {}\nWorking directory exists: {}\nSystem error: {}\n{}",
+        executable.display(),
+        cwd.display(),
+        args,
+        executable_exists.map(|v| v.to_string()).unwrap_or_else(|| "not checked (PATH lookup)".into()),
+        cwd_exists,
+        error,
+        explanation
+    )
+}
+
+fn invoke_hydrogen(program: &str, cwd: &Path, args: &[String]) -> Result<std::process::Output, String> {
+    if !cwd.is_dir() {
+        return Err(format!("Hydrogen build working directory does not exist: {}", cwd.display()));
+    }
+    let path = Path::new(program);
+    if path.is_absolute() && !path.is_file() {
+        return Err(format!(
+            "Configured Hydrogen executable is missing: {}\nChoose it again in Tools → Options → Hydrogen.",
+            path.display()
+        ));
+    }
+    Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|error| launch_diagnostics(program, cwd, args, &error))
+}
+
 pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     let Some(project) = project else {
         return ResultLog::error("Open a Hydrogen project before building or running.");
@@ -182,11 +239,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
             fs::create_dir_all(output_parent)
                 .map_err(|e| format!("Cannot create build directory: {e}"))
                 .and_then(|()| {
-                    let built = Command::new(&plan.program)
-                        .args(&plan.args)
-                        .current_dir(&plan.cwd)
-                        .output()
-                        .map_err(|e| format!("Cannot start Hydrogen build: {e}"))?;
+                    let built = invoke_hydrogen(&plan.program, &plan.cwd, &plan.args)?;
                     if !built.status.success() {
                         return Err(format!(
                             "Build failed; nothing was published.\n{}\n{}",
@@ -225,10 +278,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                     return ResultLog::error(format!("Cannot create build directory: {error}"));
                 }
             }
-            let output = Command::new(&plan.program)
-                .args(&args)
-                .current_dir(&plan.cwd)
-                .output();
+            let output = invoke_hydrogen(&plan.program, &plan.cwd, &args);
             match output {
                 Ok(process) => {
                     let message = format!(
@@ -249,7 +299,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                         Err(message)
                     }
                 }
-                Err(error) => Err(format!("Could not execute Hydrogen compiler: {error}")),
+                Err(error) => Err(error),
             }
         }
     };
