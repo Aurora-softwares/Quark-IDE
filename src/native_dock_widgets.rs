@@ -172,7 +172,7 @@ pub fn enable_widget_drag(
             .get::<String>()
             .ok()
             .and_then(|token| parse_drag_token(&token))
-            .is_some_and(|source| on_drop(source))
+            .is_some_and(&on_drop)
     });
     widget.add_controller(target);
 }
