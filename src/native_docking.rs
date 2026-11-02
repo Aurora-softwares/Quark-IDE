@@ -297,7 +297,10 @@ impl DockLayout {
                 }
                 for id in DockId::ALL {
                     if !seen.contains(&id) {
-                        clean.register(DockSection::new(id, id.default_zone()));
+                        let defaults = Self::default();
+                        if let Some(section) = defaults.section(id) {
+                            clean.register(section.clone());
+                        }
                     }
                 }
                 Ok(clean)
