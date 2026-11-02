@@ -1975,6 +1975,27 @@
         "native_ui_properties::tests::updates_nested_control_without_rewriting_siblings_or_events",
         "native_portable_preview::tests::real_hydrogen_studio_default_tab_is_one_but_design_navigation_is_independent"
       ]
+    },
+    {
+      "id": "native-hydrogen-pure-lexer",
+      "category": "Native platform",
+      "feature": "Hydrogen tokenization and completions are UI-framework independent, suitable for GTK4, WinUI 3 and AppKit",
+      "tests": [
+        "hydrogen_lexer::tests::native_lexer_reconstructs_unicode_source_exactly",
+        "hydrogen_lexer::tests::native_completion_respects_utf8_caret_and_literal_context",
+        "editor::tests::preserves_unicode_and_entire_input"
+      ]
+    },
+    {
+      "id": "native-designer-type-aware-properties",
+      "category": "Native Interface Designer",
+      "feature": "Designer properties use typed options and reject unsafe ranges, selected indices or invalid values before writing XML",
+      "tests": [
+        "native_ui_properties::tests::property_choice_editor_uses_platform_theme_and_boolean_values",
+        "native_ui_properties::tests::property_choice_editor_preserves_source_indices_not_option_labels",
+        "native_ui_properties::tests::properties_validate_native_control_ranges_and_booleans",
+        "native_ui_properties::tests::properties_reject_invalid_pages_and_allow_valid_list_choices"
+      ]
     }
   ]
 }
