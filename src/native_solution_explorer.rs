@@ -181,7 +181,8 @@ fn anchor_context_menu(popover: &gtk4::Popover, row: &gtk4::ListBoxRow, x: i32, 
             return;
         }
         if let Some(popup) = popup.upgrade() {
-            if popup.parent().as_ref() == Some(row) {
+            let anchor: gtk4::Widget = row.clone().upcast();
+            if popup.parent().as_ref() == Some(&anchor) {
                 popup.popdown();
                 popup.unparent();
             }
