@@ -67,7 +67,10 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(args.len(), 2);
         assert_eq!(args[0], "--document");
-        assert_eq!(args[1], document.display().to_string());
+        assert_eq!(
+            std::path::PathBuf::from(&args[1]),
+            document.canonicalize().unwrap(),
+        );
     }
 
     #[test]
@@ -91,7 +94,10 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(args[2], "--source");
         assert_eq!(args[4..], ["--compiler", "hydrogen-stage1"]);
-        assert_eq!(process.get_current_dir(), Some(directory.path()));
+        assert_eq!(
+            process.get_current_dir(),
+            Some(directory.path().canonicalize().unwrap().as_path()),
+        );
     }
 
     #[test]
