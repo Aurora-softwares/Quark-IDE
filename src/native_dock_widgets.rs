@@ -90,6 +90,7 @@ pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHead
             .row
             .native_widget()
             .add_css_class("quark-dock-header");
+        header.row.native_widget().set_valign(gtk4::Align::Start);
         thread_local! {
             static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
         }
@@ -98,8 +99,10 @@ pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHead
                 if let Some(display) = gtk4::gdk::Display::default() {
                     let css = gtk4::CssProvider::new();
                     css.load_from_data(
-                        ".quark-dock-panel { border: 1px solid alpha(@theme_fg_color, 0.10); } 
-                         .quark-dock-header { border-bottom: 1px solid alpha(@theme_fg_color, 0.10); }"
+                        ".quark-dock-panel { border: 1px solid alpha(@theme_fg_color, 0.14); }
+                         .quark-dock-header { border-bottom: 1px solid alpha(@theme_fg_color, 0.16); }
+                         .quark-dock-title { color: @theme_fg_color; }
+                         .quark-side-tab { color: @theme_fg_color; background: alpha(@theme_fg_color, 0.035); }"
                     );
                     gtk4::style_context_add_provider_for_display(
                         &display, &css, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
@@ -222,6 +225,12 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
 
     let title = ui.label(id.title())?;
     title.set_style(naui::TextStyle::Heading);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        title.native_widget().add_css_class("quark-dock-title");
+    }
     row.append(&title);
 
     let pin = ui.button("♢")?;
