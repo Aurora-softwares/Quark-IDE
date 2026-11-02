@@ -673,6 +673,11 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
     fallback
 }
 
+fn right_split_position(height: f64, preferred: f64, properties_first: bool) -> f64 {
+    if properties_first { preferred.max(110.0) }
+    else { (height - preferred - 6.0).max(110.0) }
+}
+
 /// Physically reorder GTK's existing native tool widgets without recreating
 /// their tree, search state, Properties editor or callbacks.
 #[cfg(target_os = "linux")]
@@ -1896,6 +1901,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let main_workspace = main_workspace.clone();
         let document_workspace = document_workspace.clone();
         let inspector = inspector.clone();
+        let model = dock_model.clone();
         move |sizes| {
             left_split.set_position(sizes.toolbox);
             main_workspace.set_position(
@@ -1904,9 +1910,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             document_workspace.set_position(
                 (split_extent(&document_workspace, 860.0) - sizes.output - 6.0).max(160.0),
             );
-            inspector.set_position(
-                (split_extent(&inspector, 795.0) - sizes.properties - 6.0).max(110.0),
-            );
+            let order = model.borrow();
+            let right = order.sections_in(native_docking::DockZone::Right);
+            let first = right.iter().position(|s| s.id == native_docking::DockId::Properties)
+                < right.iter().position(|s| s.id == native_docking::DockId::Solution);
+            inspector.set_position(right_split_position(
+                split_extent(&inspector, 795.0), sizes.properties, first,
+            ));
         }
     });
     let active_dock = Rc::new(Cell::new(None::<native_docking::DockId>));
@@ -1972,9 +1982,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
         let inspector = inspector.clone();
+        let model = dock_model.clone();
         move |position| {
             let mut next = sizes.get();
-            next.properties = (split_extent(&inspector, 795.0) - position - 6.0).max(0.0);
+            let order = model.borrow();
+            let right = order.sections_in(native_docking::DockZone::Right);
+            let first = right.iter().position(|s| s.id == native_docking::DockId::Properties)
+                < right.iter().position(|s| s.id == native_docking::DockId::Solution);
+            next.properties = if first { position.max(0.0) }
+                else { (split_extent(&inspector, 795.0) - position - 6.0).max(0.0) };
             next = next.sanitize();
             sizes.set(next);
             let _ = next.save(&path);
@@ -2108,6 +2124,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let tabs = right_tabs.clone();
         let active = right_active.clone();
         let inspector = inspector.clone();
+        let model = dock_model.clone();
         let active_dock = active_dock.clone();
         let refresh_docks = refresh_docks.clone();
         tab.on_pointer(move |event| {
@@ -2123,7 +2140,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     tab.redraw();
                 }
                 let height = split_extent(&inspector, 795.0);
-                inspector.set_position(if index == 0 {
+                let order = model.borrow();
+                let right = order.sections_in(native_docking::DockZone::Right);
+                let properties_first = right.iter().position(|s| s.id == native_docking::DockId::Properties)
+                    < right.iter().position(|s| s.id == native_docking::DockId::Solution);
+                let focused_first = (index == 0 && !properties_first)
+                    || (index == 1 && properties_first);
+                inspector.set_position(if focused_first {
                     (height - 200.0).max(110.0)
                 } else {
                     180.0
@@ -2142,6 +2165,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let model = dock_model.clone();
                 let path = dock_path.clone();
                 let refresh = refresh_docks.clone();
+                let pane_sizes = pane_sizes.clone();
                 let status = status.clone();
                 move |source, destination| {
                     use native_docking::DockId;
@@ -2166,6 +2190,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             status.set_text(&format!("Cannot save dock layout: {error}"));
                         }
                     }
+                    inspector.set_position(right_split_position(
+                        split_extent(&inspector, 795.0), pane_sizes.get().properties, properties_first,
+                    ));
                     refresh();
                     status.set_text("Tool panels reordered. Layout saved.");
                     true
