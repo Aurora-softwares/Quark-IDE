@@ -65,18 +65,30 @@ fn render_node(
     }
     let is_container = matches!(
         kind,
-        "ColumnPanel" | "RowPanel" | "GridPanel" | "Panel" |
-        "Tab" | "Tabs" | "ScrollView" | "Window" | "MenuBar" | "Menu"
+        "ColumnPanel"
+            | "RowPanel"
+            | "GridPanel"
+            | "Panel"
+            | "Tab"
+            | "Tabs"
+            | "ScrollView"
+            | "Window"
+            | "MenuBar"
+            | "Menu"
     );
-    let row = ui.stack(if is_container {
-        Orientation::Vertical
-    } else {
-        Orientation::Horizontal
-    }).map_err(|e| e.to_string())?;
+    let row = ui
+        .stack(if is_container {
+            Orientation::Vertical
+        } else {
+            Orientation::Horizontal
+        })
+        .map_err(|e| e.to_string())?;
     row.set_spacing(if is_container { 5.0 } else { 7.0 });
     // Compact, unobtrusive selector rather than a second full-sized button
     // repeating the text of every native control.
-    let select_row = ui.stack(Orientation::Horizontal).map_err(|e| e.to_string())?;
+    let select_row = ui
+        .stack(Orientation::Horizontal)
+        .map_err(|e| e.to_string())?;
     select_row.set_spacing(4.0);
     let choose = ui.button("◇").map_err(|e| e.to_string())?;
     choose.set_sizing(Sizing::new().width(Length::Fixed(28.0)));
@@ -85,9 +97,7 @@ fn render_node(
     choose.on_click(move || selected(selected_path.clone()));
     select_row.append(&choose);
     if is_container {
-        select_row.append(
-            &ui.label(&node_title(node)).map_err(|e| e.to_string())?,
-        );
+        select_row.append(&ui.label(&node_title(node)).map_err(|e| e.to_string())?);
     }
     if is_container {
         row.append(&select_row);
@@ -264,9 +274,14 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
     // itself is composed of platform-native widgets.
     let titlebar = ui.canvas().map_err(|e| e.to_string())?;
     titlebar.set_sizing(
-        Sizing::new().width(Length::Fixed(width)).height(Length::Fixed(34.0)),
+        Sizing::new()
+            .width(Length::Fixed(width))
+            .height(Length::Fixed(34.0)),
     );
-    let title = root.attribute("title").unwrap_or("Hydrogen Window").to_owned();
+    let title = root
+        .attribute("title")
+        .unwrap_or("Hydrogen Window")
+        .to_owned();
     let select = on_select.clone();
     titlebar.on_draw(move |paint| {
         paint.fill_rect(
@@ -278,7 +293,9 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
             naui::Color::rgb(0x70, 0x72, 0x7a),
         );
         paint.text(
-            &title, naui::Point::new(12.0, 9.0), 12.0,
+            &title,
+            naui::Point::new(12.0, 9.0),
+            12.0,
             naui::Color::rgb(0xf0, 0xf0, 0xf2),
         );
     });
