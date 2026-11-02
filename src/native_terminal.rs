@@ -27,11 +27,15 @@ pub fn default_shell() -> String {
 
 impl Session {
     pub fn spawn(directory: &Path) -> Result<Self, String> {
+        Self::spawn_shell(directory, &default_shell())
+    }
+
+    fn spawn_shell(directory: &Path, shell: &str) -> Result<Self, String> {
         let system = native_pty_system();
         let pair = system.openpty(PtySize {
             rows: 26, cols: 100, pixel_width: 0, pixel_height: 0,
         }).map_err(|error| format!("Cannot allocate a native PTY: {error}"))?;
-        let mut cmd = CommandBuilder::new(default_shell());
+        let mut cmd = CommandBuilder::new(shell);
         if directory.is_dir() { cmd.cwd(directory); }
         let child = pair.slave.spawn_command(cmd)
             .map_err(|error| format!("Cannot launch interactive shell: {error}"))?;
@@ -96,7 +100,7 @@ mod tests {
     #[test]
     fn pty_shell_is_live_and_accepts_multiple_inputs() {
         let temp = tempfile::tempdir().unwrap();
-        let session = Session::spawn(temp.path()).unwrap();
+        let session = Session::spawn_shell(temp.path(), "/bin/sh").unwrap();
         session.send(b"printf __QUARK_PTY_ONE__\\n\r").unwrap();
         session.send(b"printf __QUARK_PTY_TWO__\\n\r").unwrap();
         let until = std::time::Instant::now() + std::time::Duration::from_secs(4);
