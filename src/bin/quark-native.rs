@@ -2662,6 +2662,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         header.pin.on_click({
             let refresh_docks = refresh_docks.clone();
             let model = dock_model.clone();
+            #[cfg(target_os = "linux")]
+            let auto_hide_popovers = auto_hide_popovers.clone();
             let path = dock_path.clone();
             let status = status.clone();
             let pin = header.pin.clone();
@@ -2676,6 +2678,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     next
                 };
                 pin.set_text(if pinned { "◆" } else { "◇" });
+                #[cfg(target_os = "linux")]
+                if let Some(popup) = auto_hide_popovers.borrow().get(&id).cloned() {
+                    if popup.is_visible() {
+                        use gtk4::prelude::*;
+                        popup.popdown();
+                    }
+                }
                 refresh_docks();
                 status.set_text(if pinned {
                     "Panel pinned in the workspace."
@@ -2868,6 +2877,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         #[cfg(target_os = "linux")]
         let floating_windows = floating_windows.clone();
         #[cfg(target_os = "linux")]
+        let auto_hide_popovers = auto_hide_popovers.clone();
+        #[cfg(target_os = "linux")]
         let route_dock = route_dock.clone();
         #[cfg(target_os = "linux")]
         let inspector = inspector.clone();
@@ -2894,7 +2905,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             #[cfg(target_os = "linux")]
             {
                 use gtk4::prelude::*;
-                // Close detached tools first so they have a valid native host.
+                // Dismiss temporary overlays and close detached tools first.
+                let popups = auto_hide_popovers.borrow().values().cloned().collect::<Vec<_>>();
+                for popup in popups { popup.popdown(); }
                 let windows = floating_windows.borrow().values().cloned().collect::<Vec<_>>();
                 for window in windows { window.close(); }
                 // Restore every live panel to its original native parent.
