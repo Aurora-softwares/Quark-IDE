@@ -2155,24 +2155,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         native_dock_runtime::install_preview_css();
         // Existing layouts may already contain cross-zone moves from older
         // builds. Apply the saved coordinates to the real native widget tree.
-        for id in [
-            native_docking::DockId::Toolbox,
-            native_docking::DockId::Symbols,
-            native_docking::DockId::Search,
-            native_docking::DockId::Server,
-            native_docking::DockId::Data,
-            native_docking::DockId::Solution,
-            native_docking::DockId::Properties,
-            native_docking::DockId::Output,
-            native_docking::DockId::ErrorList,
-            native_docking::DockId::Debug,
-            native_docking::DockId::TestResults,
-            native_docking::DockId::FindResults,
-        ] {
-            if let Some(zone) = dock_model.borrow().section(id).map(|s| s.zone) {
-                if zone != id.default_zone() { route_dock(id, zone); }
+        // Rehydrate relocated panels in saved visual order, not enum order.
+        // GTK Box.append keeps this ordering for each sidecar zone.
+        let restored = native_docking::DockZone::ALL.into_iter()
+            .flat_map(|zone| {
+                dock_model.borrow().sections_in(zone).iter()
+                    .map(|section| (section.id, section.zone))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for (id, zone) in restored {
+            if zone != id.default_zone() {
+                route_dock(id, zone);
             }
         }
+
         for (zone, widget) in [
             (native_docking::DockZone::Left, left_side.native_widget()),
             (native_docking::DockZone::Right, right_region.native_widget()),
