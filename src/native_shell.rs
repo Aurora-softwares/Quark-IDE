@@ -15,7 +15,7 @@ pub const MENUS: &[(&str, &[&str])] = &[
             "Exit",
         ],
     ),
-    ("Edit", &["Undo", "Redo", "Cut", "Copy", "Paste", "Find"]),
+    ("Edit", &["Undo", "Redo", "Cut", "Copy", "Paste", "Find", "Format Document"]),
     (
         "View",
         &[
