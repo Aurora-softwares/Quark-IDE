@@ -993,6 +993,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 .native_widget()
                 .downcast::<gtk4::DrawingArea>()
                 .expect("naui GTK Canvas must use GtkDrawingArea");
+            drawing_area.add_css_class("quark-side-tab");
             let mode = tab_mode.clone();
             let active = active_side_tab.clone();
             drawing_area.set_draw_func(move |area, cairo, _width, height| {
@@ -1981,6 +1982,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 .native_widget()
                 .downcast::<gtk4::DrawingArea>()
                 .expect("naui GTK Canvas must use GtkDrawingArea");
+            drawing_area.add_css_class("quark-side-tab");
             let active = right_active.clone();
             drawing_area.set_draw_func(move |area, cairo, _width, allocated_height| {
                 if active.get() == index {
