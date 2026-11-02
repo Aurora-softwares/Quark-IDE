@@ -490,44 +490,57 @@ fn solution_items(
     native_solution_explorer::project(&paths, root, &title, search, descending, list_mode)
 }
 
-fn flatten_symbols(node: &symbols::SymbolNode, parent: &str, output: &mut Vec<ListItem>) {
+fn symbol_tree_items(node: &symbols::SymbolNode) -> Vec<TreeItem> {
+    let mut rows = Vec::new();
+    // Namespace and type containers are real tree nodes; matching type
+    // declarations become their own parent, not a separate flattened label.
+    for (name, branch) in &node.branches {
+        let caption = node
+            .items
+            .iter()
+            .find(|item| item.name == *name)
+            .map(|item| format!("◇ {} ({})", item.name, item.kind))
+            .unwrap_or_else(|| format!("▣ {name}"));
+        rows.push(
+            TreeItem::new(caption)
+                .expanded(true)
+                .children(symbol_tree_items(branch)),
+        );
+    }
     for item in &node.items {
-        output.push(ListItem::new(format!(
-            "{}{} ({})",
-            parent, item.name, item.kind
-        )));
+        if node.branches.contains_key(&item.name) {
+            continue;
+        }
+        let glyph = match item.kind {
+            "class" | "struct" | "interface" | "enum" => "◇",
+            "method" | "function" => "ƒ",
+            "field" | "variable" => "•",
+            _ => "▸",
+        };
+        rows.push(TreeItem::new(format!("{glyph} {} ({})", item.name, item.kind)));
     }
-    for (name, child) in &node.branches {
-        flatten_symbols(child, &format!("{parent}{name}."), output);
-    }
+    rows
 }
 
-fn project_symbols(ide: &Ide) -> Vec<ListItem> {
+/// The Symbols pane follows the *open editor document*, including unsaved
+/// edits, instead of mixing declarations from every source in the project.
+fn project_symbols(ide: &Ide) -> Vec<TreeItem> {
+    let Some(document) = ide.document.as_ref() else {
+        return vec![TreeItem::new("Open a .hy file to inspect symbols")];
+    };
     let mut tree = symbols::SymbolNode::default();
-    if let Some(project) = &ide.project {
-        for path in &project.sources {
-            if path.extension().and_then(|e| e.to_str()) != Some("hy") {
-                continue;
-            }
-            let source = ide
-                .document
-                .as_ref()
-                .filter(|doc| doc.path == *path)
-                .map(|doc| doc.text.clone())
-                .or_else(|| fs::read_to_string(path).ok());
-            if let Some(source) = source {
-                symbols::add_source(&mut tree, path, &source);
-            }
-        }
-    } else if let Some(doc) = &ide.document {
-        symbols::add_source(&mut tree, &doc.path, &doc.text);
-    }
-    let mut output = Vec::new();
-    flatten_symbols(&tree, "", &mut output);
-    if output.is_empty() {
-        output.push(ListItem::new("No symbols found"));
-    }
-    output
+    symbols::add_source(&mut tree, &document.path, &document.text);
+    let name = document.path.file_name().unwrap_or_default().to_string_lossy();
+    let children = symbol_tree_items(&tree);
+    vec![
+        TreeItem::new(format!("◈ {name}"))
+            .expanded(true)
+            .children(if children.is_empty() {
+                vec![TreeItem::new("No symbols found")]
+            } else {
+                children
+            }),
+    ]
 }
 
 /// Present compiler and debugger output as ANSI-coloured read-only
@@ -1209,7 +1222,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     symbols_view.set_row_track(0, Track::Fixed(24.0));
     symbols_view.set_row_track(1, Track::FILL);
     symbols_view.attach(&ui.label("SYMBOLS")?, GridCell::new(0, 0));
-    let symbols_list = ui.list()?;
+    let symbols_list = ui.tree()?;
     symbols_list.set_sizing(Sizing::fill());
     symbols_list.set_items(&project_symbols(&state.borrow()));
     symbols_view.attach(&symbols_list, GridCell::new(0, 1));
