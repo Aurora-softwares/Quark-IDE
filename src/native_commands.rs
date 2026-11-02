@@ -396,13 +396,21 @@ mod tests {
         assert!(!result.success);
         // The launcher now reports the selected executable and working
         // directory rather than the previous generic build-start message.
-        assert!(result.text.contains("Could not start Hydrogen compiler"), "{}", result.text);
+        assert!(
+            result.text.contains("Could not start Hydrogen compiler"),
+            "{}",
+            result.text
+        );
         assert!(
             result.text.contains("a-compiler-that-does-not-exist-quark"),
             "{}",
             result.text
         );
-        assert!(result.text.contains("Working directory:"), "{}", result.text);
+        assert!(
+            result.text.contains("Working directory:"),
+            "{}",
+            result.text
+        );
         assert!(!dir.path().join(".quark/publish").exists());
         assert_eq!(fs::read(&plan.output).unwrap(), b"old stale binary");
     }

@@ -1884,16 +1884,25 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // Never display nested headers, pin icons or fold buttons in the
         // bottom tool area. One tab row serves every selected tool.
         for header in [
-            &output_controls, &output_page_controls, &error_controls,
-            &debug_controls, &test_controls, &find_controls,
+            &output_controls,
+            &output_page_controls,
+            &error_controls,
+            &debug_controls,
+            &test_controls,
+            &find_controls,
         ] {
             header.row.native_widget().set_visible(false);
         }
-        bottom_tabs.native_widget().add_css_class("quark-bottom-tabs");
+        bottom_tabs
+            .native_widget()
+            .add_css_class("quark-bottom-tabs");
         bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
         bottom_pages.native_widget().set_vexpand(true);
         output_scroll.native_widget().set_vexpand(true);
-        if let Ok(scroller) = output_scroll.native_widget().downcast::<gtk4::ScrolledWindow>() {
+        if let Ok(scroller) = output_scroll
+            .native_widget()
+            .downcast::<gtk4::ScrolledWindow>()
+        {
             scroller.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
             // Keyboard and wheel navigation advance by roughly one console
             // line, rather than jumping across the entire output pane.
@@ -1915,7 +1924,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 ".quark-console-output { font-family: monospace; font-size: 12px; color: @theme_fg_color; }                  .quark-bottom-tabs { border-bottom: 1px solid alpha(@theme_fg_color, 0.16); }"
             );
             gtk4::style_context_add_provider_for_display(
-                &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
     }
@@ -1954,7 +1965,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         right_rail.native_widget().set_valign(gtk4::Align::Start);
     }
     right_rail.set_sizing(
-        Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
+        Sizing::new()
+            .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
             .height(Length::Fixed(282.0)),
     );
     #[cfg(target_os = "linux")]
@@ -2425,11 +2437,26 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let bottom_section_headers = {
         use naui::Widget as _;
         [
-            (native_docking::DockId::Output, output_page_controls.row.native_widget()),
-            (native_docking::DockId::ErrorList, error_controls.row.native_widget()),
-            (native_docking::DockId::Debug, debug_controls.row.native_widget()),
-            (native_docking::DockId::TestResults, test_controls.row.native_widget()),
-            (native_docking::DockId::FindResults, find_controls.row.native_widget()),
+            (
+                native_docking::DockId::Output,
+                output_page_controls.row.native_widget(),
+            ),
+            (
+                native_docking::DockId::ErrorList,
+                error_controls.row.native_widget(),
+            ),
+            (
+                native_docking::DockId::Debug,
+                debug_controls.row.native_widget(),
+            ),
+            (
+                native_docking::DockId::TestResults,
+                test_controls.row.native_widget(),
+            ),
+            (
+                native_docking::DockId::FindResults,
+                find_controls.row.native_widget(),
+            ),
         ]
     };
     #[cfg(target_os = "linux")]
@@ -2623,8 +2650,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     .native_widget()
                     .set_visible(bottom_original_visible);
                 for (id, header) in &bottom_section_headers {
-                    let in_bottom = layout.section(*id).is_some_and(|s|
-                        s.zone == native_docking::DockZone::Bottom);
+                    let in_bottom = layout
+                        .section(*id)
+                        .is_some_and(|s| s.zone == native_docking::DockZone::Bottom);
                     // Docked bottom pages use only the shared tab strip.
                     // Moving a tool to a side area restores its own header.
                     header.set_visible(!in_bottom);

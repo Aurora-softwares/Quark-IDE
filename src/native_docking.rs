@@ -162,9 +162,15 @@ impl Default for DockLayout {
             // The user can pin any section to reserve its dock space.
             let pinned = matches!(
                 id,
-                DockId::Toolbox | DockId::Symbols | DockId::Solution | DockId::Properties
-                    | DockId::Output | DockId::ErrorList | DockId::Debug
-                    | DockId::TestResults | DockId::FindResults
+                DockId::Toolbox
+                    | DockId::Symbols
+                    | DockId::Solution
+                    | DockId::Properties
+                    | DockId::Output
+                    | DockId::ErrorList
+                    | DockId::Debug
+                    | DockId::TestResults
+                    | DockId::FindResults
             );
             layout.register(DockSection::new(id, id.default_zone()).pinned(pinned));
         }
@@ -303,8 +309,11 @@ impl DockLayout {
                     }
                     if matches!(
                         section.id,
-                        DockId::Output | DockId::ErrorList | DockId::Debug
-                            | DockId::TestResults | DockId::FindResults
+                        DockId::Output
+                            | DockId::ErrorList
+                            | DockId::Debug
+                            | DockId::TestResults
+                            | DockId::FindResults
                     ) {
                         // Bottom tabs have no fold or pin controls. Their
                         // display is governed by the selected bottom tab.
