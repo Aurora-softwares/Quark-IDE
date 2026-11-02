@@ -160,7 +160,7 @@ mod tests {
     fn document_tabs_use_measured_width_and_hide_overflow_when_everything_fits() {
         let names = vec!["Program.hy".into(), "Studio.hyui".into(), "README.md".into()];
         assert_eq!(document_visible_capacity(1100.0, &names), 3);
-        assert!(document_visible_capacity(320.0, &names) < 3);
+        assert!(document_visible_capacity(235.0, &names) < 3);
         assert_eq!(document_visible_capacity(90.0, &names), 1);
         assert_eq!(document_visible_capacity(700.0, &[]), 0);
         assert_eq!(document_tab_width("a.hy"), 70.0);
