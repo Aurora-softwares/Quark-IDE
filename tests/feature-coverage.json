@@ -1740,7 +1740,7 @@
       "category": "Native platform",
       "feature": "Cross-platform visual designer layout compatibility, hit testing, persistence and validation",
       "tests": [
-        "native_model::tests::layout_is_compatible_with_existing_quarkui_file",
+        "native_model::tests::layout_round_trips_hydrogen_hyui_xml",
         "native_model::tests::untrusted_layouts_are_bounded_and_invalid_geometry_is_rejected",
         "native_model::tests::layout_save_refuses_external_modification"
       ]
@@ -1898,7 +1898,7 @@
       "category": "Native shell",
       "feature": "Compact vertically written native tool-window tabs and Hydrogen cyan/orbital blue/Quark violet accent without replacing OS widgets",
       "tests": [
-        "native_shell::tests::professional_side_rail_is_compact_and_uses_native_focusable_tabs",
+        "native_shell::tests::side_rail_presets_are_compact_and_context_sensitive",
         "native_shell::tests::hydrogen_quark_accents_are_distinct_and_start_tab_is_not_an_ide_document"
       ]
     },
@@ -1910,6 +1910,18 @@
         "native_layout::tests::grip_drags_accumulate_against_current_size_after_handle_reflows",
         "native_layout::tests::grip_hit_target_is_accessible_and_keyboard_adjustments_preserve_fixed_tracks",
         "native_layout::tests::increasing_window_size_expands_only_the_editor"
+      ]
+    },
+    {
+      "id": "native-cross-platform-dock-registry",
+      "category": "Native shell",
+      "feature": "Register dock sections once, move between left/right/bottom zones, persist pin/collapse state and preview valid drop targets without corrupting layout",
+      "tests": [
+        "native_docking::tests::every_section_has_an_explicit_default_zone_and_unique_id",
+        "native_docking::tests::registrations_and_cross_zone_moves_are_stable",
+        "native_docking::tests::auto_hide_only_applies_to_unpinned_sections_and_drops_are_validated",
+        "native_docking::tests::drop_targets_are_distinct_and_the_editor_centre_is_not_a_dock",
+        "native_docking::tests::pin_and_collapse_survive_roundtrip"
       ]
     }
   ]
