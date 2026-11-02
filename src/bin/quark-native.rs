@@ -1980,16 +1980,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     if let Some(refresh) = reload_preview.borrow().as_ref() {
                         refresh();
                     }
-                    if state
-                        .borrow()
-                        .layout
-                        .as_ref()
-                        .is_some_and(|d| d.native_window)
-                    {
-                        design_heading.set_text("DESIGN");
-                    } else {
-                        design_heading.set_text("DESIGN");
-                    }
+                    design_heading.set_text("DESIGN");
                     let tabs = state.borrow().open_tabs();
                     let index = tabs
                         .iter()
