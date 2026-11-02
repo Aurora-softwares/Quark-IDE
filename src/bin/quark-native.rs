@@ -2361,6 +2361,58 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         );
     }
 
+    // Detached GTK windows retain the original live tool widget. Closing
+    // one reattaches it to the last saved docking zone without rebuilding.
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        let floating = Rc::new(RefCell::new(std::collections::HashSet::new()));
+        for (id, header, widget) in [
+            (native_docking::DockId::Toolbox, &toolbox_controls, toolbox.native_widget()),
+            (native_docking::DockId::Solution, &solution_controls, solution_pane.native_widget()),
+            (native_docking::DockId::Properties, &properties_controls, properties_pane.native_widget()),
+        ] {
+            let model = dock_model.clone();
+            let route = route_dock.clone();
+            let refresh = refresh_docks.clone();
+            let open = floating.clone();
+            let status = status.clone();
+            header.float.on_click(move || {
+                if !open.borrow_mut().insert(id) {
+                    status.set_text("This tool already has a floating window.");
+                    return;
+                }
+                let source_zone = model.borrow().section(id).map(|section| section.zone)
+                    .unwrap_or(id.default_zone());
+                let redock = {
+                    let open = open.clone();
+                    let route = route.clone();
+                    let refresh = refresh.clone();
+                    let status = status.clone();
+                    Rc::new(move |id: native_docking::DockId| {
+                        open.borrow_mut().remove(&id);
+                        if route(id, source_zone) {
+                            refresh();
+                            status.set_text(&format!("{} docked again.", id.title()));
+                        } else {
+                            status.set_text("Could not restore the floating tool window.");
+                        }
+                    })
+                };
+                if native_dock_runtime::float_panel(id, &widget, redock).is_some() {
+                    status.set_text(&format!("{} detached to a native window.", id.title()));
+                } else {
+                    open.borrow_mut().remove(&id);
+                    status.set_text("Cannot detach this tool from its current host.");
+                }
+            });
+        }
+        // The bottom output group has several independently selected pages;
+        // do not detach that entire composite until every page has its own
+        // dock host and header.
+        output_controls.float.set_enabled(false);
+    }
+
     // Shared dock headers now own pin and collapse state. Persist settings
     // separately from sizes, so moving and hiding never destroys a user's
     // previous preferred dimensions.
