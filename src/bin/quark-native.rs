@@ -1050,10 +1050,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let design_surface = ui.grid()?;
     design_surface.set_sizing(Sizing::fill());
     design_surface.set_column_track(0, Track::FILL);
-    design_surface.set_row_track(0, Track::Fixed(26.0));
+    design_surface.set_row_track(0, Track::Fixed(34.0));
     design_surface.set_row_track(1, Track::FILL);
+    let design_header = ui.stack(Orientation::Horizontal)?;
+    design_header.set_spacing(9.0);
     let design_heading = ui.label("DESIGN")?;
-    design_surface.attach(&design_heading, GridCell::new(0, 0));
+    design_heading.set_color(naui::TextColor::Accent);
+    design_header.append(&design_heading);
+    let open_true_preview = ui.button("↗ Live OS preview")?;
+    design_header.append(&open_true_preview);
+    design_surface.attach(&design_header, GridCell::new(0, 0));
     #[cfg(target_os = "linux")]
     {
         use gtk4::prelude::*;
@@ -1125,6 +1131,46 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
+    // The Hydrogen runtime itself is the reference implementation for
+    // exact OS chrome, control spacing and responsive layout. It runs in
+    // its own genuine OS window instead of masquerading as an embedded
+    // preview. No shell interpolation, no automatic project file writes.
+    open_true_preview.on_click({
+        let state = state.clone();
+        let status = status.clone();
+        move || {
+            let (path, draft) = {
+                let ide = state.borrow();
+                let Some(doc) = ide.layout.as_ref() else {
+                    status.set_text("Open a Hydrogen .hyui document first");
+                    return;
+                };
+                (doc.path.clone(), doc.source().ok())
+            };
+            if !path.exists() {
+                status.set_text("Save the Hydrogen UI file before opening its native preview");
+                return;
+            }
+            if let Some(draft) = draft {
+                if std::fs::read_to_string(&path).ok().as_deref() != Some(draft.as_str()) {
+                    status.set_text("Save XML Source changes before launching the exact OS preview");
+                    return;
+                }
+            }
+            let runtime = std::env::var("QUARK_HYUI_RUNTIME")
+                .unwrap_or_else(|_| "hyui".to_owned());
+            match std::process::Command::new(&runtime)
+                .arg("--document")
+                .arg(&path)
+                .spawn()
+            {
+                Ok(_child) => status.set_text("Hydrogen opened a native OS preview window"),
+                Err(error) => status.set_text(&format!(
+                    "Cannot start native preview ({error}). Set QUARK_HYUI_RUNTIME to your hyui executable."
+                )),
+            }
+        }
+    });
     xml_editor.on_change({
         let state = state.clone();
         let canvas = canvas.clone();
@@ -1430,6 +1476,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let portable_scroll = portable_scroll.clone();
         let design_surface = design_surface.clone();
         let design_heading = design_heading.clone();
+        let design_header = design_header.clone();
         let canvas = canvas.clone();
         let property_editor = property_editor.clone();
         let flat_properties = flat_properties.clone();
@@ -1447,7 +1494,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let xml = layout.source().ok();
             drop(doc);
             design_surface.clear();
-            design_surface.attach(&design_heading, GridCell::new(0, 0));
+            design_surface.attach(&design_header, GridCell::new(0, 0));
             property_editor.clear();
             if is_native {
                 property_editor.append(&native_property_scroll);
