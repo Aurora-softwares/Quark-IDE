@@ -6,9 +6,9 @@ license = "MIT"
 description = "Native Hydrogen development environment"
 
 [dependencies]
-eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
-egui_extras = { version = "0.31", features = ["syntect"] }
-rfd = "0.15"
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"], optional = true }
+egui_extras = { version = "0.31", features = ["syntect"], optional = true }
+rfd = { version = "0.15", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 quick-xml = { version = "0.38", features = ["serialize"] }
@@ -33,12 +33,16 @@ strip = true
 
 
 [features]
-default = []
+# The supported application is always the OS-native frontend.
+# The previous egui application is isolated for regression/migration only.
+default = ["native-ui"]
 native-ui = ["dep:naui", "dep:gtk4", "dep:libadwaita"]
+legacy-ui = ["dep:eframe", "dep:egui_extras", "dep:rfd"]
 
 [[bin]]
 name = "quark-ide"
 path = "src/main.rs"
+required-features = ["legacy-ui"]
 
 [[bin]]
 name = "quark-native"
