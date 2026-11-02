@@ -12,10 +12,10 @@ mod hydrogen;
 mod native_commands;
 #[cfg(test)]
 #[allow(dead_code)]
-mod native_launcher;
+mod native_docking;
 #[cfg(test)]
 #[allow(dead_code)]
-mod native_docking;
+mod native_launcher;
 #[cfg(test)]
 #[allow(dead_code)]
 mod native_layout;
