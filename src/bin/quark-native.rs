@@ -18,6 +18,7 @@ mod native_compiler;
 #[path = "../native_console.rs"]
 mod native_console;
 #[cfg(target_os = "linux")]
+#[allow(dead_code)] // The multi-panel GTK stack is staged for the remaining dock zones.
 #[path = "../native_dock_runtime.rs"]
 mod native_dock_runtime;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
