@@ -63,17 +63,37 @@ fn render_node(
         parent.append(&choose);
         return Ok(());
     }
-    let row = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-    row.set_spacing(3.0);
-    // Every element, including labels and layout containers, has a selection
-    // target. Buttons additionally select when their native face is clicked.
-    let choose = ui
-        .button(&format!("◇ {}", node_title(node)))
-        .map_err(|e| e.to_string())?;
+    let is_container = matches!(
+        kind,
+        "ColumnPanel" | "RowPanel" | "GridPanel" | "Panel" |
+        "Tab" | "Tabs" | "ScrollView" | "Window" | "MenuBar" | "Menu"
+    );
+    let row = ui.stack(if is_container {
+        Orientation::Vertical
+    } else {
+        Orientation::Horizontal
+    }).map_err(|e| e.to_string())?;
+    row.set_spacing(if is_container { 5.0 } else { 7.0 });
+    // Compact, unobtrusive selector rather than a second full-sized button
+    // repeating the text of every native control.
+    let select_row = ui.stack(Orientation::Horizontal).map_err(|e| e.to_string())?;
+    select_row.set_spacing(4.0);
+    let choose = ui.button("◇").map_err(|e| e.to_string())?;
+    choose.set_sizing(Sizing::new().width(Length::Fixed(28.0)));
     let selected = on_select.clone();
     let selected_path = path.clone();
     choose.on_click(move || selected(selected_path.clone()));
-    row.append(&choose);
+    select_row.append(&choose);
+    if is_container {
+        select_row.append(
+            &ui.label(&node_title(node)).map_err(|e| e.to_string())?,
+        );
+    }
+    if is_container {
+        row.append(&select_row);
+    } else {
+        row.append(&choose);
+    }
 
     match kind {
         "ColumnPanel" | "Panel" | "Tab" | "ScrollView" | "Window" => {
@@ -229,8 +249,8 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
         return Err("Expected a Hydrogen <Window> UI".into());
     }
     let outer = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-    outer.set_spacing(8.0);
-    outer.set_padding(Padding::all(14.0));
+    outer.set_spacing(0.0);
+    outer.set_padding(Padding::all(18.0));
     let window = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     window.set_spacing(8.0);
     window.set_padding(Padding::all(12.0));
@@ -240,16 +260,34 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
         .unwrap_or(720.0)
         .clamp(320.0, 1400.0);
     window.set_sizing(Sizing::new().width(Length::Fixed(width)));
-    outer.append(
-        &ui.label(root.attribute("title").unwrap_or("Hydrogen Window"))
-            .map_err(|e| e.to_string())?,
+    // A visible window frame, kept inside the design viewport. The body
+    // itself is composed of platform-native widgets.
+    let titlebar = ui.canvas().map_err(|e| e.to_string())?;
+    titlebar.set_sizing(
+        Sizing::new().width(Length::Fixed(width)).height(Length::Fixed(34.0)),
     );
-    let choose_window = ui
-        .button("Select window properties")
-        .map_err(|e| e.to_string())?;
-    let selected = on_select.clone();
-    choose_window.on_click(move || selected(Vec::new()));
-    window.append(&choose_window);
+    let title = root.attribute("title").unwrap_or("Hydrogen Window").to_owned();
+    let select = on_select.clone();
+    titlebar.on_draw(move |paint| {
+        paint.fill_rect(
+            naui::Rect::new(0.0, 0.0, paint.width(), paint.height()),
+            naui::Color::rgb(0x45, 0x47, 0x50),
+        );
+        paint.fill_rect(
+            naui::Rect::new(0.0, 33.0, paint.width(), 1.0),
+            naui::Color::rgb(0x70, 0x72, 0x7a),
+        );
+        paint.text(
+            &title, naui::Point::new(12.0, 9.0), 12.0,
+            naui::Color::rgb(0xf0, 0xf0, 0xf2),
+        );
+    });
+    titlebar.on_pointer(move |event| {
+        if event.phase == naui::PointerPhase::Down {
+            select(Vec::new());
+        }
+    });
+    outer.append(&titlebar);
     render_children(ui, &window, root, &[], &on_select)?;
     outer.append(&window);
     Ok(outer)
