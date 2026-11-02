@@ -784,7 +784,8 @@ type DockRefreshHook = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     #[cfg(not(target_os = "linux"))]
     native_preferences_portable::apply_saved_theme(
-        ui, &workspace_file().with_file_name("native-preferences.json")
+        ui,
+        &workspace_file().with_file_name("native-preferences.json"),
     );
     // Reuse the launcher window. Creating an AppKit window from a button
     // callback and immediately closing the old one can lose activation.
@@ -2150,7 +2151,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // Never display nested headers, pin icons or fold buttons in the
         // bottom tool area. One tab row serves every selected tool.
         for header in [
-            &output_controls,
+            &_output_controls,
             &output_page_controls,
             &error_controls,
             &debug_controls,
@@ -5257,7 +5258,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let status = status.clone();
             move |(): ()| {
                 if let Err(error) = native_preferences_portable::show(
-                    &ui, workspace_file().with_file_name("native-preferences.json")
+                    &ui,
+                    workspace_file().with_file_name("native-preferences.json"),
                 ) {
                     status.set_text(&format!("Cannot open native settings: {error}"));
                 }
