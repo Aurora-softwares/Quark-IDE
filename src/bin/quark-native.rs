@@ -3266,42 +3266,43 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     #[cfg(target_os = "linux")]
     let dock_widgets = {
         use naui::Widget as _;
+        use gtk4::glib::object::Cast;
         [
-            (native_docking::DockId::Toolbox, toolbox.native_widget()),
+            (native_docking::DockId::Toolbox, toolbox.size_bin().upcast::<gtk4::Widget>()),
             (
                 native_docking::DockId::Symbols,
-                symbols_section.native_widget(),
+                symbols_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Search,
-                code_search_view.native_widget(),
+                code_search_view.size_bin().upcast::<gtk4::Widget>(),
             ),
-            (native_docking::DockId::Server, server_view.native_widget()),
-            (native_docking::DockId::Data, data_view.native_widget()),
+            (native_docking::DockId::Server, server_view.size_bin().upcast::<gtk4::Widget>()),
+            (native_docking::DockId::Data, data_view.size_bin().upcast::<gtk4::Widget>()),
             (
                 native_docking::DockId::Solution,
-                solution_pane.native_widget(),
+                solution_pane.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Properties,
-                properties_pane.native_widget(),
+                properties_pane.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Output,
-                output_section.native_widget(),
+                output_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::ErrorList,
-                error_section.native_widget(),
+                error_section.size_bin().upcast::<gtk4::Widget>(),
             ),
-            (native_docking::DockId::Debug, debug_section.native_widget()),
+            (native_docking::DockId::Debug, debug_section.size_bin().upcast::<gtk4::Widget>()),
             (
                 native_docking::DockId::TestResults,
-                test_section.native_widget(),
+                test_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::FindResults,
-                find_section.native_widget(),
+                find_section.size_bin().upcast::<gtk4::Widget>(),
             ),
         ]
     };
@@ -3774,66 +3775,67 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     #[cfg(target_os = "linux")]
     {
         use naui::Widget as _;
+        use gtk4::glib::object::Cast;
         for (id, header, widget) in [
             (
                 native_docking::DockId::Toolbox,
                 &toolbox_controls,
-                toolbox.native_widget(),
+                toolbox.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Symbols,
                 &symbols_controls,
-                symbols_section.native_widget(),
+                symbols_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Search,
                 &search_controls,
-                code_search_view.native_widget(),
+                code_search_view.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Server,
                 &server_controls,
-                server_view.native_widget(),
+                server_view.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Data,
                 &data_controls,
-                data_view.native_widget(),
+                data_view.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Solution,
                 &solution_controls,
-                solution_pane.native_widget(),
+                solution_pane.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Properties,
                 &properties_controls,
-                properties_pane.native_widget(),
+                properties_pane.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Output,
                 &output_page_controls,
-                output_section.native_widget(),
+                output_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::ErrorList,
                 &error_controls,
-                error_section.native_widget(),
+                error_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::Debug,
                 &debug_controls,
-                debug_section.native_widget(),
+                debug_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::TestResults,
                 &test_controls,
-                test_section.native_widget(),
+                test_section.size_bin().upcast::<gtk4::Widget>(),
             ),
             (
                 native_docking::DockId::FindResults,
                 &find_controls,
-                find_section.native_widget(),
+                find_section.size_bin().upcast::<gtk4::Widget>(),
             ),
         ] {
             let model = dock_model.clone();
