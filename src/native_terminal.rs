@@ -17,7 +17,11 @@ use std::{
 /// non-GTK shell input interactive, including backspaces, without executing
 /// a fresh command for each change. Both strings must be valid UTF-8.
 pub fn typed_input_delta(previous: &str, next: &str) -> Vec<u8> {
-    let prefix = previous.chars().zip(next.chars()).take_while(|(a, b)| a == b).count();
+    let prefix = previous
+        .chars()
+        .zip(next.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
     let removed = previous.chars().count() - prefix;
     let inserted = next.chars().skip(prefix).collect::<String>();
     let mut input = vec![0x7f; removed];
@@ -27,8 +31,12 @@ pub fn typed_input_delta(previous: &str, next: &str) -> Vec<u8> {
 
 pub enum Input {
     Bytes(Vec<u8>),
-    #[allow(dead_code)] // Created by GTK viewport callbacks; other native backends use fixed-size PTYs.
-    Resize { rows: u16, cols: u16 },
+    #[allow(dead_code)]
+    // Created by GTK viewport callbacks; other native backends use fixed-size PTYs.
+    Resize {
+        rows: u16,
+        cols: u16,
+    },
 }
 
 pub struct Session {
