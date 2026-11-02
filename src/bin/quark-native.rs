@@ -1252,7 +1252,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 if let Ok(navigator) = ui.combo_box() {
                     let labels: Vec<_> = paths.iter().map(|(_, name)| name.as_str()).collect();
                     navigator.set_items(&labels);
-                    if let Some(index) = paths.iter().position(|(candidate, _)| candidate == &path) {
+                    if let Some(index) = paths.iter().position(|(candidate, _)| candidate == &path)
+                    {
                         navigator.set_selected(index);
                     }
                     let paths: Vec<_> = paths.into_iter().map(|(path, _)| path).collect();
@@ -1371,10 +1372,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 portable_preview.clear();
                 if let Some(xml) = xml {
                     match native_portable_preview::render(
-                        &ui, &xml, select_native_element.clone(),
+                        &ui,
+                        &xml,
+                        select_native_element.clone(),
                         design_tab_selection.clone(),
-                    )
-                    {
+                    ) {
                         Ok(view) => portable_preview.append(&view),
                         Err(error) => {
                             status.set_text(&format!("Cannot render Hydrogen UI: {error}"))
@@ -2041,7 +2043,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if !tabs.is_empty() {
                 document_bar.set_column_track(
                     1,
-                    Track::Fixed(if tabs.len() > VISIBLE_TABS { 122.0 } else { 0.0 }),
+                    Track::Fixed(if tabs.len() > VISIBLE_TABS {
+                        122.0
+                    } else {
+                        0.0
+                    }),
                 );
                 centre.append(&document_bar);
                 centre.append(&tab_accent);
@@ -2179,7 +2185,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let selected_xml_path = selected_xml_path.clone();
         let reload_preview = reload_preview.clone();
         move |path| {
-            let different_document = state.borrow().layout.as_ref()
+            let different_document = state
+                .borrow()
+                .layout
+                .as_ref()
                 .is_none_or(|document| document.path != path);
             let result = state.borrow_mut().open_design(&path);
             if result.is_ok() && different_document {
