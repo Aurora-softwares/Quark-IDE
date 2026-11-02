@@ -4247,12 +4247,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (6, 2) => status.set_text("No native debug session is running."),
             (7, 0) => show_bottom(3),
             (7, 1) => status.set_text("Test execution integration is planned."),
-            (8, 0) => {
-                show_bottom(1);
-                status.set_text(
-                    "Static analysis is available through Hydrogen check in the legacy IDE.",
-                );
-            }
+            (8, 0) => task_action(native_commands::Task::Check),
             (9, 0) => {
                 #[cfg(target_os = "linux")]
                 native_preferences::show(workspace_file().with_file_name("native-preferences.json"));
