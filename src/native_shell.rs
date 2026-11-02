@@ -61,6 +61,45 @@ pub const SIDE_TAB_HEIGHTS: [f64; 3] = [118.0, 106.0, 86.0];
 pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
 pub const CODE_SIDE_TABS: [&str; 2] = ["SYMBOLS", "SEARCH"];
 
+/// The right-hand document controls occupy 122 logical pixels only while
+/// the tabs genuinely overflow the available centre width.
+pub const DOCUMENT_OVERFLOW_WIDTH: f64 = 122.0;
+
+/// Match the actual tab sizes used by the native shell.
+pub fn document_tab_width(filename: &str) -> f64 {
+    (filename.chars().count() as f64 * 7.0 + 20.0).clamp(70.0, 144.0)
+}
+
+/// Determine how many file tabs fit at the current measured editor width.
+/// Unconstrained widths (before initial layout) get a conservative fallback.
+pub fn document_visible_capacity(width: f64, filenames: &[String]) -> usize {
+    if filenames.is_empty() {
+        return 0;
+    }
+    let width = if width.is_finite() && width >= 80.0 {
+        width
+    } else {
+        620.0
+    };
+    let total = filenames.iter().map(|name| document_tab_width(name)).sum::<f64>()
+        + (filenames.len().saturating_sub(1) as f64 * 3.0);
+    if total <= width {
+        return filenames.len();
+    }
+    let budget = (width - DOCUMENT_OVERFLOW_WIDTH - 8.0).max(70.0);
+    let mut used = 0.0;
+    let mut count = 0;
+    for name in filenames {
+        let next = document_tab_width(name) + if count > 0 { 3.0 } else { 0.0 };
+        if count > 0 && used + next > budget {
+            break;
+        }
+        used += next;
+        count += 1;
+    }
+    count.max(1)
+}
+
 /// The document switcher and scroll controls are hidden until needed.
 pub fn document_overflow(open_count: usize, visible_capacity: usize) -> bool {
     visible_capacity > 0 && open_count > visible_capacity
@@ -115,6 +154,18 @@ mod tests {
         assert!(!document_overflow(3, 3));
         assert!(document_overflow(4, 3));
         assert!(!document_overflow(4, 0));
+    }
+
+    #[test]
+    fn document_tabs_use_measured_width_and_hide_overflow_when_everything_fits() {
+        let names = vec!["Program.hy".into(), "Studio.hyui".into(), "README.md".into()];
+        assert_eq!(document_visible_capacity(1100.0, &names), 3);
+        assert!(document_visible_capacity(320.0, &names) < 3);
+        assert_eq!(document_visible_capacity(90.0, &names), 1);
+        assert_eq!(document_visible_capacity(700.0, &[]), 0);
+        assert_eq!(document_tab_width("a.hy"), 70.0);
+        assert_eq!(document_tab_width(&"x".repeat(50)), 144.0);
+        assert_eq!(document_visible_capacity(f64::NAN, &names), 3);
     }
 
     #[test]
