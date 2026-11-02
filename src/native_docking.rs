@@ -507,6 +507,53 @@ mod tests {
     }
 
     #[test]
+    fn all_twelve_tools_move_to_each_native_zone_and_restore() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = directory.path().join("movable-docks.json");
+        for id in DockId::ALL {
+            for zone in DockZone::ALL {
+                let mut layout = DockLayout::default();
+                assert_eq!(layout.section(id).unwrap().zone, id.default_zone());
+                if zone != id.default_zone() {
+                    assert!(layout.move_to(id, zone));
+                }
+                layout.pin(id, true);
+                layout.save(&file).unwrap();
+                let loaded = DockLayout::open(&file).unwrap();
+                assert_eq!(loaded.sections.len(), DockId::ALL.len());
+                assert_eq!(loaded.section(id).unwrap().zone, zone);
+                assert!(loaded.visible(id, None));
+                assert_eq!(
+                    loaded.sections.iter().filter(|section| section.id == id).count(),
+                    1,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn restoring_default_layout_removes_cross_zone_and_custom_pin_state() {
+        let mut layout = DockLayout::default();
+        for id in DockId::ALL {
+            let zone = match id.default_zone() {
+                DockZone::Left => DockZone::Right,
+                DockZone::Right => DockZone::Bottom,
+                DockZone::Bottom => DockZone::Left,
+            };
+            assert!(layout.move_to(id, zone));
+            layout.pin(id, !layout.section(id).unwrap().pinned);
+            layout.collapse(id, true);
+        }
+        layout = DockLayout::default();
+        for id in DockId::ALL {
+            assert_eq!(layout.section(id).unwrap().zone, id.default_zone());
+            assert!(!layout.section(id).unwrap().collapsed);
+        }
+        assert!(layout.section(DockId::Solution).unwrap().pinned);
+        assert!(!layout.section(DockId::Toolbox).unwrap().pinned);
+    }
+
+    #[test]
     fn pin_and_collapse_survive_roundtrip() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("dock-layout.json");
