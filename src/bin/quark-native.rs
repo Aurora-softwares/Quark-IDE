@@ -13,6 +13,12 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
+#[allow(dead_code)] // Runtime docking model is introduced progressively to every pane.
+#[path = "../native_docking.rs"]
+mod native_docking;
+#[allow(dead_code)] // Header widget factory shared by all native tool windows.
+#[path = "../native_dock_widgets.rs"]
+mod native_dock_widgets;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
@@ -663,6 +669,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let pane_path = workspace_file().with_file_name("native-pane-layout.json");
     let preferred = native_layout::PaneSizes::open(&pane_path).unwrap_or_default();
     let pane_sizes = Rc::new(Cell::new(preferred));
+    let dock_path = workspace_file().with_file_name("native-dock-layout.json");
+    let dock_model = Rc::new(RefCell::new(
+        native_docking::DockLayout::open(&dock_path).unwrap_or_default(),
+    ));
 
     // The familiar Visual Studio command strip lives below the native menu.
     // Configuration and architecture are visible now; native compiler flag
@@ -707,8 +717,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(7.0);
-    let toolbox_heading = ui.stack(Orientation::Horizontal)?;
-    toolbox_heading.append(&ui.label("TOOLBOX")?);
+    let toolbox_controls = native_dock_widgets::section_header(
+        ui, native_docking::DockId::Toolbox,
+    )?;
+    let toolbox_heading = toolbox_controls.row.clone();
     toolbox.append(&toolbox_heading);
     let toolbox_search = ui.search_input()?;
     toolbox_search.set_placeholder("Search controls");
@@ -1076,14 +1088,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let solution_pane = ui.stack(Orientation::Vertical)?;
     solution_pane.set_spacing(6.0);
-    let solution_heading = ui.stack(Orientation::Horizontal)?;
-    let heading = ui.label("SOLUTION EXPLORER")?;
-    heading.set_style(naui::TextStyle::Heading);
-    solution_heading.append(&heading);
+    let solution_controls = native_dock_widgets::section_header(
+        ui, native_docking::DockId::Solution,
+    )?;
+    let solution_heading = solution_controls.row.clone();
     let refresh_solution = ui.button("⟳")?;
-    let collapse_solution = ui.button("−")?;
+    let collapse_solution = solution_controls.collapse.clone();
     solution_heading.append(&refresh_solution);
-    solution_heading.append(&collapse_solution);
     solution_pane.append(&solution_heading);
     let solution_search = ui.search_input()?;
     solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
@@ -1099,10 +1110,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let properties_pane = ui.stack(Orientation::Vertical)?;
     properties_pane.set_spacing(7.0);
-    let properties_heading = ui.label("PROPERTIES")?;
-    properties_heading.set_style(naui::TextStyle::Heading);
-    let properties_toolbar = ui.stack(Orientation::Horizontal)?;
-    properties_toolbar.append(&properties_heading);
+    let properties_controls = native_dock_widgets::section_header(
+        ui, native_docking::DockId::Properties,
+    )?;
+    let properties_toolbar = properties_controls.row.clone();
     properties_pane.append(&properties_toolbar);
     let flat_properties = ui.stack(Orientation::Vertical)?;
     flat_properties.set_spacing(7.0);
@@ -1335,7 +1346,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     retain_trailing_size(&inspector);
 
     let bottom = ui.stack(Orientation::Vertical)?;
-    let bottom_tabs = ui.stack(Orientation::Horizontal)?;
+    let output_controls = native_dock_widgets::section_header(
+        ui, native_docking::DockId::Output,
+    )?;
+    let bottom_tabs = output_controls.row.clone();
     bottom_tabs.set_spacing(8.0);
     let output_tab = ui.button("Output")?;
     let errors_tab = ui.button("Error List")?;
