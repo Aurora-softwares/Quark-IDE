@@ -5,12 +5,12 @@
 //! This native frontend deliberately shares .hyproj, .hy and .hyui files
 //! instead of silently converting or rewriting them.
 
-#[allow(dead_code)] // Shared Rust lexer is independent of UI frameworks.
-#[path = "../hydrogen_lexer.rs"]
-mod hydrogen_lexer;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
+#[allow(dead_code)] // Shared Rust lexer is independent of UI frameworks.
+#[path = "../hydrogen_lexer.rs"]
+mod hydrogen_lexer;
 #[path = "../native_commands.rs"]
 mod native_commands;
 #[path = "../native_compiler.rs"]
@@ -2091,9 +2091,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     {
                         use gtk4::prelude::*;
                         use naui::Widget as _;
-                        apply_button.native_widget().set_tooltip_text(Some(
-                            "Apply this property to the Hydrogen UI XML",
-                        ));
+                        apply_button
+                            .native_widget()
+                            .set_tooltip_text(Some("Apply this property to the Hydrogen UI XML"));
                     }
                     apply_button.on_click(move || {
                         let chosen = draft.borrow().clone();
