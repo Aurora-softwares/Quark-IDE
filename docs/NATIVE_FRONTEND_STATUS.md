@@ -50,6 +50,30 @@ A selected host Hydrogen compiler is used to build an Australis `.hyproj`. The A
 - An editor-owned weak-widget timer checks the shared preferences for changes and reapplies wrapping and tab stops without requiring an editor reload; it stops when the view is destroyed. Syntax highlighting remains theme-aware.
 - Accurate scroll-synced line number gutters, direct AppKit/WinUI editor options and complete Settings parity still require implementation and visual review. This work does **not** close #93.
 
+## Designer interaction progress (Development, 2026-11-02)
+
+- The Linux native preview container is explicitly top-left aligned and the
+  embedded window no longer adds an 18px outer inset. XML width and height
+  still determine the preview's fixed window dimensions.
+- GTK design-mode pointer presses are claimed before native controls receive
+  their default click actions, and route to Properties selection. This needs
+  live GTK verification, including nested controls, keyboard activation and
+  focus. Do **not** describe all preview input as read-only yet.
+- Properties contains an independent **Design page** chooser for a selected
+  `Tabs` element. It uses the real `Tab.title` labels and a session-local
+  selection; `Tabs.value` remains the application's explicitly editable
+  startup tab. Added unit tests and feature-coverage entries.
+- **Still required for #98:** prevent keyboard/IME-driven control edits and
+  prove selection-only pointer/keyboard behaviour on AppKit and WinUI,
+  confirm actual value inputs remain persistent across save/reopen.
+- **Still required for #99 / #89:** replace the hard-coded simulated titlebar
+  and fixed visual appearance with a theme-adaptive, reusable Hydrogen
+  runtime renderer and compare real GTK/AppKit/WinUI screenshots against
+  built apps. Current native widgets are not sufficient evidence of exact
+  Hydrogen theme or tabs parity.
+- All task-status changes await current CI and native manual acceptance.
+  This is partial implementation, not closure of #98, #99 or #89.
+
 ## Required checks before any Release merge
 
 Run on each supported OS, using a compatible Rust toolchain:
