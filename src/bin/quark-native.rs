@@ -1918,6 +1918,120 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    // The same model that persists pinned state now controls *actual* GTK
+    // pane visibility. Auto-hidden regions retain narrow native tab rails;
+    // restoring one reads its last saved user size rather than overwriting it.
+    let active_dock = Rc::new(Cell::new(None::<native_docking::DockId>));
+    let refresh_docks: Rc<dyn Fn()> = Rc::new({
+        let model = dock_model.clone();
+        let active = active_dock.clone();
+        let sizes = pane_sizes.clone();
+        let left_content = left_content.clone();
+        let solution_pane = solution_pane.clone();
+        let properties_pane = properties_pane.clone();
+        let inspector = inspector.clone();
+        let bottom_pages = bottom_pages.clone();
+        let left_split = left_split.clone();
+        let main_workspace = main_workspace.clone();
+        let document_workspace = document_workspace.clone();
+        let tab_mode = tab_mode.clone();
+        let active_side_tab = active_side_tab.clone();
+        move || {
+            let layout = model.borrow();
+            let selected_left = if tab_mode.get() == Page::Code {
+                if active_side_tab.get() == 1 {
+                    native_docking::DockId::Search
+                } else {
+                    native_docking::DockId::Symbols
+                }
+            } else {
+                match active_side_tab.get() {
+                    1 => native_docking::DockId::Server,
+                    2 => native_docking::DockId::Data,
+                    _ => native_docking::DockId::Toolbox,
+                }
+            };
+            let left_open = layout.visible(selected_left, active.get());
+            let right_solution = layout.visible(native_docking::DockId::Solution, active.get());
+            let right_properties = layout.visible(native_docking::DockId::Properties, active.get());
+            let right_open = right_solution || right_properties;
+            let bottom_open = [
+                native_docking::DockId::Output,
+                native_docking::DockId::ErrorList,
+                native_docking::DockId::Debug,
+                native_docking::DockId::TestResults,
+                native_docking::DockId::FindResults,
+            ].iter().any(|id| layout.visible(*id, active.get()));
+            let remembered = sizes.get();
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                left_content.native_widget().set_visible(left_open);
+                solution_pane.native_widget().set_visible(right_solution);
+                properties_pane.native_widget().set_visible(right_properties);
+                inspector.native_widget().set_visible(right_open);
+                bottom_pages.native_widget().set_visible(bottom_open);
+            }
+            if left_open {
+                left_split.set_position(remembered.toolbox.max(155.0));
+            } else {
+                left_split.set_position(native_shell::SIDE_RAIL_WIDTH);
+            }
+            let main_width = split_extent(&main_workspace, 1480.0);
+            let right_width = if right_open {
+                remembered.inspector.max(220.0)
+            } else {
+                native_shell::SIDE_RAIL_WIDTH
+            };
+            main_workspace.set_position((main_width - right_width - 6.0).max(300.0));
+            let height = split_extent(&document_workspace, 860.0);
+            document_workspace.set_position(
+                (height - if bottom_open { remembered.output.max(100.0) } else { 40.0 } - 6.0)
+                    .max(160.0),
+            );
+        }
+    });
+    // Only narrow rail/header widths remain when a section is auto-hidden.
+    left_split.set_min_sizes(native_shell::SIDE_RAIL_WIDTH, 200.0);
+    main_workspace.set_min_sizes(300.0, native_shell::SIDE_RAIL_WIDTH);
+    document_workspace.set_min_sizes(160.0, 35.0);
+    refresh_docks();
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        for (id, pane) in [
+            (native_docking::DockId::Toolbox, toolbox.native_widget()),
+            (native_docking::DockId::Solution, solution_pane.native_widget()),
+            (native_docking::DockId::Properties, properties_pane.native_widget()),
+            (native_docking::DockId::Output, bottom.native_widget()),
+        ] {
+            let focus = gtk4::EventControllerFocus::new();
+            let active = active_dock.clone();
+            let refresh = refresh_docks.clone();
+            focus.connect_leave(move |_| {
+                if active.get() == Some(id) {
+                    active.set(None);
+                    refresh();
+                }
+            });
+            pane.add_controller(focus);
+        }
+        // Clicking the document closes any temporary tool pane.
+        let dismiss = gtk4::GestureClick::new();
+        dismiss.set_button(0);
+        dismiss.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let active = active_dock.clone();
+        let refresh = refresh_docks.clone();
+        dismiss.connect_pressed(move |_, _, _, _| {
+            if active.take().is_some() {
+                refresh();
+            }
+        });
+        centre.native_widget().add_controller(dismiss);
+    }
+
     // Shared dock headers now own pin and collapse state. Persist settings
     // separately from sizes, so moving and hiding never destroys a user's
     // previous preferred dimensions.
@@ -1935,6 +2049,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         header.pin.set_text(if pinned { "◆" } else { "◇" });
         header.collapse.set_text(if collapsed { "▸" } else { "▾" });
         header.pin.on_click({
+            let refresh_docks = refresh_docks.clone();
             let model = dock_model.clone();
             let path = dock_path.clone();
             let status = status.clone();
@@ -1950,10 +2065,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     next
                 };
                 pin.set_text(if pinned { "◆" } else { "◇" });
+                refresh_docks();
                 status.set_text(if pinned {
-                    "Pinned preference saved."
+                    "Panel pinned in the workspace."
                 } else {
-                    "Unpinned preference saved; overlay auto-hide is not active yet."
+                    "Panel auto-hidden; use its side tab to show it temporarily."
                 });
             }
         });
@@ -2146,6 +2262,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_side_tab.clone();
         let tabs = side_tabs.clone();
         let tab_mode = tab_mode.clone();
+        let active_dock = active_dock.clone();
+        let refresh_docks = refresh_docks.clone();
         tab.on_pointer(move |event| {
             if event.phase == PointerPhase::Down {
                 if tab_mode.get() == Page::Code && index > 1 {
@@ -2156,6 +2274,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     tab.redraw();
                 }
                 left_panel(index);
+                let id = if tab_mode.get() == Page::Code {
+                    if index == 1 { native_docking::DockId::Search }
+                    else { native_docking::DockId::Symbols }
+                } else {
+                    match index {
+                        1 => native_docking::DockId::Server,
+                        2 => native_docking::DockId::Data,
+                        _ => native_docking::DockId::Toolbox,
+                    }
+                };
+                active_dock.set(Some(id));
+                refresh_docks();
             }
         });
     }
