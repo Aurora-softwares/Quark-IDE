@@ -80,10 +80,15 @@ impl DockId {
 
     pub fn default_zone(self) -> DockZone {
         match self {
-            Self::Toolbox | Self::Symbols | Self::Search | Self::Server | Self::Data => DockZone::Left,
+            Self::Toolbox | Self::Symbols | Self::Search | Self::Server | Self::Data => {
+                DockZone::Left
+            }
             Self::Solution | Self::Properties => DockZone::Right,
-            Self::Output | Self::ErrorList | Self::Debug
-            | Self::TestResults | Self::FindResults => DockZone::Bottom,
+            Self::Output
+            | Self::ErrorList
+            | Self::Debug
+            | Self::TestResults
+            | Self::FindResults => DockZone::Bottom,
         }
     }
 
@@ -144,7 +149,9 @@ pub struct DockLayout {
 
 impl Default for DockLayout {
     fn default() -> Self {
-        let mut layout = Self { sections: Vec::new() };
+        let mut layout = Self {
+            sections: Vec::new(),
+        };
         for id in DockId::ALL {
             // Default unpinned tool windows auto-hide after losing focus.
             // The user can pin any section to reserve its dock space.
@@ -157,10 +164,16 @@ impl Default for DockLayout {
 
 impl DockLayout {
     pub fn register(&mut self, mut section: DockSection) {
-        if self.sections.iter().any(|existing| existing.id == section.id) {
+        if self
+            .sections
+            .iter()
+            .any(|existing| existing.id == section.id)
+        {
             return;
         }
-        section.order = self.sections.iter()
+        section.order = self
+            .sections
+            .iter()
             .filter(|existing| existing.zone == section.zone)
             .map(|existing| existing.order)
             .max()
@@ -177,7 +190,9 @@ impl DockLayout {
     }
 
     pub fn move_to(&mut self, id: DockId, zone: DockZone) -> bool {
-        let order = self.sections.iter()
+        let order = self
+            .sections
+            .iter()
             .filter(|entry| entry.zone == zone)
             .map(|entry| entry.order)
             .max()
@@ -207,7 +222,9 @@ impl DockLayout {
     }
 
     pub fn sections_in(&self, zone: DockZone) -> Vec<&DockSection> {
-        let mut sections: Vec<_> = self.sections.iter()
+        let mut sections: Vec<_> = self
+            .sections
+            .iter()
             .filter(|section| section.zone == zone)
             .collect();
         sections.sort_by_key(|section| section.order);
@@ -225,7 +242,9 @@ impl DockLayout {
         match fs::read_to_string(path) {
             Ok(raw) => {
                 let stored: Self = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-                let mut clean = Self { sections: Vec::new() };
+                let mut clean = Self {
+                    sections: Vec::new(),
+                };
                 let mut seen = HashSet::new();
                 for section in stored.sections {
                     if seen.insert(section.id) {
@@ -261,9 +280,7 @@ pub struct DockInteraction {
 
 impl DockInteraction {
     pub fn open(&mut self, layout: &DockLayout, id: DockId) {
-        self.active_popup = layout.section(id)
-            .filter(|s| !s.pinned)
-            .map(|_| id);
+        self.active_popup = layout.section(id).filter(|s| !s.pinned).map(|_| id);
     }
 
     pub fn blur(&mut self) {
@@ -311,9 +328,15 @@ mod tests {
         layout.register(DockSection::new(DockId::Toolbox, DockZone::Right));
         assert_eq!(layout.sections.len(), DockId::ALL.len());
         assert!(layout.move_to(DockId::Toolbox, DockZone::Bottom));
-        assert_eq!(layout.section(DockId::Toolbox).unwrap().zone, DockZone::Bottom);
+        assert_eq!(
+            layout.section(DockId::Toolbox).unwrap().zone,
+            DockZone::Bottom
+        );
         assert!(!layout.move_to(DockId::Toolbox, DockZone::Bottom));
-        assert_eq!(layout.sections_in(DockZone::Bottom).last().unwrap().id, DockId::Toolbox);
+        assert_eq!(
+            layout.sections_in(DockZone::Bottom).last().unwrap().id,
+            DockId::Toolbox
+        );
     }
 
     #[test]
@@ -330,7 +353,10 @@ mod tests {
         gesture.begin_drag(DockId::Toolbox);
         gesture.hover(DockZone::Right);
         assert!(gesture.drop(&mut layout));
-        assert_eq!(layout.section(DockId::Toolbox).unwrap().zone, DockZone::Right);
+        assert_eq!(
+            layout.section(DockId::Toolbox).unwrap().zone,
+            DockZone::Right
+        );
         assert_eq!(gesture.dragging, None);
     }
 
