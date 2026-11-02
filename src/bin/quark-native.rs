@@ -1478,11 +1478,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // A second, consistent panel row owns view controls independently of
     // the panel title/pin/float/collapse header.
     let explorer_toolbar = ui.stack(Orientation::Horizontal)?;
-    explorer_toolbar.set_spacing(5.0);
-    let sort_ascending = ui.button("A → Z")?;
-    let sort_descending = ui.button("Z → A")?;
-    let show_tree = ui.button("🌳 Tree")?;
-    let show_list = ui.button("☷ List")?;
+    explorer_toolbar.set_spacing(2.0);
+    let sort_ascending = ui.button("A↓")?;
+    let sort_descending = ui.button("Z↑")?;
+    let show_tree = ui.button("▾")?;
+    let show_list = ui.button("☷")?;
     for button in [&sort_ascending, &sort_descending, &show_tree, &show_list] {
         explorer_toolbar.append(button);
     }
@@ -1494,10 +1494,88 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     tree.set_sizing(Sizing::fill());
     let solution_descending = Rc::new(Cell::new(false));
     let solution_list_mode = Rc::new(Cell::new(false));
+    #[cfg(target_os = "linux")]
+    let sync_explorer_controls: Rc<dyn Fn()> = Rc::new({
+        use naui::Widget as _;
+        use gtk4::prelude::*;
+        let ascending = sort_ascending.native_widget();
+        let descending = sort_descending.native_widget();
+        let tree_button = show_tree.native_widget();
+        let list_button = show_list.native_widget();
+        let sort = solution_descending.clone();
+        let list = solution_list_mode.clone();
+        move || {
+            for (widget, selected) in [
+                (&ascending, !sort.get()), (&descending, sort.get()),
+                (&tree_button, !list.get()), (&list_button, list.get()),
+            ] {
+                if selected { widget.add_css_class("quark-explorer-tool-selected"); }
+                else { widget.remove_css_class("quark-explorer-tool-selected"); }
+            }
+        }
+    });
+    #[cfg(target_os = "linux")]
+    sync_explorer_controls();
     let (initial_tree, initial_paths) = solution_items(&state.borrow(), "", false, false);
     let displayed_paths = Rc::new(RefCell::new(initial_paths));
     let solution_query = Rc::new(RefCell::new(String::new()));
     tree.set_items(&initial_tree);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        explorer_toolbar.native_widget().add_css_class("quark-explorer-toolbar");
+        for (button, description) in [
+            (&sort_ascending, "Sort files A to Z"),
+            (&sort_descending, "Sort files Z to A"),
+            (&show_tree, "Show folder tree"),
+            (&show_list, "Show flat file list"),
+        ] {
+            button.native_widget().add_css_class("quark-explorer-tool");
+            button.native_widget().set_tooltip_text(Some(description));
+        }
+        solution_search.native_widget().add_css_class("quark-explorer-search");
+        tree.native_widget().add_css_class("quark-solution-tree");
+        if let Some(display) = gtk4::gdk::Display::default() {
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_data(
+                ".quark-explorer-toolbar { margin: 1px 3px; }
+                 button.quark-explorer-tool {
+                    min-height: 19px; min-width: 24px;
+                    padding: 1px 4px; margin: 0;
+                    font-size: 10px; border-radius: 3px;
+                    color: @theme_fg_color;
+                 }
+                 button.quark-explorer-tool-selected {
+                    background: alpha(@theme_fg_color, 0.14);
+                    box-shadow: inset 0 -2px #8662cc;
+                    font-weight: bold;
+                 }
+                 .quark-explorer-search { min-height: 22px; margin: 1px 3px 2px; }
+                 .quark-explorer-search text { min-height: 17px; padding: 0 3px; }
+                 .quark-solution-tree row {
+                    min-height: 19px; margin: 0; padding: 0 2px;
+                 }
+                 .quark-solution-tree row box {
+                    min-height: 18px; margin: 0; padding: 0;
+                 }
+                 .quark-solution-tree row label {
+                    font-size: 11px; margin: 0; padding: 0 1px;
+                 }
+                 .quark-solution-tree row button {
+                    min-height: 16px; min-width: 16px;
+                    padding: 0; margin: 0; border: none;
+                 }
+                 .quark-solution-tree row:selected {
+                    background: alpha(@theme_fg_color, 0.13);
+                    color: @theme_fg_color;
+                 }"
+            );
+            gtk4::style_context_add_provider_for_display(
+                &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+    }
     solution_pane.append(&tree);
     solution_pane.set_sizing(Sizing::fill());
 
@@ -4246,16 +4324,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     for (button, descending) in [(&sort_ascending, false), (&sort_descending, true)] {
         let refresh_project = refresh_project.clone();
         let state = solution_descending.clone();
+        #[cfg(target_os = "linux")]
+        let sync = sync_explorer_controls.clone();
         button.on_click(move || {
             state.set(descending);
+            #[cfg(target_os = "linux")]
+            sync();
             refresh_project();
         });
     }
     for (button, list_mode) in [(&show_tree, false), (&show_list, true)] {
         let refresh_project = refresh_project.clone();
         let state = solution_list_mode.clone();
+        #[cfg(target_os = "linux")]
+        let sync = sync_explorer_controls.clone();
         button.on_click(move || {
             state.set(list_mode);
+            #[cfg(target_os = "linux")]
+            sync();
             refresh_project();
         });
     }
