@@ -54,11 +54,20 @@ def validate(register, available, ignored=frozenset(), platform=sys.platform):
 
 
 def listing(ignored=False):
-    command = ["cargo", "test", "--all-targets", "--", "--list"]
-    if ignored:
-        command.append("--ignored")
-    result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
-    return test_names(result.stdout)
+    # Both frontends are isolated by Cargo feature design. Running the
+    # default native binary alone would hide the legacy regression tests;
+    # requiring both features together would accidentally mix UI frameworks.
+    names = set()
+    for frontend in ("legacy-ui", "native-ui"):
+        command = [
+            "cargo", "test", "--no-default-features", "--features", frontend,
+            "--all-targets", "--", "--list",
+        ]
+        if ignored:
+            command.append("--ignored")
+        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
+        names.update(test_names(result.stdout))
+    return names
 
 
 def main():
