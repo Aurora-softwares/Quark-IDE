@@ -8,7 +8,7 @@ pub struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
     receiver: Receiver<Vec<u8>>,
-    child: Box<dyn Child + Send + Sync>,
+    child: Box<dyn Child + Send>,
 }
 
 pub fn default_shell() -> String {
@@ -91,7 +91,7 @@ mod tests {
         let mut collected = Vec::new();
         while std::time::Instant::now() < until {
             collected.extend(session.poll());
-            if collected.windows(15).any(|s| s == b"__QUARK_PTY_TWO__") { break; }
+            if collected.windows(b"__QUARK_PTY_TWO__".len()).any(|s| s == b"__QUARK_PTY_TWO__") { break; }
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
         assert!(String::from_utf8_lossy(&collected).contains("__QUARK_PTY_ONE__"));
