@@ -41,6 +41,9 @@ mod native_portable_preview;
 #[cfg(target_os = "linux")]
 #[path = "../native_preferences.rs"]
 mod native_preferences;
+#[cfg(not(target_os = "linux"))]
+#[path = "../native_preferences_portable.rs"]
+mod native_preferences_portable;
 #[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
@@ -779,6 +782,10 @@ fn apply_bottom_dock_order(
 type DockRefreshHook = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
 
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    native_preferences_portable::apply_saved_theme(
+        ui, &workspace_file().with_file_name("native-preferences.json")
+    );
     // Reuse the launcher window. Creating an AppKit window from a button
     // callback and immediately closing the old one can lose activation.
     // Replacing the content also makes this transition atomic on every OS.
@@ -5244,6 +5251,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let status = status.clone();
         let window = window.clone();
         let reset_window_layout = reset_window_layout.clone();
+        #[cfg(not(target_os = "linux"))]
+        let ui = ui.clone();
         move |menu, action| match (menu, action) {
             (0, 0) => show_new_project(),
             (0, 1) => {
@@ -5361,7 +5370,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     workspace_file().with_file_name("native-preferences.json"),
                 );
                 #[cfg(not(target_os = "linux"))]
-                status.set_text("Native settings are currently available on GTK/Linux.");
+                if let Err(error) = native_preferences_portable::show(
+                    &ui, workspace_file().with_file_name("native-preferences.json")
+                ) {
+                    status.set_text(&format!("Cannot open native settings: {error}"));
+                }
             }
             (10, 0) => status.set_text("Native extension management is planned."),
             (11, 0) => reset_window_layout(),
