@@ -678,9 +678,19 @@ mod tests {
     fn real_hydrogen_studio_default_tab_is_one_but_design_navigation_is_independent() {
         let source = include_str!("../tests/fixtures/Studio.hyui");
         let document = roxmltree::Document::parse(source).unwrap();
-        let tabs = document.descendants().find(|node| node.has_tag_name("Tabs")).unwrap();
-        let startup = tabs.attribute("value").unwrap_or("0").parse::<usize>().unwrap();
-        let count = tabs.children().filter(|node| node.has_tag_name("Tab")).count();
+        let tabs = document
+            .descendants()
+            .find(|node| node.has_tag_name("Tabs"))
+            .unwrap();
+        let startup = tabs
+            .attribute("value")
+            .unwrap_or("0")
+            .parse::<usize>()
+            .unwrap();
+        let count = tabs
+            .children()
+            .filter(|node| node.has_tag_name("Tab"))
+            .count();
         assert_eq!(design_tab_index(startup, None, count), Some(0));
         assert_eq!(design_tab_index(startup, Some(1), count), Some(1));
         assert_eq!(tabs.attribute("value"), Some("0"));
