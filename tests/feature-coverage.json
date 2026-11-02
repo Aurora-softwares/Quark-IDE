@@ -1996,6 +1996,36 @@
         "native_ui_properties::tests::properties_validate_native_control_ranges_and_booleans",
         "native_ui_properties::tests::properties_reject_invalid_pages_and_allow_valid_list_choices"
       ]
+    },
+    {
+      "id": "native-designer-runtime-layout-parity",
+      "category": "Native Interface Designer",
+      "feature": "Designer honours Hydrogen preferredWidth instead of dividing panel widths evenly and preserves container spacing for hidden children",
+      "tests": [
+        "native_portable_preview::tests::row_preferred_widths_follow_hydrogen_studio_not_even_distribution",
+        "native_portable_preview::tests::row_widths_distribute_remaining_space_and_skip_hidden_children"
+      ]
+    },
+    {
+      "id": "native-designer-native-menu-groups",
+      "category": "Native Interface Designer",
+      "feature": "Hydrogen MenuBar groups remain semantic native menus rather than becoming direct action buttons in design mode",
+      "tests": [
+        "native_portable_preview::tests::hydrogen_studio_declares_top_level_native_menu_groups",
+        "native_portable_preview::tests::row_preferred_widths_follow_hydrogen_studio_not_even_distribution"
+      ]
+    },
+    {
+      "id": "native-designer-inset-and-theme-shadow",
+      "category": "Native Interface Designer",
+      "feature": "Designer reserves a separate viewport margin for the GTK window shadow without modifying Hydrogen Window geometry or overriding theme colours",
+      "tests": [
+        "native_portable_preview::tests::design_window_inset_leaves_room_for_shadows_without_changing_xml_geometry",
+        "native_portable_preview::tests::gtk_shadow_uses_native_theme_colours_and_keeps_background_unmodified"
+      ],
+      "platforms": [
+        "linux"
+      ]
     }
   ]
 }
