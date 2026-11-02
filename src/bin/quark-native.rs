@@ -689,10 +689,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     toolbox.set_spacing(7.0);
     let toolbox_heading = ui.stack(Orientation::Horizontal)?;
     toolbox_heading.append(&ui.label("TOOLBOX")?);
-    let toolbox_narrow = ui.button("◂")?;
-    let toolbox_wide = ui.button("▸")?;
-    toolbox_heading.append(&toolbox_narrow);
-    toolbox_heading.append(&toolbox_wide);
     toolbox.append(&toolbox_heading);
     let toolbox_search = ui.search_input()?;
     toolbox_search.set_placeholder("Search controls");
@@ -718,7 +714,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     toolbox_scroll.set_child(&toolbox_items);
     toolbox_scroll.set_sizing(Sizing::fill());
     toolbox.append(&toolbox_scroll);
-    toolbox.append(&ui.label("Select a control, then click the design surface.")?);
     toolbox.set_sizing(Sizing::fill());
     toolbox_search.on_change({
         let entries = toolbox_items.clone();
@@ -744,8 +739,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
-    // Text-only vertical rail; each full label is drawn as upright glyphs
-    // with no native button background or padding.
+    // Side rail: generous targets with indicators separate from the text.
     let left_rail = ui.stack(Orientation::Vertical)?;
     left_rail.set_spacing(4.0);
     left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
@@ -780,7 +774,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let title = titles.get(index).copied().unwrap_or("");
                 if active.get() == index {
                     cairo.set_source_rgb(0.53, 0.49, 0.64);
-                    cairo.rectangle(0.0, 0.0, 2.0, f64::from(height));
+                    cairo.rectangle(1.0, 6.0, 3.0, f64::from(height) - 12.0);
                     let _ = cairo.fill();
                 }
                 cairo.set_source_rgb(0.78, 0.78, 0.81);
@@ -789,8 +783,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     gtk4::cairo::FontSlant::Normal,
                     gtk4::cairo::FontWeight::Normal,
                 );
-                cairo.set_font_size(10.0);
-                cairo.translate(8.0, f64::from(height) - 9.0);
+                cairo.set_font_size(12.0);
+                cairo.translate(24.0, f64::from(height) - 15.0);
                 cairo.rotate(-std::f64::consts::FRAC_PI_2);
                 cairo.move_to(0.0, 0.0);
                 let _ = cairo.show_text(title);
@@ -811,15 +805,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 if active.get() == index {
                     p.fill_rect(
-                        Rect::new(0.0, 0.0, 2.0, p.height()),
+                        Rect::new(1.0, 6.0, 3.0, p.height() - 12.0),
                         Color::rgb(0x8a, 0x81, 0xa4),
                     );
                 }
                 for (i, letter) in title.chars().enumerate() {
                     p.text(
                         &letter.to_string(),
-                        Point::new(6.0, 7.0 + i as f64 * 10.0),
-                        9.0,
+                        Point::new(20.0, 10.0 + i as f64 * 12.0),
+                        11.0,
                         Color::rgb(0xc5, 0xc5, 0xc9),
                     );
                 }
@@ -830,10 +824,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
     let server_view = ui.stack(Orientation::Vertical)?;
     server_view.append(&ui.label("SERVER EXPLORER")?);
-    server_view.append(&ui.label("Server connections can be added here in a future update.")?);
     let data_view = ui.stack(Orientation::Vertical)?;
     data_view.append(&ui.label("DATA SOURCES")?);
-    data_view.append(&ui.label("Data source integration is planned.")?);
     let symbols_view = ui.grid()?;
     symbols_view.set_sizing(Sizing::fill());
     symbols_view.set_column_track(0, Track::FILL);
@@ -846,7 +838,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     symbols_view.attach(&symbols_list, GridCell::new(0, 1));
     let code_search_view = ui.stack(Orientation::Vertical)?;
     code_search_view.append(&ui.label("SEARCH")?);
-    code_search_view.append(&ui.label("Use Search Solution to find project files.")?);
     let left_content = ui.stack(Orientation::Vertical)?;
     left_content.append(&toolbox);
     left_content.set_sizing(Sizing::fill());
@@ -939,7 +930,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     design_surface.set_column_track(0, Track::FILL);
     design_surface.set_row_track(0, Track::Fixed(26.0));
     design_surface.set_row_track(1, Track::FILL);
-    let design_heading = ui.label("Visual Designer · Native window preview")?;
+    let design_heading = ui.label("DESIGN")?;
     design_surface.attach(&design_heading, GridCell::new(0, 0));
     let canvas = ui.canvas()?;
     canvas.set_sizing(Sizing::fill());
@@ -1008,7 +999,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if let Some(layout) = ide.layout.as_mut() {
                 match layout.edit_source(text.to_owned()) {
                     Ok(()) => {
-                        status.set_text("Hydrogen UI XML valid · visual preview refreshed");
+                        status.set_text("XML valid");
                         drop(ide);
                         if let Some(refresh) = reload_preview.borrow().as_ref() {
                             refresh();
@@ -1037,10 +1028,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let collapse_solution = ui.button("−")?;
     solution_heading.append(&refresh_solution);
     solution_heading.append(&collapse_solution);
-    let inspector_wide = ui.button("◂")?;
-    let inspector_narrow = ui.button("▸")?;
-    solution_heading.append(&inspector_wide);
-    solution_heading.append(&inspector_narrow);
     solution_pane.append(&solution_heading);
     let solution_search = ui.search_input()?;
     solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
@@ -1060,10 +1047,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     properties_heading.set_style(naui::TextStyle::Heading);
     let properties_toolbar = ui.stack(Orientation::Horizontal)?;
     properties_toolbar.append(&properties_heading);
-    let properties_grow = ui.button("▲")?;
-    let properties_shrink = ui.button("▼")?;
-    properties_toolbar.append(&properties_grow);
-    properties_toolbar.append(&properties_shrink);
     properties_pane.append(&properties_toolbar);
     let flat_properties = ui.stack(Orientation::Vertical)?;
     flat_properties.set_spacing(7.0);
@@ -1308,10 +1291,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     bottom_tabs.append(&debug_tab);
     bottom_tabs.append(&test_tab);
     bottom_tabs.append(&find_tab);
-    let output_grow = ui.button("▲")?;
-    let output_shrink = ui.button("▼")?;
-    bottom_tabs.append(&output_grow);
-    bottom_tabs.append(&output_shrink);
     bottom.append(&bottom_tabs);
 
     let bottom_pages = ui.stack(Orientation::Vertical)?;
@@ -1431,40 +1410,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let _ = next.save(&path);
         }
     });
-
-    // Accessible native-button alternatives to fine pointer dragging.
-    // These buttons adjust the same native splitters and persistent sizes.
-    let adjust_pane: Rc<dyn Fn(native_layout::Pane, i32)> = Rc::new({
-        let pane_sizes = pane_sizes.clone();
-        let refresh_tracks = refresh_tracks.clone();
-        let pane_path = pane_path.clone();
-        let status = status.clone();
-        move |pane, steps| {
-            let original = pane_sizes.get();
-            let next = original.adjust(pane, steps);
-            if next == original {
-                return;
-            }
-            pane_sizes.set(next);
-            refresh_tracks(next);
-            if let Err(error) = next.save(&pane_path) {
-                status.set_text(&format!("Could not save tool window sizes: {error}"));
-            }
-        }
-    });
-    for (button, pane, steps) in [
-        (&toolbox_narrow, native_layout::Pane::Toolbox, -1),
-        (&toolbox_wide, native_layout::Pane::Toolbox, 1),
-        (&inspector_wide, native_layout::Pane::Inspector, -1),
-        (&inspector_narrow, native_layout::Pane::Inspector, 1),
-        (&properties_grow, native_layout::Pane::Properties, -1),
-        (&properties_shrink, native_layout::Pane::Properties, 1),
-        (&output_grow, native_layout::Pane::Output, -1),
-        (&output_shrink, native_layout::Pane::Output, 1),
-    ] {
-        let adjust_pane = adjust_pane.clone();
-        button.on_click(move || adjust_pane(pane, steps));
-    }
 
     let status_bar = ui.stack(Orientation::Horizontal)?;
     status_bar.append(&ui.label("✦ QUARK · HYDROGEN")?);
@@ -1871,10 +1816,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .is_some_and(|d| d.native_window)
                     {
                         design_heading.set_text(
-                            "Hydrogen <Window> preview · switch to XML Source to edit responsive layout",
+                            "DESIGN",
                         );
                     } else {
-                        design_heading.set_text("Visual Designer · Native window preview");
+                        design_heading.set_text("DESIGN");
                     }
                     let tabs = state.borrow().open_tabs();
                     let index = tabs
