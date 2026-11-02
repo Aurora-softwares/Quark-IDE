@@ -47,7 +47,7 @@ pub fn apply_saved_theme(ui: &Ui, path: &Path) {
         .and_then(|v| v.get("theme"))
         .and_then(Value::as_str)
         .unwrap_or("system");
-    ui.set_theme(match theme {
+    let _ = ui.set_theme(match theme {
         "light" => Theme::Light,
         "dark" => Theme::Dark,
         _ => Theme::System,
@@ -73,7 +73,9 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
         let ui = ui.clone();
         let file = preferences_file.clone();
         button.on_click(move || {
-            ui.set_theme(theme);
+            if let Err(error) = ui.set_theme(theme) {
+                eprintln!("Quark: could not apply theme: {error}");
+            }
             if let Err(error) = update(&file, "appearance", "theme", json!(persisted)) {
                 eprintln!("Quark: cannot save theme: {error}");
             }
