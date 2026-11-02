@@ -2358,6 +2358,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let editor = editor.clone();
         let show_page = show_page.clone();
         let tab_offset = tab_offset.clone();
+        let visible_tab_capacity = visible_tab_capacity.clone();
         let status = status.clone();
         let symbols_list = symbols_list.clone();
         move |path| {
@@ -2390,6 +2391,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let state = state.clone();
         let show_page = show_page.clone();
         let tab_offset = tab_offset.clone();
+        let visible_tab_capacity = visible_tab_capacity.clone();
         let status = status.clone();
         let canvas = canvas.clone();
         let design_heading = design_heading.clone();
