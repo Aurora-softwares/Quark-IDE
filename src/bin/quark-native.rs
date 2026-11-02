@@ -4200,6 +4200,77 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             }
                         }
                     });
+                    // GTK gets a theme-aware document tab renderer. The
+                    // legacy portable painter above has a fixed pale text
+                    // colour that becomes unreadable on light desktops.
+                    #[cfg(target_os = "linux")]
+                    {
+                        use gtk4::prelude::*;
+                        use naui::Widget as _;
+                        let area = tab.native_widget()
+                            .downcast::<gtk4::DrawingArea>()
+                            .expect("native document tab must be a GTK drawing area");
+                        area.add_css_class("quark-document-tab");
+                        if selected { area.add_css_class("quark-document-tab-active"); }
+                        area.set_tooltip_text(Some(&filename));
+                        let label = filename.clone();
+                        area.set_draw_func(move |area, cairo, width, height| {
+                            #[allow(deprecated)]
+                            let foreground = area.style_context().color();
+                            let fr = f64::from(foreground.red());
+                            let fg = f64::from(foreground.green());
+                            let fb = f64::from(foreground.blue());
+                            let is_dark = fr * 0.2126 + fg * 0.7152 + fb * 0.0722 > 0.55;
+                            let (r, g, b) = match (is_dark, selected) {
+                                (false, true) => (0.950, 0.928, 0.990),
+                                (false, false) => (0.865, 0.878, 0.905),
+                                (true, true) => (0.225, 0.208, 0.282),
+                                (true, false) => (0.142, 0.147, 0.166),
+                            };
+                            cairo.set_source_rgb(r, g, b);
+                            cairo.rectangle(0.0, 0.0, f64::from(width), f64::from(height));
+                            let _ = cairo.fill();
+
+                            // Defined edges remain visible against the white
+                            // editor in light mode without adding heavy chrome.
+                            cairo.set_source_rgba(fr, fg, fb, if selected { 0.35 } else { 0.20 });
+                            cairo.set_line_width(1.0);
+                            cairo.rectangle(
+                                0.5, 0.5, f64::from(width) - 1.0,
+                                f64::from(height) - 0.5,
+                            );
+                            let _ = cairo.stroke();
+
+                            if selected {
+                                cairo.set_source_rgb(0.53, 0.38, 0.83);
+                                cairo.rectangle(
+                                    0.0, f64::from(height) - 3.0,
+                                    f64::from(width), 3.0,
+                                );
+                                let _ = cairo.fill();
+                            }
+
+                            if selected {
+                                cairo.set_source_rgb(fr, fg, fb);
+                            } else if is_dark {
+                                cairo.set_source_rgb(0.76, 0.76, 0.80);
+                            } else {
+                                cairo.set_source_rgb(0.28, 0.29, 0.34);
+                            }
+                            cairo.select_font_face(
+                                "Sans",
+                                gtk4::cairo::FontSlant::Normal,
+                                if selected {
+                                    gtk4::cairo::FontWeight::Bold
+                                } else {
+                                    gtk4::cairo::FontWeight::Normal
+                                },
+                            );
+                            cairo.set_font_size(11.5);
+                            cairo.move_to(9.0, f64::from(height) / 2.0 + 4.0);
+                            let _ = cairo.show_text(&label);
+                        });
+                    }
                     let kind = *kind;
                     let path = path.clone();
                     let selector = tab_selector.clone();
