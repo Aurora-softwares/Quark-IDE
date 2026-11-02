@@ -7,7 +7,6 @@ use eframe::egui::{self, Color32};
 // native GTK/AppKit/WinUI application. Avoid a second lexer implementation.
 pub use crate::hydrogen_lexer::{
     completion_candidates, completion_context, insert_completion, prefix_at, tokenize, TokenKind,
-    KEYWORDS,
 };
 fn highlight_with_palette(
     text: &str,
