@@ -15,6 +15,7 @@ use std::{
 /// Messages sent from platform-native input widgets to the live PTY.
 pub enum Input {
     Bytes(Vec<u8>),
+    #[allow(dead_code)] // Created by GTK viewport callbacks; other native backends use fixed-size PTYs.
     Resize { rows: u16, cols: u16 },
 }
 
