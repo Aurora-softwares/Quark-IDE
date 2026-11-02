@@ -145,12 +145,17 @@ impl DockSection {
 #[serde(default)]
 pub struct DockLayout {
     pub sections: Vec<DockSection>,
+    /// Layout-format version; zero identifies arrangements saved before
+    /// persistent Toolbox/Symbols and the single-row bottom tool strip.
+    #[serde(default)]
+    pub layout_version: u8,
 }
 
 impl Default for DockLayout {
     fn default() -> Self {
         let mut layout = Self {
             sections: Vec::new(),
+            layout_version: 2,
         };
         for id in DockId::ALL {
             // Default unpinned tool windows auto-hide after losing focus.
@@ -288,9 +293,24 @@ impl DockLayout {
                 let stored: Self = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
                 let mut clean = Self {
                     sections: Vec::new(),
+                    layout_version: 2,
                 };
                 let mut seen = HashSet::new();
-                for section in stored.sections {
+                let legacy = stored.layout_version < 2;
+                for mut section in stored.sections {
+                    if legacy && matches!(section.id, DockId::Toolbox | DockId::Symbols) {
+                        section.pinned = true;
+                    }
+                    if matches!(
+                        section.id,
+                        DockId::Output | DockId::ErrorList | DockId::Debug
+                            | DockId::TestResults | DockId::FindResults
+                    ) {
+                        // Bottom tabs have no fold or pin controls. Their
+                        // display is governed by the selected bottom tab.
+                        section.pinned = true;
+                        section.collapsed = false;
+                    }
                     if seen.insert(section.id) {
                         clean.sections.push(section);
                     }
