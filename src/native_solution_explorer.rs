@@ -170,7 +170,9 @@ fn validate_name(name: &str) -> Result<(), String> {
 }
 
 pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<PathBuf, String> {
-    let root = root.canonicalize().map_err(|error| format!("Workspace folder is unavailable: {error}"))?;
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("Workspace folder is unavailable: {error}"))?;
     let metadata = std::fs::symlink_metadata(selected)
         .map_err(|error| format!("Selected entry is unavailable: {error}"))?;
     if metadata.file_type().is_symlink() {
@@ -261,7 +263,12 @@ mod tests {
     fn file_actions_reject_path_traversal_external_paths_and_root_removal() {
         let dir = tempfile::tempdir().unwrap();
         let other = tempfile::tempdir().unwrap();
-        assert!(file_action(dir.path(), dir.path(), FileAction::NewFile("../escape".into())).is_err());
+        assert!(file_action(
+            dir.path(),
+            dir.path(),
+            FileAction::NewFile("../escape".into())
+        )
+        .is_err());
         assert!(file_action(dir.path(), dir.path(), FileAction::NewFolder("x/y".into())).is_err());
         assert!(file_action(dir.path(), dir.path(), FileAction::Delete).is_err());
         let outside = other.path().join("outside.hy");

@@ -517,7 +517,10 @@ fn symbol_tree_items(node: &symbols::SymbolNode) -> Vec<TreeItem> {
             "field" | "variable" => "•",
             _ => "▸",
         };
-        rows.push(TreeItem::new(format!("{glyph} {} ({})", item.name, item.kind)));
+        rows.push(TreeItem::new(format!(
+            "{glyph} {} ({})",
+            item.name, item.kind
+        )));
     }
     rows
 }
@@ -530,17 +533,19 @@ fn project_symbols(ide: &Ide) -> Vec<TreeItem> {
     };
     let mut tree = symbols::SymbolNode::default();
     symbols::add_source(&mut tree, &document.path, &document.text);
-    let name = document.path.file_name().unwrap_or_default().to_string_lossy();
+    let name = document
+        .path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
     let children = symbol_tree_items(&tree);
-    vec![
-        TreeItem::new(format!("◈ {name}"))
-            .expanded(true)
-            .children(if children.is_empty() {
-                vec![TreeItem::new("No symbols found")]
-            } else {
-                children
-            }),
-    ]
+    vec![TreeItem::new(format!("◈ {name}"))
+        .expanded(true)
+        .children(if children.is_empty() {
+            vec![TreeItem::new("No symbols found")]
+        } else {
+            children
+        })]
 }
 
 /// Present compiler and debugger output as ANSI-coloured read-only
@@ -647,7 +652,11 @@ fn run_task(
                 refresh_errors();
                 if had_chunks.get() {
                     let rendered = parser.borrow().screen().contents_formatted_basic();
-                    let outcome = if result.success { "completed successfully" } else { "failed" };
+                    let outcome = if result.success {
+                        "completed successfully"
+                    } else {
+                        "failed"
+                    };
                     set_console_text(
                         &output,
                         &format!("{rendered}\n\n{} {outcome}.", task.label()),
