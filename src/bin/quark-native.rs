@@ -1475,7 +1475,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let portable_preview = portable_preview.clone();
         let portable_scroll = portable_scroll.clone();
         let design_surface = design_surface.clone();
-        let design_heading = design_heading.clone();
         let design_header = design_header.clone();
         let canvas = canvas.clone();
         let property_editor = property_editor.clone();
