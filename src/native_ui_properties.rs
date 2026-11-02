@@ -46,41 +46,49 @@ pub struct PropertyField {
 
 fn supported_fields(kind: &str) -> &'static [&'static str] {
     match kind {
-        "Window" => &["version","title","width","height","padding","theme","material","onLoad"],
+        "Window" => &[
+            "version", "title", "width", "height", "padding", "theme", "material", "onLoad",
+        ],
         "ColumnPanel" => &["gap"],
-        "RowPanel" => &["gap","breakpoint"],
-        "GridPanel" => &["gap","columns","minItemWidth"],
-        "ScrollView" => &["height","gap"],
-        "Panel" => &["title","padding","gap"],
+        "RowPanel" => &["gap", "breakpoint"],
+        "GridPanel" => &["gap", "columns", "minItemWidth"],
+        "ScrollView" => &["height", "gap"],
+        "Panel" => &["title", "padding", "gap"],
         "MenuBar" | "Separator" | "ContextMenu" => &[],
         "Menu" => &["text"],
-        "MenuItem" => &["text","onClick","checked","shortcut"],
-        "Tabs" => &["value","onChange"],
-        "Tab" => &["title","gap"],
-        "Label" => &["text","role","tone"],
-        "Button" => &["text","onClick","primary"],
-        "Input" | "SearchInput" => &["text","placeholder","onChange","onSubmit"],
-        "PasswordInput" => &["placeholder","onChange","onSubmit"],
-        "FilePicker" => &["mode","text","onPick","onCancel"],
-        "TextArea" => &["text","placeholder","onChange","height"],
-        "CheckBox" | "Switch" => &["text","checked","onChange"],
-        "Select" | "RadioGroup" => &["items","value","onChange"],
-        "ListBox" => &["items","value","height","onChange"],
-        "Table" => &["columns","rows","value","height","onChange"],
-        "Image" => &["source","height"],
-        "Dialog" => &["title","text","buttons","open","value","onClose"],
-        "Slider" | "NumberInput" => &["value","minimum","maximum","onChange"],
-        "ProgressBar" => &["value","minimum","maximum","indeterminate"],
+        "MenuItem" => &["text", "onClick", "checked", "shortcut"],
+        "Tabs" => &["value", "onChange"],
+        "Tab" => &["title", "gap"],
+        "Label" => &["text", "role", "tone"],
+        "Button" => &["text", "onClick", "primary"],
+        "Input" | "SearchInput" => &["text", "placeholder", "onChange", "onSubmit"],
+        "PasswordInput" => &["placeholder", "onChange", "onSubmit"],
+        "FilePicker" => &["mode", "text", "onPick", "onCancel"],
+        "TextArea" => &["text", "placeholder", "onChange", "height"],
+        "CheckBox" | "Switch" => &["text", "checked", "onChange"],
+        "Select" | "RadioGroup" => &["items", "value", "onChange"],
+        "ListBox" => &["items", "value", "height", "onChange"],
+        "Table" => &["columns", "rows", "value", "height", "onChange"],
+        "Image" => &["source", "height"],
+        "Dialog" => &["title", "text", "buttons", "open", "value", "onClose"],
+        "Slider" | "NumberInput" => &["value", "minimum", "maximum", "onChange"],
+        "ProgressBar" => &["value", "minimum", "maximum", "indeterminate"],
         "Spinner" => &["running"],
         "Spacer" => &["height"],
         "Clipboard" => &["onRead"],
         "State" => &["value"],
-        "Timer" => &["interval","running","onTick"],
+        "Timer" => &["interval", "running", "onTick"],
         _ => &[],
     }
 }
 const COMMON_FIELDS: &[&str] = &[
-    "id","visible","enabled","fill","preferredWidth","accessibleName","tooltip",
+    "id",
+    "visible",
+    "enabled",
+    "fill",
+    "preferredWidth",
+    "accessibleName",
+    "tooltip",
 ];
 
 fn default_value(kind: &str, name: &str) -> &'static str {
@@ -129,7 +137,9 @@ pub fn available_properties(
     let node = element_at(&parsed, path)?;
     let kind = node.tag_name().name();
     let mut fields = Vec::new();
-    for (name, group) in supported_fields(kind).iter().map(|s| (*s, "Build / Design"))
+    for (name, group) in supported_fields(kind)
+        .iter()
+        .map(|s| (*s, "Build / Design"))
         .chain(COMMON_FIELDS.iter().map(|s| (*s, "Common")))
     {
         let explicit = node.attribute(name);
@@ -166,14 +176,27 @@ pub fn element_paths(source: &str) -> Result<Vec<(Vec<usize>, String)>, String> 
     if root.tag_name().name() != "Window" {
         return Err("Expected a Hydrogen <Window> document".into());
     }
-    fn visit(node: Node<'_, '_>, path: Vec<usize>, depth: usize, result: &mut Vec<(Vec<usize>, String)>) {
-        let label = node.attribute("id")
+    fn visit(
+        node: Node<'_, '_>,
+        path: Vec<usize>,
+        depth: usize,
+        result: &mut Vec<(Vec<usize>, String)>,
+    ) {
+        let label = node
+            .attribute("id")
             .or_else(|| node.attribute("title"))
             .or_else(|| node.attribute("text"))
             .unwrap_or("");
         let padding = "  ".repeat(depth.min(12));
-        let suffix = if label.is_empty() { String::new() } else { format!(" · {label}") };
-        result.push((path.clone(), format!("{padding}{}{suffix}", node.tag_name().name())));
+        let suffix = if label.is_empty() {
+            String::new()
+        } else {
+            format!(" · {label}")
+        };
+        result.push((
+            path.clone(),
+            format!("{padding}{}{suffix}", node.tag_name().name()),
+        ));
         for (index, child) in node.children().filter(|n| n.is_element()).enumerate() {
             let mut child_path = path.clone();
             child_path.push(index);
@@ -335,11 +358,17 @@ mod tests {
     fn exposes_unset_runtime_and_design_attributes_without_changing_xml() {
         let xml = r#"<Window version="1" title="Studio"><Tabs id="pages"><Tab title="First"/><Tab title="Second"/></Tabs><TextArea id="notes"/></Window>"#;
         let (_, window) = available_properties(xml, &[]).unwrap();
-        assert!(window.iter().any(|f| f.name == "theme" && f.value == "system" && !f.explicitly_set));
+        assert!(window
+            .iter()
+            .any(|f| f.name == "theme" && f.value == "system" && !f.explicitly_set));
         let (_, tabs) = available_properties(xml, &[0]).unwrap();
-        assert!(tabs.iter().any(|f| f.name == "value" && f.value == "0" && !f.explicitly_set));
+        assert!(tabs
+            .iter()
+            .any(|f| f.name == "value" && f.value == "0" && !f.explicitly_set));
         let (_, area) = available_properties(xml, &[1]).unwrap();
-        assert!(area.iter().any(|f| f.name == "height" && f.value == "100" && !f.explicitly_set));
+        assert!(area
+            .iter()
+            .any(|f| f.name == "height" && f.value == "100" && !f.explicitly_set));
         assert!(!xml.contains("theme="));
     }
     #[test]
@@ -347,15 +376,20 @@ mod tests {
         let xml = r#"<Window><Tabs><Tab title="First"><Button id="a"/></Tab><Tab title="Second"><Label id="hidden" visible="false"/></Tab></Tabs></Window>"#;
         let entries = element_paths(xml).unwrap();
         assert_eq!(entries.len(), 6);
-        assert!(entries.iter().any(|(path, label)| path == &[0, 1, 0] && label.contains("hidden")));
+        assert!(entries
+            .iter()
+            .any(|(path, label)| path == &[0, 1, 0] && label.contains("hidden")));
         assert!(entries.iter().any(|(_, label)| label.contains("Second")));
     }
 
     #[test]
     fn explicit_attribute_and_unknown_new_runtime_field_are_retained() {
-        let (_, fields) = available_properties("<Window title='App' futureSetting='on'/>", &[]).unwrap();
+        let (_, fields) =
+            available_properties("<Window title='App' futureSetting='on'/>", &[]).unwrap();
         assert!(fields.iter().any(|f| f.name == "title" && f.explicitly_set));
-        assert!(fields.iter().any(|f| f.name == "futureSetting" && f.group == "Other"));
+        assert!(fields
+            .iter()
+            .any(|f| f.name == "futureSetting" && f.group == "Other"));
     }
 
     #[test]
