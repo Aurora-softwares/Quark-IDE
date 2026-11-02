@@ -28,11 +28,11 @@ mod native_portable_preview;
 mod native_shell;
 #[path = "../native_start_window.rs"]
 mod native_start_window;
-#[path = "../native_ui_properties.rs"]
-mod native_ui_properties;
 #[cfg(target_os = "linux")]
 #[path = "../native_syntax.rs"]
 mod native_syntax;
+#[path = "../native_ui_properties.rs"]
+mod native_ui_properties;
 #[path = "../problems.rs"]
 mod problems;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
@@ -1399,9 +1399,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let right_active = Rc::new(Cell::new(0_usize));
     let right_rail = ui.stack(Orientation::Vertical)?;
     right_rail.set_spacing(4.0);
-    right_rail.set_sizing(
-        Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)),
-    );
+    right_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
     let mut right_tabs = Vec::new();
     for (index, label, height) in [
         (0_usize, "SOLUTION", 124.0_f64),
@@ -1425,9 +1423,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             drawing_area.set_draw_func(move |_, cairo, _width, allocated_height| {
                 if active.get() == index {
                     cairo.set_source_rgb(0.53, 0.49, 0.64);
-                    cairo.rectangle(
-                        1.0, 6.0, 3.0, f64::from(allocated_height) - 12.0,
-                    );
+                    cairo.rectangle(1.0, 6.0, 3.0, f64::from(allocated_height) - 12.0);
                     let _ = cairo.fill();
                 }
                 cairo.set_source_rgb(0.78, 0.78, 0.81);
@@ -1489,13 +1485,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     tab.redraw();
                 }
                 let height = split_extent(&inspector, 795.0);
-                inspector.set_position(
-                    if index == 0 {
-                        (height - 200.0).max(110.0)
-                    } else {
-                        180.0
-                    },
-                );
+                inspector.set_position(if index == 0 {
+                    (height - 200.0).max(110.0)
+                } else {
+                    180.0
+                });
             }
         });
     }
@@ -1992,9 +1986,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .as_ref()
                         .is_some_and(|d| d.native_window)
                     {
-                        design_heading.set_text(
-                            "DESIGN",
-                        );
+                        design_heading.set_text("DESIGN");
                     } else {
                         design_heading.set_text("DESIGN");
                     }
