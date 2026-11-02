@@ -21,10 +21,8 @@ fn render_dock_icon(p: &mut Painter, id: DockId) {
         DockId::Output | DockId::TestResults => Color::rgb(0x70, 0xc3, 0x94),
         _ => Color::rgb(0x81, 0xae, 0xe6),
     };
-    p.fill_rect(
-        Rect::new(2.0, 3.0, 23.0, 24.0),
-        Color::rgb(0x36, 0x39, 0x42),
-    );
+    // Transparent icon slot: never paint a dark tile behind icons in light mode.
+    // The host panel supplies the appropriate native background.
     match id {
         DockId::Toolbox | DockId::Data => {
             for y in [9.0, 16.0] {
@@ -36,7 +34,7 @@ fn render_dock_icon(p: &mut Painter, id: DockId) {
         DockId::Solution | DockId::Server => {
             p.fill_rect(Rect::new(7.0, 11.0, 13.0, 10.0), color);
             p.fill_rect(Rect::new(7.0, 8.0, 7.0, 4.0), color);
-            p.fill_rect(Rect::new(9.0, 15.0, 9.0, 4.0), Color::rgb(0x36, 0x39, 0x42));
+            p.fill_rect(Rect::new(9.0, 15.0, 9.0, 4.0), Color::rgb(0x65, 0x51, 0xa0));
         }
         DockId::Properties => {
             for (y, x) in [(10.0, 12.0), (15.0, 17.0), (20.0, 9.0)] {
@@ -110,7 +108,7 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         use gtk4::prelude::*;
         use naui::Widget as _;
         pin.native_widget().set_tooltip_text(Some(
-            "Save this section's pinned preference. Auto-hide docking is being integrated.",
+            "Pin this panel. Unpinned auto-hide is not yet implemented.",
         ));
         collapse
             .native_widget()
