@@ -726,11 +726,7 @@ pub fn render(
                 light,
                 1.4,
             );
-            paint.stroke_rect(
-                naui::Rect::new(edge - 48.0, 12.0, 11.0, 10.0),
-                light,
-                1.2,
-            );
+            paint.stroke_rect(naui::Rect::new(edge - 48.0, 12.0, 11.0, 10.0), light, 1.2);
             paint.line(
                 naui::Point::new(edge - 22.0, 12.0),
                 naui::Point::new(edge - 12.0, 22.0),
@@ -746,7 +742,14 @@ pub fn render(
         }
         paint.text(
             &title,
-            naui::Point::new(if cfg!(target_os = "macos") { 76.0 } else { 12.0 }, 9.0),
+            naui::Point::new(
+                if cfg!(target_os = "macos") {
+                    76.0
+                } else {
+                    12.0
+                },
+                9.0,
+            ),
             12.0,
             naui::Color::rgb(0xf0, 0xf0, 0xf2),
         );
@@ -801,7 +804,11 @@ mod tests {
             missing_native_controls(xml).unwrap(),
             ["Popover", "Spinner", "Toolbar"]
         );
-        assert!(missing_native_controls("<Window><Tabs><Tab><TextArea/></Tab></Tabs></Window>").unwrap().is_empty());
+        assert!(
+            missing_native_controls("<Window><Tabs><Tab><TextArea/></Tab></Tabs></Window>")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
