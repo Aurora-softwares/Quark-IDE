@@ -2527,6 +2527,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // The composite toolbar is not itself a tool; Output has its own
         // independently movable and floatable section below the toolbar.
         output_controls.float.set_enabled(false);
+        output_controls.pin.set_enabled(false);
     }
 
     // Shared dock headers now own pin and collapse state. Persist settings
@@ -2540,7 +2541,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         (native_docking::DockId::Data, &data_controls),
         (native_docking::DockId::Solution, &solution_controls),
         (native_docking::DockId::Properties, &properties_controls),
-        (native_docking::DockId::Output, &output_controls),
+        (native_docking::DockId::Output, &output_page_controls),
         (native_docking::DockId::ErrorList, &error_controls),
         (native_docking::DockId::Debug, &debug_controls),
         (native_docking::DockId::TestResults, &test_controls),
@@ -2741,7 +2742,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (native_docking::DockId::Data, data_controls.clone()),
             (native_docking::DockId::Solution, solution_controls.clone()),
             (native_docking::DockId::Properties, properties_controls.clone()),
-            (native_docking::DockId::Output, output_controls.clone()),
+            (native_docking::DockId::Output, output_page_controls.clone()),
             (native_docking::DockId::ErrorList, error_controls.clone()),
             (native_docking::DockId::Debug, debug_controls.clone()),
             (native_docking::DockId::TestResults, test_controls.clone()),
