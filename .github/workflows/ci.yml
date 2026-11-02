@@ -25,19 +25,19 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Lints
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --no-default-features --features legacy-ui --all-targets -- -D warnings
       - name: Unit tests
-        run: cargo test --all-targets
+        run: cargo test --no-default-features --features legacy-ui --all-targets
       - name: Feature coverage policy
         run: |
           python -m unittest discover -s scripts -p test_feature_coverage.py
           python scripts/check-feature-coverage.py
       - name: Release compilation
-        run: cargo build --release
+        run: cargo build --release --no-default-features --features legacy-ui --bin quark-ide
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: quark-${{ runner.os }}
+          name: quark-legacy-${{ runner.os }}
           path: |
             target/release/quark-ide
             target/release/quark-ide.exe
@@ -59,23 +59,23 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y pkg-config libgtk-4-dev libadwaita-1-dev xvfb xauth xdotool
       - name: Verify native UI frontend
-        run: cargo clippy --features native-ui --bin quark-native -- -D warnings
+        run: cargo clippy --no-default-features --features native-ui --bin quark-native -- -D warnings
       - name: Native UI model tests
-        run: cargo test --features native-ui --bin quark-native
+        run: cargo test --no-default-features --features native-ui --bin quark-native
       - name: Build native UI frontend
-        run: cargo build --release --features native-ui --bin quark-native
+        run: cargo build --release --no-default-features --features native-ui --bin quark-native
       - name: GTK startup lifetime under Xvfb
         if: runner.os == 'Linux'
         run: xvfb-run -a -s '-screen 0 1600x1000x24' python3 scripts/native-startup-smoke.py target/release/quark-native
       - name: Native GTK stacked docking ownership regression under Xvfb
         if: runner.os == 'Linux'
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings GTK_A11Y=none cargo test --features native-ui --bin quark-native moved_stacks_reparent_without_gtk_non_child_warnings -- --ignored --test-threads=1
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings GTK_A11Y=none cargo test --no-default-features --features native-ui --bin quark-native moved_stacks_reparent_without_gtk_non_child_warnings -- --ignored --test-threads=1
       - name: Native GTK SizeBin parent regression under Xvfb
         if: runner.os == 'Linux'
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings GTK_A11Y=none cargo test --features native-ui --bin quark-native native_sizing_wrappers_move_without_detaching_the_inner_widget -- --ignored --test-threads=1
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings GTK_A11Y=none cargo test --no-default-features --features native-ui --bin quark-native native_sizing_wrappers_move_without_detaching_the_inner_widget -- --ignored --test-threads=1
       - name: Native GTK Solution Explorer context-menu ownership regression under Xvfb
         if: runner.os == 'Linux'
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings GTK_A11Y=none cargo test --features native-ui --bin quark-native context_menu_does_not_poison_listbox_row_rebuild -- --ignored --test-threads=1
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings GTK_A11Y=none cargo test --no-default-features --features native-ui --bin quark-native context_menu_does_not_poison_listbox_row_rebuild -- --ignored --test-threads=1
       - uses: actions/upload-artifact@v4
         with:
           name: quark-native-${{ runner.os }}
