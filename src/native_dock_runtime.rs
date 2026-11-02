@@ -389,6 +389,35 @@ mod stack_tests {
         assert!(third.parent().is_some());
     }
 
+    /// Regression for the naui 0.8 SizeBin parent: moving the widget
+    /// INSIDE the sizing wrapper fails, while moving its outer wrapper
+    /// between native side hosts is valid and retains the original contents.
+    #[test]
+    #[ignore = "requires a GTK display; Linux CI invokes this under Xvfb"]
+    fn native_sizing_wrappers_move_without_detaching_the_inner_widget() {
+        gtk4::init().expect("GTK test must run under a virtual display");
+        let original = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        let inner = gtk4::Label::new(Some("Solution Explorer"));
+        // Frame stands in for naui's custom NauiSizeBin: it is a single-child
+        // GTK widget which cannot be manipulated as a GtkBox or GtkPaned.
+        let wrapper = gtk4::Frame::new(None);
+        wrapper.set_child(Some(&inner));
+        original.append(&wrapper);
+        let inner_widget: gtk4::Widget = inner.clone().upcast();
+        let wrapper_widget: gtk4::Widget = wrapper.clone().upcast();
+        assert!(!detach(&inner_widget));
+        assert_eq!(inner_widget.parent(), Some(wrapper_widget.clone()));
+        assert!(detach(&wrapper_widget));
+        assert!(wrapper_widget.parent().is_none());
+        let dock = gtk4::Paned::new(gtk4::Orientation::Vertical);
+        dock.set_start_child(Some(&wrapper_widget));
+        assert_eq!(dock.start_child(), Some(wrapper_widget.clone()));
+        assert_eq!(inner_widget.parent(), Some(wrapper_widget.clone()));
+        assert!(detach(&wrapper_widget));
+        assert!(attach_box(&wrapper_widget, &original));
+        assert_eq!(inner_widget.parent(), Some(wrapper_widget));
+    }
+
     #[test]
     fn pinned_sections_default_to_equal_heights() {
         assert_eq!(equal_stack_position(600, 1, 1), 300);
