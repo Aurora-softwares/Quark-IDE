@@ -31,6 +31,9 @@ mod native_layout;
 mod native_model;
 #[path = "../native_portable_preview.rs"]
 mod native_portable_preview;
+#[cfg(target_os = "linux")]
+#[path = "../native_preferences.rs"]
+mod native_preferences;
 #[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
@@ -610,8 +613,8 @@ fn retain_trailing_size(split: &naui::SplitView) {
                 if let Some(display) = gtk4::gdk::Display::default() {
                     let provider = gtk4::CssProvider::new();
                     provider.load_from_data(
-                        "paned.quark-resize-pane > separator { background: #41434a; min-width: 5px; min-height: 5px; } \
-                         paned.quark-resize-pane > separator:hover { background: #77717f; }"
+                        "paned.quark-resize-pane > separator { background: alpha(@theme_fg_color, 0.14); min-width: 5px; min-height: 5px; } \
+                         paned.quark-resize-pane > separator:hover { background: alpha(@theme_fg_color, 0.32); }"
                     );
                     gtk4::style_context_add_provider_for_display(
                         &display,
@@ -887,11 +890,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 let title = titles.get(index).copied().unwrap_or("");
                 if active.get() == index {
-                    cairo.set_source_rgb(0.53, 0.49, 0.64);
+                    cairo.set_source_rgb(0.42, 0.32, 0.73);
                     cairo.rectangle(1.0, 6.0, 3.0, f64::from(height) - 12.0);
                     let _ = cairo.fill();
                 }
-                cairo.set_source_rgb(0.78, 0.78, 0.81);
+                let dark = gtk4::Settings::default()
+                    .map(|settings| settings.is_gtk_application_prefer_dark_theme())
+                    .unwrap_or(false);
+                if dark { cairo.set_source_rgb(0.84, 0.84, 0.88); }
+                else { cairo.set_source_rgb(0.28, 0.29, 0.36); }
                 cairo.select_font_face(
                     "Sans",
                     gtk4::cairo::FontSlant::Normal,
@@ -3124,7 +3131,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     "Static analysis is available through Hydrogen check in the legacy IDE.",
                 );
             }
-            (9, 0) => status.set_text("Native Options panel is planned."),
+            (9, 0) => {
+                #[cfg(target_os = "linux")]
+                native_preferences::show(workspace_file().with_file_name("native-preferences.json"));
+                #[cfg(not(target_os = "linux"))]
+                status.set_text("Native settings are currently available on GTK/Linux.");
+            },
             (10, 0) => status.set_text("Native extension management is planned."),
             (11, 0) => reset_window_layout(),
             (12, 0) => status.set_text("Quark IDE — native WinUI 3 / AppKit / GTK 4 preview."),
@@ -3160,6 +3172,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 }
 
 fn build(ui: &Ui) -> naui::Result<()> {
+    #[cfg(target_os = "linux")]
+    native_preferences::apply_theme(&native_preferences::load(&workspace_file().with_file_name("native-preferences.json")));
     let state = Rc::new(RefCell::new(Ide::load()));
     let existing = state.borrow().workspace.recent.clone();
     let window = ui.window("Quark IDE — Start Window", 1080.0, 660.0)?;
