@@ -140,9 +140,15 @@ pub fn markup(raw: &str, palette: Palette) -> String {
         let plain = remove_escape_sequences(raw);
         out = plain.lines().map(|line| {
             let low = line.to_ascii_lowercase();
-            let colour = if low.contains("fail") || low.contains("error") || low.contains("panic") {
+            let successful_summary = low.contains("test result: ok")
+                || (low.contains("0 failed") && low.contains("pass"));
+            let colour = if successful_summary {
+                "#b5e890"
+            } else if low.contains("failed") || low.contains("fail:")
+                || low.contains("error:") || low.contains("panic") {
                 "#ff7b86"
-            } else if low.contains("pass") || low.contains(" ok") || low.contains("success") {
+            } else if low.contains("passed") || low.contains(" ... ok")
+                || low.starts_with("pass") || low.contains("success") {
                 "#b5e890"
             } else { "#d9e1eb" };
             format!("<span foreground=\"{colour}\">{}</span>\n", escape(line))
@@ -170,6 +176,13 @@ mod tests {
         );
     }
 
+    #[test]
+    fn zero_failed_summary_is_green_not_red() {
+        let text = "test result: ok. 12 passed; 0 failed; 0 ignored";
+        let m = markup(text, Palette::Tests);
+        assert!(m.contains("#b5e890"), "{m}");
+        assert!(!m.contains("#ff7b86"), "{m}");
+    }
     #[test]
     fn test_results_colours_match_pass_and_fail() {
         let m = markup("test one ... ok\ntest two ... FAILED", Palette::Tests);
