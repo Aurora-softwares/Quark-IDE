@@ -130,7 +130,12 @@ fn render_node(
         capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let selected = on_select.clone();
         let selected_path = path.clone();
-        capture.connect_pressed(move |_, _, _, _| selected(selected_path.clone()));
+        capture.connect_pressed(move |gesture, _, _, _| {
+            selected(selected_path.clone());
+            // A designer click is a selection, not a command. Claiming the
+            // GTK sequence suppresses default button/input/slider actions.
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+        });
         row.native_widget().add_controller(capture);
     }
     let enabled = node.attribute("enabled") != Some("false");
@@ -676,7 +681,9 @@ pub fn render(
     }
     let outer = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     outer.set_spacing(0.0);
-    outer.set_padding(Padding::all(18.0));
+    // Align the window at the viewport origin: never introduce padding that
+    // makes the preview float in the middle of the Design surface.
+    outer.set_padding(Padding::all(0.0));
     let window = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     window.set_spacing(8.0);
     window.set_padding(Padding::all(12.0));
