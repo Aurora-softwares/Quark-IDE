@@ -1478,6 +1478,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Windows (WinUI 3) and Linux (GTK). The canvas remains for flat layouts.
     let portable_preview = ui.stack(Orientation::Vertical)?;
     portable_preview.set_spacing(6.0);
+    // Keep the design window top-left aligned, but reserve a small breathing
+    // space on every side so its native shadow is not clipped by the scroll.
+    portable_preview.set_padding(Padding::all(native_portable_preview::DESIGN_VIEWPORT_INSET));
     // A fixed-size design window belongs at the viewport origin. GTK's
     // default child alignment can otherwise centre it in a wide editor.
     #[cfg(target_os = "linux")]
@@ -1500,6 +1503,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         Rc::new(RefCell::new(std::collections::HashMap::new()));
     type PreviewRefresh = Rc<dyn Fn()>;
     let reload_preview: Rc<RefCell<Option<PreviewRefresh>>> = Rc::new(RefCell::new(None));
+    // Preview rerenders must never destroy the active Properties input on
+    // each keystroke, otherwise editing even a short string loses focus.
+    let skip_properties_on_preview_refresh = Rc::new(Cell::new(false));
 
     let xml_editor = ui.text_area("")?;
     xml_editor.set_sizing(Sizing::fill());
@@ -1931,12 +1937,31 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    // A native text/change callback only queues its edit. Applying the XML
+    // and rebuilding the preview happens after the widget's callback returns.
+    let live_property_later = ui.tasks().channel({
+        let apply = apply_xml_property.clone();
+        let status = status.clone();
+        let skip = skip_properties_on_preview_refresh.clone();
+        move |(kind, name, input): (String, String, String)| {
+            match native_ui_properties::runtime_property_value(&kind, &name, &input) {
+                Ok(value) => {
+                    skip.set(true);
+                    apply(name, value);
+                    skip.set(false);
+                }
+                Err(error) => status.set_text(&format!("Cannot edit XML property: {error}")),
+            }
+        }
+    });
+
     *reload_properties.borrow_mut() = Some(Rc::new({
         let state = state.clone();
         let ui = ui.clone();
         let native_property_content = native_property_content.clone();
         let selected_xml_path = selected_xml_path.clone();
         let apply_xml_property = apply_xml_property.clone();
+        let live_property_later = live_property_later.clone();
         let select_element_later = select_element_later.clone();
         let design_tab_selection = design_tab_selection.clone();
         let change_design_page_later = change_design_page_later.clone();
@@ -2055,7 +2080,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     continue;
                 };
                 edit_row.set_spacing(4.0);
-                let draft = Rc::new(RefCell::new(display_value.clone()));
                 let choices = native_ui_properties::property_choices(&kind, &name, &all_fields);
                 if !choices.is_empty() {
                     if let Ok(selector) = ui.combo_box() {
@@ -2069,45 +2093,33 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             .position(|(_, value)| value == &display_value)
                             .unwrap_or(0);
                         selector.set_selected(selected);
-                        let draft = draft.clone();
+                        let dispatch = live_property_later.clone();
+                        let property_kind = kind.clone();
+                        let property_name = name.clone();
                         selector.on_select(move |index| {
                             if let Some((_, value)) = choices.get(index) {
-                                *draft.borrow_mut() = value.clone();
+                                let _ = dispatch.send((
+                                    property_kind.clone(),
+                                    property_name.clone(),
+                                    value.clone(),
+                                ));
                             }
                         });
                         edit_row.append(&selector);
                     }
                 } else if let Ok(value_field) = ui.text_input(&display_value) {
                     value_field.set_sizing(Sizing::fill_width());
-                    value_field.on_change({
-                        let draft = draft.clone();
-                        move |next| *draft.borrow_mut() = next.to_owned()
+                    let dispatch = live_property_later.clone();
+                    let property_kind = kind.clone();
+                    let property_name = name.clone();
+                    value_field.on_change(move |next| {
+                        let _ = dispatch.send((
+                            property_kind.clone(),
+                            property_name.clone(),
+                            next.to_owned(),
+                        ));
                     });
                     edit_row.append(&value_field);
-                }
-                if let Ok(apply_button) = ui.button("✓") {
-                    let update = apply_xml_property.clone();
-                    #[cfg(target_os = "linux")]
-                    {
-                        use gtk4::prelude::*;
-                        use naui::Widget as _;
-                        apply_button
-                            .native_widget()
-                            .set_tooltip_text(Some("Apply this property to the Hydrogen UI XML"));
-                    }
-                    apply_button.on_click(move || {
-                        let chosen = draft.borrow().clone();
-                        if human_tab_index {
-                            if let Ok(page) = chosen.trim().parse::<usize>() {
-                                if page > 0 {
-                                    update(name.clone(), (page - 1).to_string());
-                                }
-                            }
-                        } else {
-                            update(name.clone(), chosen);
-                        }
-                    });
-                    edit_row.append(&apply_button);
                 }
                 row.append(&edit_row);
                 native_property_content.append(&row);
@@ -2160,6 +2172,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let select_native_element = select_native_element.clone();
         let design_tab_selection = design_tab_selection.clone();
         let reload_properties = reload_properties.clone();
+        let skip_properties_on_preview_refresh = skip_properties_on_preview_refresh.clone();
         let status = status.clone();
         move || {
             let doc = state.borrow();
@@ -2203,8 +2216,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
                 design_surface.attach(&portable_scroll, GridCell::new(0, 1));
-                if let Some(refresh) = reload_properties.borrow().as_ref() {
-                    refresh();
+                if !skip_properties_on_preview_refresh.get() {
+                    if let Some(refresh) = reload_properties.borrow().as_ref() {
+                        refresh();
+                    }
                 }
             } else {
                 property_editor.append(&flat_properties);
