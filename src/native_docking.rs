@@ -231,6 +231,37 @@ impl DockLayout {
         sections
     }
 
+    /// An unpinned pane is visible only while explicitly activated by its
+    /// rail or focused as a temporary tool window. The layout itself remains
+    /// unchanged, so its preferred size survives auto-hide.
+    pub fn visible(&self, id: DockId, active: Option<DockId>) -> bool {
+        self.section(id)
+            .is_some_and(|section| section.pinned || active == Some(id))
+    }
+
+    /// Move a section before a sibling within the requested dock zone.
+    /// Reassign dense order values to prevent overflow after many drags.
+    pub fn reorder_before(&mut self, id: DockId, sibling: DockId) -> bool {
+        if id == sibling { return false; }
+        let Some(zone) = self.section(sibling).map(|section| section.zone) else {
+            return false;
+        };
+        if self.section(id).is_none() { return false; }
+        let mut ordered: Vec<DockId> = self.sections_in(zone).iter()
+            .map(|section| section.id).filter(|entry| *entry != id).collect();
+        let Some(index) = ordered.iter().position(|entry| *entry == sibling) else {
+            return false;
+        };
+        ordered.insert(index, id);
+        for (order, entry) in ordered.iter().enumerate() {
+            if let Some(section) = self.section_mut(*entry) {
+                section.zone = zone;
+                section.order = order as u16;
+            }
+        }
+        true
+    }
+
     pub fn pinned_in(&self, zone: DockZone) -> Vec<&DockSection> {
         self.sections_in(zone)
             .into_iter()
@@ -449,6 +480,29 @@ mod tests {
         assert_eq!(targets.hit_test(740.0, 380.0), None);
         assert_eq!(targets.hit_test(f64::NAN, 0.0), None);
         assert!(DockTargets::for_viewport(100.0, 100.0).is_none());
+    }
+
+    #[test]
+    fn auto_hide_visibility_respects_pin_and_active_focus() {
+        let mut layout = DockLayout::default();
+        assert!(!layout.visible(DockId::Toolbox, None));
+        assert!(layout.visible(DockId::Toolbox, Some(DockId::Toolbox)));
+        assert!(!layout.visible(DockId::Toolbox, Some(DockId::Output)));
+        assert!(layout.visible(DockId::Solution, None));
+        layout.pin(DockId::Toolbox, true);
+        assert!(layout.visible(DockId::Toolbox, None));
+    }
+
+    #[test]
+    fn dragging_order_within_zone_preserves_unique_sections() {
+        let mut layout = DockLayout::default();
+        assert!(layout.reorder_before(DockId::Properties, DockId::Solution));
+        assert_eq!(layout.sections_in(DockZone::Right)[0].id, DockId::Properties);
+        assert!(!layout.reorder_before(DockId::Properties, DockId::Properties));
+        assert!(layout.reorder_before(DockId::Output, DockId::Solution));
+        assert_eq!(layout.section(DockId::Output).unwrap().zone, DockZone::Right);
+        assert_eq!(layout.sections_in(DockZone::Right)[0].id, DockId::Properties);
+        assert_eq!(layout.sections_in(DockZone::Right)[1].id, DockId::Output);
     }
 
     #[test]
