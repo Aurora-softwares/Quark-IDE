@@ -2560,6 +2560,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use gtk4::prelude::*;
         use naui::Widget as _;
         let widget = terminal_output.native_widget();
+        // Canvas widgets are not focusable by default. Without this setting
+        // gtk4::EventControllerKey never receives keystrokes, even when the
+        // Terminal tab calls grab_focus().
+        widget.set_focusable(true);
+        let focus_click = gtk4::GestureClick::new();
+        focus_click.set_button(1);
+        let focus = widget.clone();
+        focus_click.connect_pressed(move |_, _, _, _| {
+            focus.grab_focus();
+        });
+        widget.add_controller(focus_click);
         let controller = gtk4::EventControllerKey::new();
         let send = terminal_input_sender.clone();
         controller.connect_key_pressed(move |_, key, _, modifiers| {
