@@ -742,7 +742,6 @@ fn apply_right_dock_order(
 #[cfg(target_os = "linux")]
 fn apply_bottom_dock_order(
     tab_strip: &naui::Stack,
-    anchor: &naui::Button,
     tabs: &[(native_docking::DockId, naui::Button)],
     layout: &native_docking::DockLayout,
 ) -> bool {
@@ -751,12 +750,12 @@ fn apply_bottom_dock_order(
     let Ok(container) = tab_strip.native_widget().downcast::<gtk4::Box>() else {
         return false;
     };
-    let mut predecessor = anchor.native_widget();
+    let mut predecessor: Option<gtk4::Widget> = None;
     for section in layout.sections_in(native_docking::DockZone::Bottom) {
         if let Some((_, button)) = tabs.iter().find(|(id, _)| *id == section.id) {
             let widget = button.native_widget();
-            container.reorder_child_after(&widget, Some(&predecessor));
-            predecessor = widget;
+            container.reorder_child_after(&widget, predecessor.as_ref());
+            predecessor = Some(widget);
         }
     }
     true
@@ -1831,9 +1830,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // present for model compatibility, but never occupies a second row.
     let bottom_tabs = ui.stack(Orientation::Horizontal)?;
     bottom_tabs.set_spacing(6.0);
-    let bottom_anchor = ui.button("▸")?;
-    bottom_tabs.append(&bottom_anchor);
-    let output_tab = ui.button("Output")?;
+     let output_tab = ui.button("Output")?;
     let errors_tab = ui.button("Error List")?;
     let debug_tab = ui.button("Debug")?;
     let test_tab = ui.button("Test Results")?;
@@ -2992,6 +2989,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // independently movable and floatable section below the toolbar.
         output_controls.float.set_enabled(false);
         output_controls.pin.set_enabled(false);
+        output_controls.collapse.set_enabled(false);
     }
 
     // Shared dock headers now own pin and collapse state. Persist settings
@@ -3259,7 +3257,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         #[cfg(target_os = "linux")]
         let bottom_tabs = bottom_tabs.clone();
         #[cfg(target_os = "linux")]
-        let bottom_anchor = bottom_anchor.clone();
         #[cfg(target_os = "linux")]
         let bottom_buttons = [
             (native_docking::DockId::Output, output_tab.clone()),
@@ -3302,7 +3299,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     route_dock(id, id.default_zone());
                 }
                 apply_right_dock_order(&inspector, &solution_pane, &properties_pane, false);
-                apply_bottom_dock_order(&bottom_tabs, &bottom_anchor, &bottom_buttons, &new_layout);
+                apply_bottom_dock_order(&bottom_tabs, &bottom_buttons, &new_layout);
             }
             *dock_model.borrow_mut() = new_layout;
             for (id, header) in &reset_headers {
@@ -3387,19 +3384,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (native_docking::DockId::TestResults, test_tab.clone()),
             (native_docking::DockId::FindResults, find_tab.clone()),
         ];
-        apply_bottom_dock_order(
-            &bottom_tabs,
-            &bottom_anchor,
-            &tabs,
-            &dock_model.borrow(),
-        );
+        apply_bottom_dock_order(&bottom_tabs, &tabs, &dock_model.borrow());
         for (target, button) in &tabs {
             let destination = *target;
             let tabs = tabs.clone();
             let model = dock_model.clone();
             let path = dock_path.clone();
             let strip = bottom_tabs.clone();
-            let anchor = bottom_anchor.clone();
             let status = status.clone();
             native_dock_widgets::enable_widget_drag(
                 &button.native_widget(),
@@ -3412,7 +3403,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     if !layout.reorder_before(source, destination) {
                         return false;
                     }
-                    if !apply_bottom_dock_order(&strip, &anchor, &tabs, &layout) {
+                    if !apply_bottom_dock_order(&strip, &tabs, &layout) {
                         status.set_text("Cannot reorder these native tool tabs.");
                         return false;
                     }
