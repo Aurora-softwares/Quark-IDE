@@ -1855,11 +1855,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     designer.append(&xml_editor);
                 }
             }
-            if page == Page::Design {
-                xml_visual_tab.redraw();
-                xml_text_tab.redraw();
-                centre.append(&design_tabs);
-            }
             pages.clear();
             match page {
                 Page::Empty => pages.append(&empty_workspace),
@@ -1867,6 +1862,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 Page::Design => pages.append(&designer),
             }
             centre.append(&pages);
+            // Visual Studio-style designer modes live below the workspace.
+            // A source document has no extra row.
+            if page == Page::Design {
+                xml_visual_tab.redraw();
+                xml_text_tab.redraw();
+                centre.append(&design_tabs);
+            }
             // Ensure the design host is restored whenever an already-open
             // .hyui document becomes active again, not only on first open.
             if page == Page::Design && design_mode.get() {
