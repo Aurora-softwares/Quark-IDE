@@ -324,6 +324,100 @@ fn escaped(value: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+/// Reject invalid values before mutating the XML. Unknown future Hydrogen
+/// attributes remain losslessly editable, but known native controls should
+/// never accept impossible ranges, pages or bool strings.
+fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Result<(), String> {
+    let kind = node.tag_name().name();
+    if !supported_fields(kind).contains(&name) && !COMMON_FIELDS.contains(&name) {
+        return Ok(());
+    }
+    if matches!(
+        name,
+        "visible" | "enabled" | "fill" | "checked" | "primary" | "indeterminate" | "running" | "open"
+    ) && value != "true"
+        && value != "false"
+    {
+        return Err(format!("{name} must be true or false"));
+    }
+    if name == "theme" && kind == "Window" && !matches!(value, "system" | "light" | "dark") {
+        return Err("Window theme must be system, light or dark".into());
+    }
+    if matches!(
+        name,
+        "width" | "height" | "padding" | "gap" | "breakpoint" | "minItemWidth" | "preferredWidth"
+            | "minimum" | "maximum" | "interval"
+    ) || (name == "value" && matches!(kind, "Slider" | "NumberInput" | "ProgressBar"))
+    {
+        let number = value
+            .parse::<f64>()
+            .map_err(|_| format!("{name} must be a number"))?;
+        if !number.is_finite() {
+            return Err(format!("{name} must be a finite number"));
+        }
+        if matches!(name, "width" | "height" | "padding" | "gap" | "breakpoint"
+            | "minItemWidth" | "preferredWidth" | "interval")
+            && number < 0.0
+        {
+            return Err(format!("{name} must not be negative"));
+        }
+        if name == "width" && kind == "Window" && number < 200.0 {
+            return Err("Window width must be at least 200".into());
+        }
+        if name == "height" && kind == "Window" && number < 200.0 {
+            return Err("Window height must be at least 200".into());
+        }
+        if matches!(kind, "Slider" | "NumberInput" | "ProgressBar")
+            && matches!(name, "minimum" | "maximum" | "value")
+        {
+            let min = if name == "minimum" {
+                number
+            } else {
+                node.attribute("minimum")
+                    .and_then(|n| n.parse::<f64>().ok())
+                    .unwrap_or(0.0)
+            };
+            let max = if name == "maximum" {
+                number
+            } else {
+                node.attribute("maximum")
+                    .and_then(|n| n.parse::<f64>().ok())
+                    .unwrap_or(100.0)
+            };
+            if !min.is_finite() || !max.is_finite() || max <= min {
+                return Err("maximum must be greater than minimum".into());
+            }
+            if name == "value" && !(min..=max).contains(&number) {
+                return Err(format!("value must be between {min} and {max}"));
+            }
+        }
+    }
+    if name == "value" && matches!(kind, "Tabs" | "Select" | "RadioGroup" | "ListBox" | "Table") {
+        let index = value
+            .parse::<usize>()
+            .map_err(|_| format!("{kind} selection must be a zero-based, whole-number index"))?;
+        let count = if kind == "Tabs" {
+            node.children()
+                .filter(|child| child.is_element() && child.tag_name().name() == "Tab")
+                .count()
+        } else {
+            let choices = node.attribute(if kind == "Table" { "rows" } else { "items" })
+                .unwrap_or("");
+            if choices.is_empty() {
+                0
+            } else if kind == "Table" {
+                choices.lines().count()
+            } else {
+                choices.split('|').count()
+            }
+        };
+        if count > 0 && index >= count || count == 0 && index != 0 {
+            return Err(format!("{kind} selection {index} is outside the available {count} choices"));
+        }
+    }
+    Ok(())
+}
+
 /// Replace one attribute in its existing start tag, or add it if missing.
 /// This edits only that one tag, preserving all other XML bytes verbatim.
 pub fn set_attribute(
@@ -340,6 +434,7 @@ pub fn set_attribute(
         return Err("Expected a Hydrogen <Window> document".into());
     }
     let node = element_at(&parsed, path)?;
+    validate_known_property(node, name, value)?;
     let start = node.range().start;
     let bytes = source.as_bytes();
     let mut quote = None;
@@ -525,6 +620,30 @@ mod tests {
         assert!(design_tab_pages(xml, &[]).is_err());
         assert!(design_tab_pages(xml, &[1]).is_err());
         assert!(design_tab_pages(xml, &[0, 4]).is_err());
+    }
+
+    #[test]
+    fn properties_validate_native_control_ranges_and_booleans() {
+        let xml = r#"<Window title="Test"><Slider minimum="-10" maximum="30" value="5"/><CheckBox checked="true"/></Window>"#;
+        assert!(set_attribute(xml, &[0], "minimum", "31").is_err());
+        assert!(set_attribute(xml, &[0], "maximum", "-11").is_err());
+        assert!(set_attribute(xml, &[0], "value", "31").is_err());
+        assert!(set_attribute(xml, &[0], "value", "NaN").is_err());
+        assert!(set_attribute(xml, &[1], "checked", "maybe").is_err());
+        assert!(set_attribute(xml, &[0], "value", "12.5").unwrap().contains("value=\"12.5\""));
+        assert!(set_attribute(xml, &[1], "checked", "false").is_ok());
+    }
+
+    #[test]
+    fn properties_reject_invalid_pages_and_allow_valid_list_choices() {
+        let xml = r#"<Window theme="system"><Tabs value="0"><Tab title="First"/><Tab title="Second"/></Tabs><Select items="Red|Green|Blue" value="1"/></Window>"#;
+        assert!(set_attribute(xml, &[0], "value", "2").is_err());
+        assert!(set_attribute(xml, &[0], "value", "-1").is_err());
+        assert!(set_attribute(xml, &[1], "value", "3").is_err());
+        assert!(set_attribute(xml, &[], "theme", "banana").is_err());
+        assert!(set_attribute(xml, &[0], "value", "1").unwrap().contains("<Tabs value=\"1\""));
+        assert!(set_attribute(xml, &[1], "value", "2").unwrap().contains("value=\"2\""));
+        assert!(set_attribute(xml, &[], "theme", "dark").is_ok());
     }
 
     #[test]
