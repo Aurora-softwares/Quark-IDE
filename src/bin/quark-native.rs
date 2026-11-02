@@ -1463,13 +1463,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         {
             use gtk4::prelude::*;
             use naui::Widget as _;
-            tab.native_widget().set_tooltip_text(Some(
-                if index == 0 {
-                    "Focus Solution Explorer; drag the divider to resize."
-                } else {
-                    "Focus Properties; drag the divider to resize."
-                },
-            ));
+            tab.native_widget().set_tooltip_text(Some(if index == 0 {
+                "Focus Solution Explorer; drag the divider to resize."
+            } else {
+                "Focus Properties; drag the divider to resize."
+            }));
         }
         right_rail.append(&tab);
         right_tabs.push(tab);
