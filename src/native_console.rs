@@ -39,6 +39,31 @@ fn rgb(number: u16) -> String {
     let shade = 8 + 10 * (number - 232).min(23);
     format!("#{shade:02x}{shade:02x}{shade:02x}")
 }
+/// Discard formatting/control escape sequences while preserving readable
+/// UTF-8 text. Used for non-GTK fallback and pass/fail classification.
+pub fn remove_escape_sequences(raw: &str) -> String {
+    let bytes = raw.as_bytes();
+    let mut text = String::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == 0x1b {
+            i += 1;
+            if i < bytes.len() && bytes[i] == b'[' {
+                i += 1;
+                while i < bytes.len() && !(0x40..=0x7e).contains(&bytes[i]) {
+                    i += 1;
+                }
+                if i < bytes.len() { i += 1; }
+            }
+            continue;
+        }
+        let ch = raw[i..].chars().next().unwrap();
+        if !ch.is_control() || ch == '\n' || ch == '\t' { text.push(ch); }
+        i += ch.len_utf8();
+    }
+    text
+}
+
 pub fn markup(raw: &str, palette: Palette) -> String {
     let bytes = raw.as_bytes();
     let mut out = String::new();
@@ -110,8 +135,10 @@ pub fn markup(raw: &str, palette: Palette) -> String {
     }
     push(&mut out, &mut current, &fg, bold);
     if palette == Palette::Tests {
-        // Test runners often print plain PASS/FAIL lines, no ANSI sequences.
-        out = raw.lines().map(|line| {
+        // Test runners may already colour output. Strip existing SGR codes
+        // before applying consistent pass/fail colouring for each line.
+        let plain = remove_escape_sequences(raw);
+        out = plain.lines().map(|line| {
             let low = line.to_ascii_lowercase();
             let colour = if low.contains("fail") || low.contains("error") || low.contains("panic") {
                 "#ff7b86"
@@ -135,6 +162,14 @@ mod tests {
         assert!(m.contains("&amp;"));
         assert!(!m.contains("\x1b"));
     }
+    #[test]
+    fn strips_ansi_colours_and_private_cursor_codes() {
+        assert_eq!(
+            remove_escape_sequences("\x1b[?25l\x1b[31mFAIL\x1b[0m\n"),
+            "FAIL\n"
+        );
+    }
+
     #[test]
     fn test_results_colours_match_pass_and_fail() {
         let m = markup("test one ... ok\ntest two ... FAILED", Palette::Tests);
