@@ -1,9 +1,7 @@
 //! GTK platform settings editor backed by the cross-platform preferences schema.
 use gtk4::prelude::*;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
-pub use crate::native_settings::{
-    load, Appearance, Build, Debugging, Editor, Hydrogen, Preferences, ThemeChoice,
-};
+use crate::native_settings::{load, Preferences, ThemeChoice};
 fn save(path: &std::path::Path, preferences: &Preferences) -> Result<(), String> {
     crate::native_settings::save(path, preferences)
 }
@@ -394,6 +392,7 @@ pub fn show(path: PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     #[test]
     fn preferences_roundtrip_and_old_files_use_defaults() {
         let dir = tempfile::tempdir().unwrap();
