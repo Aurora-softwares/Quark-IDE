@@ -1809,8 +1809,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let (bottom, output_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Output)?;
-    let bottom_tabs = output_controls.row.clone();
-    bottom_tabs.set_spacing(8.0);
+    // Bottom tools share one tab strip. The generic dock header remains
+    // present for model compatibility, but never occupies a second row.
+    let bottom_tabs = ui.stack(Orientation::Horizontal)?;
+    bottom_tabs.set_spacing(6.0);
+    let bottom_anchor = ui.button("▸")?;
+    bottom_tabs.append(&bottom_anchor);
     let output_tab = ui.button("Output")?;
     let errors_tab = ui.button("Error List")?;
     let debug_tab = ui.button("Debug")?;
@@ -1855,8 +1859,45 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         native_dock_widgets::section_panel(ui, native_docking::DockId::FindResults)?;
     find_section.append(&find_view);
     bottom_pages.append(&output_section);
+    bottom.append(&bottom_tabs);
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        // Never display nested headers, pin icons or fold buttons in the
+        // bottom tool area. One tab row serves every selected tool.
+        for header in [
+            &output_controls, &output_page_controls, &error_controls,
+            &debug_controls, &test_controls, &find_controls,
+        ] {
+            header.row.native_widget().set_visible(false);
+        }
+        bottom_tabs.native_widget().add_css_class("quark-bottom-tabs");
+        bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
+        bottom_pages.native_widget().set_vexpand(true);
+        output_scroll.native_widget().set_vexpand(true);
+        let console = output.native_widget();
+        if let Ok(label) = console.downcast::<gtk4::Label>() {
+            label.set_xalign(0.0);
+            label.set_yalign(0.0);
+            label.set_wrap(false);
+            label.set_selectable(false);
+            label.set_valign(gtk4::Align::Start);
+            label.set_halign(gtk4::Align::Start);
+            label.add_css_class("quark-console-output");
+        }
+        if let Some(display) = gtk4::gdk::Display::default() {
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_data(
+                ".quark-console-output { font-family: monospace; font-size: 12px; color: @theme_fg_color; }                  .quark-bottom-tabs { border-bottom: 1px solid alpha(@theme_fg_color, 0.16); }"
+            );
+            gtk4::style_context_add_provider_for_display(
+                &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
+    }
 
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
@@ -3197,7 +3238,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         #[cfg(target_os = "linux")]
         let bottom_tabs = bottom_tabs.clone();
         #[cfg(target_os = "linux")]
-        let bottom_anchor = output_controls.collapse.clone();
+        let bottom_anchor = bottom_anchor.clone();
         #[cfg(target_os = "linux")]
         let bottom_buttons = [
             (native_docking::DockId::Output, output_tab.clone()),
@@ -3327,7 +3368,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         ];
         apply_bottom_dock_order(
             &bottom_tabs,
-            &output_controls.collapse,
+            &bottom_anchor,
             &tabs,
             &dock_model.borrow(),
         );
@@ -3337,7 +3378,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let model = dock_model.clone();
             let path = dock_path.clone();
             let strip = bottom_tabs.clone();
-            let anchor = output_controls.collapse.clone();
+            let anchor = bottom_anchor.clone();
             let status = status.clone();
             native_dock_widgets::enable_widget_drag(
                 &button.native_widget(),
