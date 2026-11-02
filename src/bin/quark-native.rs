@@ -44,6 +44,8 @@ mod native_preferences;
 #[cfg(not(target_os = "linux"))]
 #[path = "../native_preferences_portable.rs"]
 mod native_preferences_portable;
+#[path = "../native_settings.rs"]
+mod native_settings;
 #[allow(dead_code)] // Menu metadata also used by UI contract tests.
 #[path = "../native_shell.rs"]
 mod native_shell;
@@ -56,8 +58,6 @@ mod native_start_window;
 mod native_syntax;
 #[path = "../native_terminal.rs"]
 mod native_terminal;
-#[path = "../native_settings.rs"]
-mod native_settings;
 #[path = "../native_ui_properties.rs"]
 mod native_ui_properties;
 #[path = "../problems.rs"]
@@ -1250,10 +1250,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         native_syntax::install(&editor, false);
         native_syntax::apply_editor_preferences(
             &editor,
-            &native_settings::load(
-                &workspace_file().with_file_name("native-preferences.json"),
-            )
-            .editor,
+            &native_settings::load(&workspace_file().with_file_name("native-preferences.json"))
+                .editor,
         );
     }
     code.attach(&editor, GridCell::new(0, 0));
@@ -5131,7 +5129,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             }
             if preferences.build.show_output {
-                show_bottom(if task == native_commands::Task::Test { 3 } else { 0 });
+                show_bottom(if task == native_commands::Task::Test {
+                    3
+                } else {
+                    0
+                });
             }
             run_task(
                 task,
