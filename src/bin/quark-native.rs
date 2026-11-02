@@ -957,7 +957,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use naui::Widget as _;
         left_rail.native_widget().set_valign(gtk4::Align::Start);
     }
-    left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
+    left_rail.set_sizing(
+        Sizing::new()
+            .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
+            .height(Length::Fixed(
+                native_shell::SIDE_TAB_HEIGHTS.iter().sum::<f64>() + 10.0,
+            )),
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let rail = left_rail.native_widget();
+        rail.set_valign(gtk4::Align::Start);
+        rail.set_vexpand(false);
+        rail.set_halign(gtk4::Align::Start);
+    }
     let tab_mode = Rc::new(Cell::new(Page::Design));
     let active_side_tab = Rc::new(Cell::new(0_usize));
     let mut side_tabs = Vec::new();
@@ -980,7 +995,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 .expect("naui GTK Canvas must use GtkDrawingArea");
             let mode = tab_mode.clone();
             let active = active_side_tab.clone();
-            drawing_area.set_draw_func(move |_, cairo, _width, height| {
+            drawing_area.set_draw_func(move |area, cairo, _width, height| {
                 let titles = if mode.get() == Page::Code {
                     &native_shell::CODE_SIDE_TABS[..]
                 } else {
@@ -992,14 +1007,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     cairo.rectangle(1.0, 6.0, 3.0, f64::from(height) - 12.0);
                     let _ = cairo.fill();
                 }
-                let dark = gtk4::Settings::default()
-                    .map(|settings| settings.is_gtk_application_prefer_dark_theme())
-                    .unwrap_or(false);
-                if dark {
-                    cairo.set_source_rgb(0.84, 0.84, 0.88);
-                } else {
-                    cairo.set_source_rgb(0.28, 0.29, 0.36);
-                }
+                // Draw with the actual theme foreground colour. The GTK
+                // dark-theme preference is not a reliable test for whether a
+                // user theme is currently dark.
+                #[allow(deprecated)]
+                let foreground = area.style_context().color();
+                cairo.set_source_rgb(
+                    f64::from(foreground.red()),
+                    f64::from(foreground.green()),
+                    f64::from(foreground.blue()),
+                );
                 cairo.select_font_face(
                     "Sans",
                     gtk4::cairo::FontSlant::Normal,
@@ -1932,7 +1949,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use naui::Widget as _;
         right_rail.native_widget().set_valign(gtk4::Align::Start);
     }
-    right_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
+    right_rail.set_sizing(
+        Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
+            .height(Length::Fixed(282.0)),
+    );
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let rail = right_rail.native_widget();
+        rail.set_valign(gtk4::Align::Start);
+        rail.set_vexpand(false);
+        rail.set_halign(gtk4::Align::Start);
+    }
     let mut right_tabs = Vec::new();
     for (index, label, height) in [
         (0_usize, "SOLUTION", 124.0_f64),
@@ -1953,20 +1982,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 .downcast::<gtk4::DrawingArea>()
                 .expect("naui GTK Canvas must use GtkDrawingArea");
             let active = right_active.clone();
-            drawing_area.set_draw_func(move |_, cairo, _width, allocated_height| {
+            drawing_area.set_draw_func(move |area, cairo, _width, allocated_height| {
                 if active.get() == index {
                     cairo.set_source_rgb(0.42, 0.32, 0.73);
                     cairo.rectangle(1.0, 6.0, 3.0, f64::from(allocated_height) - 12.0);
                     let _ = cairo.fill();
                 }
-                let dark = gtk4::Settings::default()
-                    .map(|settings| settings.is_gtk_application_prefer_dark_theme())
-                    .unwrap_or(false);
-                if dark {
-                    cairo.set_source_rgb(0.84, 0.84, 0.88);
-                } else {
-                    cairo.set_source_rgb(0.28, 0.29, 0.36);
-                }
+                #[allow(deprecated)]
+                let foreground = area.style_context().color();
+                cairo.set_source_rgb(
+                    f64::from(foreground.red()),
+                    f64::from(foreground.green()),
+                    f64::from(foreground.blue()),
+                );
                 cairo.select_font_face(
                     "Sans",
                     gtk4::cairo::FontSlant::Normal,
