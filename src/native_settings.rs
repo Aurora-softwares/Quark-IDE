@@ -172,10 +172,7 @@ pub fn save(path: &Path, preferences: &Preferences) -> Result<(), String> {
     crate::storage::atomic_write(path, &data).map_err(|error| error.to_string())
 }
 
-pub fn update(
-    path: &Path,
-    change: impl FnOnce(&mut Preferences),
-) -> Result<Preferences, String> {
+pub fn update(path: &Path, change: impl FnOnce(&mut Preferences)) -> Result<Preferences, String> {
     let mut preferences = try_load(path)?;
     change(&mut preferences);
     save(path, &preferences)?;
@@ -190,15 +187,20 @@ mod tests {
     fn legacy_settings_upgrade_to_versioned_defaults() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("native-preferences.json");
-        fs::write(&path, r#"{"appearance":{"theme":"dark"},"editor":{"tab_width":8}}"#)
-            .unwrap();
+        fs::write(
+            &path,
+            r#"{"appearance":{"theme":"dark"},"editor":{"tab_width":8}}"#,
+        )
+        .unwrap();
         let migrated = try_load(&path).unwrap();
         assert_eq!(migrated.schema_version, SCHEMA_VERSION);
         assert_eq!(migrated.appearance.theme, ThemeChoice::Dark);
         assert_eq!(migrated.editor.tab_width, 8);
         assert!(migrated.build.save_before_build);
         save(&path, &migrated).unwrap();
-        assert!(fs::read_to_string(&path).unwrap().contains("schema_version"));
+        assert!(fs::read_to_string(&path)
+            .unwrap()
+            .contains("schema_version"));
     }
 
     #[test]
