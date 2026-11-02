@@ -4052,10 +4052,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     result_status.set_text("Document changed while formatting; reopen it to see the result.");
                 }
             });
+            let worker_path = path.clone();
             std::thread::spawn(move || {
-                let log = native_commands::format_document(&compiler, &path);
+                let log = native_commands::format_document(&compiler, &worker_path);
                 let formatted = if log.success {
-                    std::fs::read_to_string(&path).ok()
+                    std::fs::read_to_string(&worker_path).ok()
                 } else { None };
                 let _ = sender.send((log, formatted));
             });
