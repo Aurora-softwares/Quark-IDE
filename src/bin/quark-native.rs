@@ -13,12 +13,12 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
-#[allow(dead_code)] // Runtime docking model is introduced progressively to every pane.
-#[path = "../native_docking.rs"]
-mod native_docking;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
 #[path = "../native_dock_widgets.rs"]
 mod native_dock_widgets;
+#[allow(dead_code)] // Runtime docking model is introduced progressively to every pane.
+#[path = "../native_docking.rs"]
+mod native_docking;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
@@ -717,9 +717,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let toolbox = ui.stack(Orientation::Vertical)?;
     toolbox.set_spacing(7.0);
-    let toolbox_controls = native_dock_widgets::section_header(
-        ui, native_docking::DockId::Toolbox,
-    )?;
+    let toolbox_controls =
+        native_dock_widgets::section_header(ui, native_docking::DockId::Toolbox)?;
     let toolbox_heading = toolbox_controls.row.clone();
     toolbox.append(&toolbox_heading);
     let toolbox_search = ui.search_input()?;
@@ -1088,9 +1087,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let solution_pane = ui.stack(Orientation::Vertical)?;
     solution_pane.set_spacing(6.0);
-    let solution_controls = native_dock_widgets::section_header(
-        ui, native_docking::DockId::Solution,
-    )?;
+    let solution_controls =
+        native_dock_widgets::section_header(ui, native_docking::DockId::Solution)?;
     let solution_heading = solution_controls.row.clone();
     let refresh_solution = ui.button("⟳")?;
     let collapse_solution = solution_controls.collapse.clone();
@@ -1110,9 +1108,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let properties_pane = ui.stack(Orientation::Vertical)?;
     properties_pane.set_spacing(7.0);
-    let properties_controls = native_dock_widgets::section_header(
-        ui, native_docking::DockId::Properties,
-    )?;
+    let properties_controls =
+        native_dock_widgets::section_header(ui, native_docking::DockId::Properties)?;
     let properties_toolbar = properties_controls.row.clone();
     properties_pane.append(&properties_toolbar);
     let flat_properties = ui.stack(Orientation::Vertical)?;
@@ -1346,9 +1343,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     retain_trailing_size(&inspector);
 
     let bottom = ui.stack(Orientation::Vertical)?;
-    let output_controls = native_dock_widgets::section_header(
-        ui, native_docking::DockId::Output,
-    )?;
+    let output_controls = native_dock_widgets::section_header(ui, native_docking::DockId::Output)?;
     let bottom_tabs = output_controls.row.clone();
     bottom_tabs.set_spacing(8.0);
     let output_tab = ui.button("Output")?;
@@ -1376,12 +1371,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let current_errors = Rc::new(RefCell::new(Vec::<problems::Problem>::new()));
     errors_view.append(&error_summary);
     errors_view.append(&error_list);
-    let debug_view =
-        ui.label("No debugger attached")?;
-    let tests_view =
-        ui.label("No test run selected")?;
-    let find_view =
-        ui.label("No search results")?;
+    let debug_view = ui.label("No debugger attached")?;
+    let tests_view = ui.label("No test run selected")?;
+    let find_view = ui.label("No search results")?;
     bottom_pages.append(&output_scroll);
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
@@ -1637,7 +1629,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move || {
             let collapsed = {
                 let mut layout = model.borrow_mut();
-                let next = !layout.section(native_docking::DockId::Toolbox)
+                let next = !layout
+                    .section(native_docking::DockId::Toolbox)
                     .is_some_and(|s| s.collapsed);
                 layout.collapse(native_docking::DockId::Toolbox, next);
                 let _ = layout.save(&path);
@@ -1663,7 +1656,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move || {
             let collapsed = {
                 let mut layout = model.borrow_mut();
-                let next = !layout.section(native_docking::DockId::Solution)
+                let next = !layout
+                    .section(native_docking::DockId::Solution)
                     .is_some_and(|s| s.collapsed);
                 layout.collapse(native_docking::DockId::Solution, next);
                 let _ = layout.save(&path);
@@ -1688,7 +1682,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move || {
             let collapsed = {
                 let mut layout = model.borrow_mut();
-                let next = !layout.section(native_docking::DockId::Properties)
+                let next = !layout
+                    .section(native_docking::DockId::Properties)
                     .is_some_and(|s| s.collapsed);
                 layout.collapse(native_docking::DockId::Properties, next);
                 let _ = layout.save(&path);
@@ -1712,7 +1707,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move || {
             let collapsed = {
                 let mut layout = model.borrow_mut();
-                let next = !layout.section(native_docking::DockId::Output)
+                let next = !layout
+                    .section(native_docking::DockId::Output)
                     .is_some_and(|s| s.collapsed);
                 layout.collapse(native_docking::DockId::Output, next);
                 let _ = layout.save(&path);
