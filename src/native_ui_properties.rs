@@ -55,7 +55,10 @@ fn supported_fields(kind: &str) -> &'static [&'static str] {
         "GridPanel" => &["gap", "columns", "minItemWidth"],
         "ScrollView" => &["height", "gap"],
         "Panel" => &["title", "padding", "gap"],
-        "MenuBar" | "Separator" | "ContextMenu" => &[],
+        "MenuBar" | "Toolbar" | "Separator" => &[],
+        "ContextMenu" => &["target"],
+        "Popover" => &["target", "text", "open", "onClose"],
+        "ToolButton" => &["text", "onClick"],
         "Menu" => &["text"],
         "MenuItem" => &["text", "onClick", "checked", "shortcut"],
         "Tabs" => &["value", "onChange"],
@@ -116,11 +119,44 @@ fn default_value(kind: &str, name: &str) -> &'static str {
         ("Dialog", "buttons") => "OK",
         ("Timer", "interval") => "1000",
         ("Spinner", "running") => "true",
+        ("Popover", "open") => "false",
         (_, "visible" | "enabled") => "true",
         (_, "fill" | "checked" | "primary" | "indeterminate") => "false",
         (_, "gap") => "12",
         (_, "value") => "0",
         _ => "",
+    }
+}
+
+/// Keep design-time presentation separate from the application's runtime
+/// defaults. Every supported XML attribute is editable even if it is absent.
+fn property_group(kind: &str, name: &str) -> &'static str {
+    if kind == "Tabs" && name == "value" {
+        return "Application defaults";
+    }
+    if name.starts_with("on") {
+        return "Events & behaviour";
+    }
+    if matches!(name, "text" | "title" | "placeholder" | "source" | "items" | "rows" | "columns" | "accessibleName") {
+        return "Content & accessibility";
+    }
+    if matches!(name, "visible" | "enabled" | "checked" | "running" | "primary" | "indeterminate" | "open" | "value") {
+        return "State & behaviour";
+    }
+    if matches!(name, "width" | "height" | "padding" | "gap" | "breakpoint" | "minItemWidth" | "preferredWidth" | "fill" | "theme" | "material" | "role" | "tone") {
+        return "Appearance & layout";
+    }
+    "Other"
+}
+
+fn property_order(group: &str) -> usize {
+    match group {
+        "Application defaults" => 0,
+        "Content & accessibility" => 1,
+        "Appearance & layout" => 2,
+        "State & behaviour" => 3,
+        "Events & behaviour" => 4,
+        _ => 5,
     }
 }
 
@@ -138,11 +174,12 @@ pub fn available_properties(
     let node = element_at(&parsed, path)?;
     let kind = node.tag_name().name();
     let mut fields = Vec::new();
-    for (name, group) in supported_fields(kind)
+    for name in supported_fields(kind)
         .iter()
-        .map(|s| (*s, "Build / Design"))
-        .chain(COMMON_FIELDS.iter().map(|s| (*s, "Common")))
+        .copied()
+        .chain(COMMON_FIELDS.iter().copied())
     {
+        let group = property_group(kind, name);
         let explicit = node.attribute(name);
         let default = default_value(kind, name);
         fields.push(PropertyField {
@@ -165,6 +202,7 @@ pub fn available_properties(
             });
         }
     }
+    fields.sort_by_key(|field| property_order(field.group));
     Ok((kind.to_owned(), fields))
 }
 
@@ -372,6 +410,17 @@ mod tests {
             .any(|f| f.name == "height" && f.value == "100" && !f.explicitly_set));
         assert!(!xml.contains("theme="));
     }
+    #[test]
+    fn runtime_popovers_toolbars_and_defaults_are_editable_before_being_set() {
+        let xml = r#"<Window version="1"><Toolbar><ToolButton id="run"/></Toolbar><Popover target="run"/></Window>"#;
+        let (_, button) = available_properties(xml, &[0, 0]).unwrap();
+        assert!(button.iter().any(|field| field.name == "text" && !field.explicitly_set));
+        assert!(button.iter().any(|field| field.name == "onClick" && field.group == "Events & behaviour"));
+        let (_, popover) = available_properties(xml, &[1]).unwrap();
+        assert!(popover.iter().any(|field| field.name == "open" && field.value == "false"));
+        assert!(popover.iter().any(|field| field.name == "onClose"));
+    }
+
     #[test]
     fn hierarchy_includes_hidden_controls_and_all_tabs() {
         let xml = r#"<Window><Tabs><Tab title="First"><Button id="a"/></Tab><Tab title="Second"><Label id="hidden" visible="false"/></Tab></Tabs></Window>"#;
