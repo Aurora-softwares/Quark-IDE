@@ -698,12 +698,17 @@ fn apply_right_dock_order(
     let solution_widget = solution.native_widget();
     let properties_widget = properties.native_widget();
     let wanted_first = if properties_first { &properties_widget } else { &solution_widget };
-    if paned.start_child().as_ref() == Some(wanted_first) {
+    let wanted_second = if properties_first { &solution_widget } else { &properties_widget };
+    if paned.start_child().as_ref() == Some(wanted_first)
+        && paned.end_child().as_ref() == Some(wanted_second) {
         return true;
     }
-    // Both children must be detached before either can be attached elsewhere.
-    paned.set_start_child(None::<&gtk4::Widget>);
-    paned.set_end_child(None::<&gtk4::Widget>);
+    // Both children must be detached from *whatever* dock currently owns
+    // them. GTK rejects assigning a widget that already has another parent.
+    if !native_dock_runtime::detach(&solution_widget)
+        || !native_dock_runtime::detach(&properties_widget) {
+        return false;
+    }
     if properties_first {
         paned.set_start_child(Some(&properties_widget));
         paned.set_end_child(Some(&solution_widget));
@@ -1916,6 +1921,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             .expect("native bottom dock must be a GTK Box");
         left_parent.append(&left);
         right_parent.append(&right);
+        right_parent.reorder_child_after(&right, Some(&inspector.native_widget()));
         bottom_parent.append(&bottom_host);
         (left, right, bottom_host)
     };
@@ -2206,7 +2212,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 properties_pane.native_widget().set_visible(
                     layout.visible(native_docking::DockId::Properties, active.get()));
                 inspector.native_widget().set_visible(right_solution || right_properties);
-                bottom_pages.native_widget().set_visible(bottom_open);
+                let bottom_original_visible = [
+                    native_docking::DockId::Output, native_docking::DockId::ErrorList,
+                    native_docking::DockId::Debug, native_docking::DockId::TestResults,
+                    native_docking::DockId::FindResults,
+                ].iter().any(|id| layout.section(*id).is_some_and(|s|
+                    s.zone == native_docking::DockZone::Bottom)
+                    && layout.visible(*id, active.get()));
+                bottom_pages.native_widget().set_visible(bottom_original_visible);
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
                 bottom_dock_host.set_visible(has_bottom_guests);
