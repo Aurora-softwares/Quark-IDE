@@ -1830,7 +1830,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // present for model compatibility, but never occupies a second row.
     let bottom_tabs = ui.stack(Orientation::Horizontal)?;
     bottom_tabs.set_spacing(6.0);
-     let output_tab = ui.button("Output")?;
+    let output_tab = ui.button("Output")?;
     let errors_tab = ui.button("Error List")?;
     let debug_tab = ui.button("Debug")?;
     let test_tab = ui.button("Test Results")?;
