@@ -2733,6 +2733,32 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let dock_model = dock_model.clone();
         let dock_path = dock_path.clone();
         let active_dock = active_dock.clone();
+        let reset_headers = [
+            (native_docking::DockId::Toolbox, toolbox_controls.clone()),
+            (native_docking::DockId::Symbols, symbols_controls.clone()),
+            (native_docking::DockId::Search, search_controls.clone()),
+            (native_docking::DockId::Server, server_controls.clone()),
+            (native_docking::DockId::Data, data_controls.clone()),
+            (native_docking::DockId::Solution, solution_controls.clone()),
+            (native_docking::DockId::Properties, properties_controls.clone()),
+            (native_docking::DockId::Output, output_controls.clone()),
+            (native_docking::DockId::ErrorList, error_controls.clone()),
+            (native_docking::DockId::Debug, debug_controls.clone()),
+            (native_docking::DockId::TestResults, test_controls.clone()),
+            (native_docking::DockId::FindResults, find_controls.clone()),
+        ];
+        #[cfg(target_os = "linux")]
+        let reset_sections = [
+            (native_docking::DockId::Symbols, symbols_section.clone()),
+            (native_docking::DockId::Search, code_search_view.clone()),
+            (native_docking::DockId::Server, server_view.clone()),
+            (native_docking::DockId::Data, data_view.clone()),
+            (native_docking::DockId::Output, output_section.clone()),
+            (native_docking::DockId::ErrorList, error_section.clone()),
+            (native_docking::DockId::Debug, debug_section.clone()),
+            (native_docking::DockId::TestResults, test_section.clone()),
+            (native_docking::DockId::FindResults, find_section.clone()),
+        ];
         #[cfg(target_os = "linux")]
         let floating_windows = floating_windows.clone();
         #[cfg(target_os = "linux")]
@@ -2779,6 +2805,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 );
             }
             *dock_model.borrow_mut() = new_layout;
+            for (id, header) in &reset_headers {
+                let pinned = dock_model.borrow().section(*id).is_some_and(|s| s.pinned);
+                header.pin.set_text(if pinned { "◆" } else { "◇" });
+                header.collapse.set_text("▾");
+            }
+            #[cfg(target_os = "linux")]
+            for (_, section) in &reset_sections {
+                native_dock_widgets::set_section_collapsed(section, false);
+            }
             active_dock.set(None);
             pane_sizes.set(defaults);
             refresh_tracks(defaults);
