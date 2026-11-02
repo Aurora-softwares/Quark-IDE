@@ -4,6 +4,7 @@ mod command;
 mod designer;
 mod diagnostics;
 mod editor;
+mod hydrogen_lexer;
 #[cfg(test)]
 mod feature_tests;
 mod hydrogen;
