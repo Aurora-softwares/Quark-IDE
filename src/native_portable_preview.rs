@@ -11,16 +11,6 @@ pub type DesignTabs = Rc<RefCell<HashMap<Vec<usize>, usize>>>;
 
 pub type SelectElement = Rc<dyn Fn(Vec<usize>)>;
 
-fn node_title(node: Node<'_, '_>) -> String {
-    let kind = node.tag_name().name();
-    let label = node
-        .attribute("id")
-        .or_else(|| node.attribute("title"))
-        .or_else(|| node.attribute("text"))
-        .unwrap_or(kind);
-    format!("{kind} · {label}")
-}
-
 fn render_children(
     ui: &Ui,
     parent: &naui::Stack,
