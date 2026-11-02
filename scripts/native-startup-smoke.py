@@ -22,6 +22,9 @@ def check_startup(binary: Path, seconds: float = 5.0) -> None:
         env["GDK_BACKEND"] = "x11"
         env["GSETTINGS_BACKEND"] = "memory"
         env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+        # Treat GTK parenting warnings (including "Tried to remove non-child")
+        # as a startup failure instead of silently printing thousands of lines.
+        env["G_DEBUG"] = "fatal-warnings"
         process = subprocess.Popen(
             [str(binary)],
             cwd=home,
