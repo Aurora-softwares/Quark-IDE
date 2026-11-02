@@ -2417,6 +2417,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         RefCell<std::collections::HashMap<native_docking::DockId, gtk4::Popover>>,
     > = Rc::new(RefCell::new(std::collections::HashMap::new()));
     #[cfg(target_os = "linux")]
+    let bottom_section_headers = {
+        use naui::Widget as _;
+        [
+            (native_docking::DockId::Output, output_page_controls.row.native_widget()),
+            (native_docking::DockId::ErrorList, error_controls.row.native_widget()),
+            (native_docking::DockId::Debug, debug_controls.row.native_widget()),
+            (native_docking::DockId::TestResults, test_controls.row.native_widget()),
+            (native_docking::DockId::FindResults, find_controls.row.native_widget()),
+        ]
+    };
+    #[cfg(target_os = "linux")]
     let dock_widgets = {
         use naui::Widget as _;
         [
@@ -2465,6 +2476,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_dock.clone();
         #[cfg(target_os = "linux")]
         let dock_widgets = dock_widgets.clone();
+        #[cfg(target_os = "linux")]
+        let bottom_section_headers = bottom_section_headers.clone();
         #[cfg(target_os = "linux")]
         let floating_windows = floating_windows.clone();
         #[cfg(target_os = "linux")]
@@ -2604,6 +2617,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 bottom_pages
                     .native_widget()
                     .set_visible(bottom_original_visible);
+                for (id, header) in &bottom_section_headers {
+                    let in_bottom = layout.section(*id).is_some_and(|s|
+                        s.zone == native_docking::DockZone::Bottom);
+                    // Docked bottom pages use only the shared tab strip.
+                    // Moving a tool to a side area restores its own header.
+                    header.set_visible(!in_bottom);
+                }
                 for (id, widget) in &dock_widgets {
                     widget.set_visible(
                         layout.visible(*id, active.get())
@@ -3171,32 +3191,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             control.set_text(if collapsed { "▸" } else { "▾" });
         }
     });
-    output_controls.collapse.on_click({
-        let model = dock_model.clone();
-        let path = dock_path.clone();
-        let pane = bottom.clone();
-        let heading = bottom_tabs.clone();
-        let body = bottom_pages.clone();
-        let control = output_controls.collapse.clone();
-        move || {
-            let collapsed = {
-                let mut layout = model.borrow_mut();
-                let next = !layout
-                    .section(native_docking::DockId::Output)
-                    .is_some_and(|s| s.collapsed);
-                layout.collapse(native_docking::DockId::Output, next);
-                let _ = layout.save(&path);
-                next
-            };
-            pane.clear();
-            pane.append(&heading);
-            if !collapsed {
-                pane.append(&body);
-            }
-            control.set_text(if collapsed { "▸" } else { "▾" });
-        }
-    });
-
     let status_bar = ui.stack(Orientation::Horizontal)?;
     let status_brand = ui.label("● Quark · Hydrogen")?;
     status_brand.set_color(naui::TextColor::Accent);
