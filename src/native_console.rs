@@ -273,7 +273,10 @@ mod tests {
         );
         assert_eq!(endings.normalize(b"\r"), b"\r");
         assert_eq!(endings.normalize(b"\nNext\n"), b"\nNext\r\n");
-        assert_eq!(endings.normalize(b"\x1b[31mERROR\x1b[0m"), b"\x1b[31mERROR\x1b[0m");
+        assert_eq!(
+            endings.normalize(b"\x1b[31mERROR\x1b[0m"),
+            b"\x1b[31mERROR\x1b[0m"
+        );
         // A partial UTF-8 scalar is never decoded or altered.
         assert_eq!(endings.normalize(&[0xe2, 0x98]), vec![0xe2, 0x98]);
         assert_eq!(endings.normalize(&[0x83, b'\n']), vec![0x83, b'\r', b'\n']);
