@@ -1,7 +1,10 @@
 //! Native IDE build, run, clean and binary publishing commands.
 //! These are toolkit-independent: the UI dispatches work on a worker thread.
 
-use crate::hydrogen::{self, BuildPlan, BuildScope};
+use crate::{
+    hydrogen::{self, BuildPlan, BuildScope},
+    project,
+};
 use std::{
     fs,
     io::{self, Read},
@@ -130,6 +133,151 @@ pub fn clean_generated(plan: &BuildPlan) -> Result<(), String> {
         return Err("Refusing to clean a build directory outside the project".into());
     }
     fs::remove_dir_all(generated).map_err(|e| e.to_string())
+}
+
+fn run_target(plan: &BuildPlan, manifest: &Path) -> Result<(PathBuf, bool), String> {
+    let selected = project::load(manifest);
+    let supported = match selected.kind.as_str() {
+        "exe" => true,
+        "windows" => cfg!(windows),
+        "macos" => cfg!(target_os = "macos"),
+        _ => false,
+    };
+    if !supported {
+        return Err(format!(
+            "Cannot run Hydrogen target '{}' on this host; select a host desktop executable project",
+            selected.kind
+        ));
+    }
+    let artifact = if selected.has_ui && cfg!(windows) {
+        append_output_suffix(&plan.output, "exe")
+    } else if selected.has_ui && cfg!(target_os = "macos") {
+        append_output_suffix(&plan.output, "app")
+    } else {
+        plan.output.clone()
+    };
+    Ok((artifact, selected.has_ui))
+}
+
+fn append_output_suffix(path: &Path, suffix: &str) -> PathBuf {
+    if path
+        .extension()
+        .is_some_and(|extension| extension == suffix)
+    {
+        return path.to_path_buf();
+    }
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".");
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
+fn remove_previous_run_artifact(plan: &BuildPlan, artifact: &Path, ui: bool) -> Result<(), String> {
+    let build_root = plan.cwd.join(".quark").join("build");
+    if !artifact.starts_with(&build_root) || artifact == build_root {
+        return Err(
+            "Refusing to replace a build artifact outside the generated build directory".into(),
+        );
+    }
+    for directory in [plan.cwd.join(".quark"), build_root] {
+        if fs::symlink_metadata(&directory).is_ok_and(|metadata| metadata.file_type().is_symlink())
+        {
+            return Err("Refusing to build through a linked generated directory".into());
+        }
+    }
+    remove_generated_path(artifact)?;
+    if ui && cfg!(windows) {
+        // WinUI exports a launcher plus a sibling runtime directory. Both
+        // must be removed together before packaging a fresh application.
+        let mut runtime_name = artifact.as_os_str().to_os_string();
+        runtime_name.push(".runtime");
+        let runtime = PathBuf::from(runtime_name);
+        remove_generated_path(&runtime)?;
+    }
+    Ok(())
+}
+
+fn remove_generated_path(path: &Path) -> Result<(), String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.to_string()),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err("Refusing to replace a linked build artifact".into());
+    }
+    if metadata.is_dir() {
+        fs::remove_dir_all(path).map_err(|error| error.to_string())
+    } else {
+        fs::remove_file(path).map_err(|error| error.to_string())
+    }
+}
+
+fn launch_built(path: &Path, cwd: &Path, ui: bool) -> Result<String, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        format!(
+            "Built application is missing at {}: {error}",
+            path.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err("Refusing to launch a linked build artifact".into());
+    }
+    if ui && cfg!(target_os = "macos") {
+        if !metadata.is_dir() || !path.join("Contents/MacOS/hyui-launcher").is_file() {
+            return Err("Native macOS UI bundle is incomplete".into());
+        }
+        let result = Command::new("open")
+            .arg(path)
+            .current_dir(cwd)
+            .output()
+            .map_err(|error| format!("Cannot open native UI application: {error}"))?;
+        if !result.status.success() {
+            return Err(format!(
+                "Native UI launch failed: {}",
+                String::from_utf8_lossy(&result.stderr)
+            ));
+        }
+        return Ok(format!(
+            "Launched native UI application: {}",
+            path.display()
+        ));
+    }
+    if !metadata.is_file() {
+        return Err(format!(
+            "Build output is not an executable file: {}",
+            path.display()
+        ));
+    }
+    if ui {
+        let mut child = Command::new(path)
+            .current_dir(cwd)
+            .spawn()
+            .map_err(|error| format!("Cannot start native UI application: {error}"))?;
+        let pid = child.id();
+        let _ = thread::spawn(move || {
+            let _ = child.wait();
+        });
+        return Ok(format!(
+            "Launched native UI application: {} (process {pid})",
+            path.display()
+        ));
+    }
+    let result = Command::new(path)
+        .current_dir(cwd)
+        .output()
+        .map_err(|error| format!("Cannot start built application: {error}"))?;
+    let log = format!(
+        "{}{}Process exit code: {}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr),
+        result.status.code().unwrap_or(-1)
+    );
+    if result.status.success() {
+        Ok(log)
+    } else {
+        Err(log)
+    }
 }
 
 /// Format a saved Hydrogen source file with the configured compiler.
@@ -330,11 +478,13 @@ fn invoke_hydrogen_streaming(
 
 /// Existing one-shot callers retain their exact result contract; native UI
 /// callers can subscribe to raw output chunks without waiting for exit.
+type OutputCallback<'a> = Option<&'a mut dyn FnMut(&[u8])>;
+
 fn invoke_hydrogen_maybe_streaming(
     program: &str,
     cwd: &Path,
     args: &[String],
-    emit: &mut Option<&mut dyn FnMut(&[u8])>,
+    emit: &mut OutputCallback<'_>,
 ) -> Result<std::process::Output, String> {
     if let Some(emit) = emit.as_deref_mut() {
         invoke_hydrogen_streaming(program, cwd, args, emit)
@@ -352,6 +502,7 @@ pub fn run_streaming(
     run_with_output(task, compiler, project, Some(&mut emit))
 }
 
+#[cfg(test)]
 pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     run_with_output(task, compiler, project, None)
 }
@@ -360,7 +511,7 @@ fn run_with_output(
     task: Task,
     compiler: &str,
     project: Option<&Path>,
-    mut emit: Option<&mut dyn FnMut(&[u8])>,
+    mut emit: OutputCallback<'_>,
 ) -> ResultLog {
     let Some(project) = project else {
         return ResultLog::error("Open a Hydrogen project before building or running.");
@@ -404,15 +555,20 @@ fn run_with_output(
                 })
         }
         Task::Build | Task::Check | Task::Test | Task::Rebuild | Task::RunWithoutDebugging => {
+            let target = if task == Task::RunWithoutDebugging {
+                match run_target(&plan, project) {
+                    Ok(target) => Some(target),
+                    Err(error) => return ResultLog::error(error),
+                }
+            } else {
+                None
+            };
             if task == Task::Rebuild {
                 if let Err(error) = clean_generated(&plan) {
                     return ResultLog::error(format!("Rebuild could not clean outputs: {error}"));
                 }
             }
             let args = match task {
-                Task::RunWithoutDebugging => {
-                    vec!["run".into(), project.to_string_lossy().into_owned()]
-                }
                 Task::Check => vec!["check".into(), project.to_string_lossy().into_owned()],
                 Task::Test => vec!["test".into(), project.to_string_lossy().into_owned()],
                 _ => plan.args.clone(),
@@ -422,9 +578,16 @@ fn run_with_output(
             } else {
                 plan.output.parent().unwrap_or_else(|| Path::new("."))
             };
-            if !matches!(task, Task::RunWithoutDebugging | Task::Check | Task::Test) {
+            if !matches!(task, Task::Check | Task::Test) {
                 if let Err(error) = fs::create_dir_all(output_parent) {
                     return ResultLog::error(format!("Cannot create build directory: {error}"));
+                }
+            }
+            if let Some((artifact, ui)) = &target {
+                if let Err(error) = remove_previous_run_artifact(&plan, artifact, *ui) {
+                    return ResultLog::error(format!(
+                        "Cannot prepare a fresh run artifact: {error}"
+                    ));
                 }
             }
             let output =
@@ -434,7 +597,7 @@ fn run_with_output(
                     let message = format!(
                         "Hydrogen {} {}\n{}\n{}\nProcess exit code: {}",
                         match task {
-                            Task::RunWithoutDebugging => "run",
+                            Task::RunWithoutDebugging => "build",
                             Task::Check => "check",
                             Task::Test => "test",
                             _ => "build",
@@ -445,7 +608,13 @@ fn run_with_output(
                         process.status.code().unwrap_or(-1),
                     );
                     if process.status.success() {
-                        Ok(message)
+                        if let Some((artifact, ui)) = target {
+                            launch_built(&artifact, &plan.cwd, ui)
+                                .map(|launch| format!("{message}\n{launch}"))
+                                .map_err(|error| format!("{message}\n{error}"))
+                        } else {
+                            Ok(message)
+                        }
                     } else {
                         Err(message)
                     }
@@ -680,6 +849,137 @@ mod tests {
         fs::write(&manifest, "type='linux'").unwrap();
         let no_compiler = run(Task::Build, "", Some(&manifest));
         assert!(!no_compiler.success);
+    }
+
+    #[test]
+    fn run_selects_host_artifact_for_console_and_ui_manifests() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("Sample.hyproj");
+        let plan = sample_plan(dir.path());
+        fs::write(&project, "type='exe'\nsources=['Main.hy']").unwrap();
+        assert_eq!(
+            run_target(&plan, &project).unwrap(),
+            (plan.output.clone(), false)
+        );
+
+        fs::write(
+            &project,
+            "type='exe'\nui='Studio.hyui'\nsources=['Main.hy']",
+        )
+        .unwrap();
+        let (artifact, is_ui) = run_target(&plan, &project).unwrap();
+        assert!(is_ui);
+        if cfg!(windows) {
+            assert_eq!(artifact, append_output_suffix(&plan.output, "exe"));
+        } else if cfg!(target_os = "macos") {
+            assert_eq!(artifact, append_output_suffix(&plan.output, "app"));
+        } else {
+            assert_eq!(artifact, plan.output);
+        }
+        assert_eq!(
+            append_output_suffix(&dir.path().join("My.App"), "exe"),
+            dir.path().join("My.App.exe")
+        );
+    }
+
+    #[test]
+    fn run_rejects_non_host_executable_targets_before_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("Firmware.hyproj");
+        fs::write(&project, "type='efi'\nsources=['Main.hy']").unwrap();
+        let result = run(Task::RunWithoutDebugging, "hy", Some(&project));
+        assert!(!result.success);
+        assert!(result.text.contains("Cannot run Hydrogen target 'efi'"));
+        assert!(!dir.path().join(".quark").exists());
+    }
+
+    #[test]
+    fn run_replaces_only_generated_artifacts_and_windows_runtime_sidecar() {
+        let dir = tempfile::tempdir().unwrap();
+        let plan = sample_plan(dir.path());
+        let artifact = if cfg!(windows) {
+            append_output_suffix(&plan.output, "exe")
+        } else if cfg!(target_os = "macos") {
+            append_output_suffix(&plan.output, "app")
+        } else {
+            plan.output.clone()
+        };
+        fs::create_dir_all(artifact.parent().unwrap()).unwrap();
+        if cfg!(target_os = "macos") {
+            fs::create_dir_all(&artifact).unwrap();
+        } else {
+            fs::write(&artifact, b"previous application").unwrap();
+        }
+        if cfg!(windows) {
+            let mut runtime = artifact.as_os_str().to_os_string();
+            runtime.push(".runtime");
+            fs::create_dir_all(PathBuf::from(runtime)).unwrap();
+        }
+        remove_previous_run_artifact(&plan, &artifact, true).unwrap();
+        assert!(!artifact.exists());
+        if cfg!(windows) {
+            let mut runtime = artifact.as_os_str().to_os_string();
+            runtime.push(".runtime");
+            assert!(!PathBuf::from(runtime).exists());
+        }
+        assert!(dir.path().exists());
+        assert!(remove_previous_run_artifact(&plan, dir.path(), true).is_err());
+    }
+
+    #[cfg(unix)]
+    fn executable_script(path: &Path, content: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::write(path, content).unwrap();
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(path, permissions).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_builds_and_executes_a_fresh_console_application() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("Console.hyproj");
+        fs::write(&project, "type='exe'\nsources=['Main.hy']").unwrap();
+        let compiler = dir.path().join("fake-hy");
+        executable_script(
+            &compiler,
+            "#!/bin/sh\n[ \"$1\" = build ] || exit 10\n[ \"$3\" = -o ] || exit 11\nprintf '#!/bin/sh\\nprintf \"fresh-console\\n\"\\n' > \"$4\"\nchmod +x \"$4\"\n",
+        );
+        let result = run(
+            Task::RunWithoutDebugging,
+            compiler.to_str().unwrap(),
+            Some(&project),
+        );
+        assert!(result.success, "{}", result.text);
+        assert!(result.text.contains("fresh-console"));
+        assert!(result.text.contains("Process exit code: 0"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_does_not_launch_stale_output_after_a_no_op_build() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("Console.hyproj");
+        fs::write(&project, "type='exe'").unwrap();
+        let plan = hydrogen::build_plan("hy", Some(&project), None, BuildScope::Project).unwrap();
+        fs::create_dir_all(plan.output.parent().unwrap()).unwrap();
+        let marker = dir.path().join("stale-launched");
+        executable_script(
+            &plan.output,
+            &format!("#!/bin/sh\ntouch '{}'\n", marker.display()),
+        );
+        let compiler = dir.path().join("fake-hy");
+        executable_script(&compiler, "#!/bin/sh\nexit 0\n");
+        let result = run(
+            Task::RunWithoutDebugging,
+            compiler.to_str().unwrap(),
+            Some(&project),
+        );
+        assert!(!result.success);
+        assert!(result.text.contains("Built application is missing"));
+        assert!(!marker.exists());
+        assert!(!plan.output.exists());
     }
 
     #[cfg(unix)]

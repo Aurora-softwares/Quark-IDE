@@ -10,6 +10,7 @@ struct Manifest {
     name: Option<String>,
     #[serde(rename = "type")]
     kind: Option<String>,
+    ui: Option<String>,
     #[serde(default)]
     sources: Vec<String>,
     #[serde(default)]
@@ -21,6 +22,7 @@ pub struct Project {
     pub path: PathBuf,
     pub name: String,
     pub kind: String,
+    pub has_ui: bool,
     pub sources: Vec<PathBuf>,
     pub references: Vec<Project>,
     pub warnings: Vec<String>,
@@ -39,6 +41,7 @@ fn load_inner(path: &Path, seen: &mut HashSet<PathBuf>, depth: usize) -> Project
             .to_string_lossy()
             .into_owned(),
         kind: "unknown".into(),
+        has_ui: false,
         path: canonical.clone(),
         sources: vec![],
         references: vec![],
@@ -72,6 +75,7 @@ fn load_inner(path: &Path, seen: &mut HashSet<PathBuf>, depth: usize) -> Project
     };
     result.name = manifest.name.unwrap_or(result.name);
     result.kind = manifest.kind.unwrap_or(result.kind);
+    result.has_ui = manifest.ui.as_ref().is_some_and(|ui| !ui.trim().is_empty());
     let base = canonical.parent().unwrap_or(Path::new("."));
     for source in manifest.sources {
         let src = base.join(source);

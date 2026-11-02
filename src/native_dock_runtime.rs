@@ -88,6 +88,88 @@ pub fn attach_paned(widget: &gtk4::Widget, host: &gtk4::Paned, start: bool) -> b
     true
 }
 
+/// Equal-height initial partition for adjacent pinned tool panels. A GTK
+/// splitter remains user-draggable after it has been created.
+pub fn equal_stack_position(height: i32, upper: usize, lower: usize) -> i32 {
+    let total = upper.saturating_add(lower);
+    if total == 0 {
+        return 0;
+    }
+    ((height.max(0) as f64) * upper as f64 / total as f64).round() as i32
+}
+
+fn collect_stacked_panels(widget: &gtk4::Widget, output: &mut Vec<gtk4::Widget>) {
+    if let Ok(paned) = widget.clone().downcast::<gtk4::Paned>() {
+        if let Some(child) = paned.start_child() {
+            collect_stacked_panels(&child, output);
+        }
+        if let Some(child) = paned.end_child() {
+            collect_stacked_panels(&child, output);
+        }
+    } else {
+        output.push(widget.clone());
+    }
+}
+
+fn build_stack(panels: &[gtk4::Widget]) -> gtk4::Widget {
+    if panels.len() == 1 {
+        return panels[0].clone();
+    }
+    let divider = gtk4::Paned::new(gtk4::Orientation::Vertical);
+    divider.add_css_class("quark-resize-pane");
+    divider.set_vexpand(true);
+    divider.set_hexpand(true);
+    divider.set_resize_start_child(true);
+    divider.set_resize_end_child(true);
+    divider.set_shrink_start_child(false);
+    divider.set_shrink_end_child(false);
+    divider.set_start_child(Some(&panels[0]));
+    let below = build_stack(&panels[1..]);
+    divider.set_end_child(Some(&below));
+    let weak = divider.downgrade();
+    let count = panels.len();
+    gtk4::glib::idle_add_local_once(move || {
+        if let Some(divider) = weak.upgrade() {
+            let height = divider.allocated_height();
+            if height > 0 {
+                divider.set_position(equal_stack_position(height, 1, count - 1));
+            }
+        }
+    });
+    divider.upcast()
+}
+
+/// Stack an arbitrary number of moved panels in a vertical native splitter
+/// chain. Each live panel is reparented, never recreated, and single panels
+/// fill the entire host without leaving a redundant divider. Call only after
+/// a successful zone move, not on ordinary redraws, to preserve manual sizes.
+pub fn rebalance_side_host(host: &gtk4::Box) {
+    let mut panels = Vec::new();
+    let mut child = host.first_child();
+    while let Some(widget) = child {
+        child = widget.next_sibling();
+        collect_stacked_panels(&widget, &mut panels);
+    }
+    if panels.is_empty() {
+        while let Some(child) = host.first_child() {
+            host.remove(&child);
+        }
+        return;
+    }
+    for widget in &panels {
+        if !detach(widget) {
+            return;
+        }
+    }
+    while let Some(child) = host.first_child() {
+        host.remove(&child);
+    }
+    let stacked = build_stack(&panels);
+    stacked.set_vexpand(true);
+    stacked.set_hexpand(true);
+    host.append(&stacked);
+}
+
 /// A zone's drop target accepts only the internal, validated panel IDs.
 /// Drag motion is highlighted with a GTK CSS class; unrelated files and text
 /// are refused. The presenter commits the layout only after reparent succeeds.
@@ -114,7 +196,14 @@ pub fn install_zone_target(
         else {
             return false;
         };
-        drop(id, zone)
+        // Reparenting the source inside connect_drop() destroys its active
+        // drag controller before GDK releases the pointer. Accept the drop
+        // first; commit the move on the next GTK main-loop turn.
+        let apply = drop.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            apply(id, zone);
+        });
+        true
     });
     host.add_controller(target);
 }
@@ -212,4 +301,17 @@ pub fn float_panel(
     });
     floating.present();
     Some(floating)
+}
+
+#[cfg(test)]
+mod stack_tests {
+    use super::*;
+
+    #[test]
+    fn pinned_sections_default_to_equal_heights() {
+        assert_eq!(equal_stack_position(600, 1, 1), 300);
+        assert_eq!(equal_stack_position(600, 1, 2), 200);
+        assert_eq!(equal_stack_position(600, 2, 1), 400);
+        assert_eq!(equal_stack_position(600, 1, 0), 600);
+    }
 }

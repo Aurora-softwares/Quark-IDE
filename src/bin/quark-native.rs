@@ -18,6 +18,7 @@ mod native_compiler;
 #[path = "../native_console.rs"]
 mod native_console;
 #[cfg(target_os = "linux")]
+#[allow(dead_code)] // The multi-panel GTK stack is staged for the remaining dock zones.
 #[path = "../native_dock_runtime.rs"]
 mod native_dock_runtime;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
@@ -805,10 +806,18 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
 }
 
 fn right_split_position(height: f64, preferred: f64, properties_first: bool) -> f64 {
+    // First use: pinned side sections split evenly. A user's explicitly
+    // resized Properties height is retained after pinning or reordering.
+    let properties_height =
+        if (preferred - native_layout::PaneSizes::default().properties).abs() < f64::EPSILON {
+            (height - 6.0).max(0.0) / 2.0
+        } else {
+            preferred
+        };
     if properties_first {
-        preferred.max(110.0)
+        properties_height.max(110.0)
     } else {
-        (height - preferred - 6.0).max(110.0)
+        (height - properties_height - 6.0).max(110.0)
     }
 }
 
@@ -1647,6 +1656,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     sync_explorer_controls();
     let (initial_tree, initial_paths) = solution_items(&state.borrow(), "", false, false);
     let displayed_paths = Rc::new(RefCell::new(initial_paths));
+    let selected_explorer_path: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "linux")]
+    let explorer_menu_hook: native_solution_explorer::MenuCallback = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        native_solution_explorer::install_context_menu(
+            &tree.native_widget(),
+            explorer_menu_hook.clone(),
+        );
+    }
     let solution_query = Rc::new(RefCell::new(String::new()));
     tree.set_items(&initial_tree);
     #[cfg(target_os = "linux")]
@@ -2047,7 +2067,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     inspector.set_sizing(Sizing::fill());
     inspector.set_start(&solution_pane);
     inspector.set_end(&properties_pane);
-    inspector.set_position(940.0 - preferred.properties - 145.0);
+    inspector.set_position(right_split_position(795.0, preferred.properties, false));
     inspector.set_min_sizes(110.0, 150.0);
     retain_trailing_size(&inspector);
 
@@ -2789,7 +2809,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // single-pane selection stacks. Changing tabs never destroys a relocated
     // widget or reattaches it to the old region by accident.
     #[cfg(target_os = "linux")]
-    let (left_dock_host, right_dock_host, bottom_dock_host) = {
+    let (left_dock_host, right_dock_host, bottom_dock_host, left_stacked, right_stacked) = {
         use gtk4::prelude::*;
         use naui::Widget as _;
         let left = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
@@ -2807,12 +2827,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             .native_widget()
             .downcast::<gtk4::Box>()
             .expect("native bottom dock must be a GTK Box");
-        left_parent.append(&left);
-        right_parent.append(&right);
-        right_parent.reorder_child_after(&right, Some(&inspector.native_widget()));
+        // Side guests are vertical neighbours of the primary panels, not
+        // additional columns squeezed into the editor or side rail.
+        let left_primary = left_content.native_widget();
+        let right_primary = inspector.native_widget();
+        assert!(native_dock_runtime::detach(&left_primary));
+        assert!(native_dock_runtime::detach(&right_primary));
+        let left_pair = gtk4::Paned::new(gtk4::Orientation::Vertical);
+        left_pair.set_start_child(Some(&left_primary));
+        left_pair.set_end_child(Some(&left));
+        let right_pair = gtk4::Paned::new(gtk4::Orientation::Vertical);
+        right_pair.set_start_child(Some(&right_primary));
+        right_pair.set_end_child(Some(&right));
+        for pair in [&left_pair, &right_pair] {
+            pair.set_vexpand(true);
+            pair.set_hexpand(true);
+            pair.set_resize_start_child(true);
+            pair.set_resize_end_child(true);
+            pair.set_shrink_start_child(false);
+            pair.set_shrink_end_child(false);
+            pair.add_css_class("quark-resize-pane");
+        }
+        left_parent.append(&left_pair);
+        right_parent.prepend(&right_pair);
         bottom_parent.append(&bottom_host);
-        (left, right, bottom_host)
+        (left, right, bottom_host, left_pair, right_pair)
     };
+    #[cfg(target_os = "linux")]
+    let left_stack_counts = Rc::new(Cell::new((usize::MAX, usize::MAX)));
+    #[cfg(target_os = "linux")]
+    let right_stack_counts = Rc::new(Cell::new((usize::MAX, usize::MAX)));
 
     let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
         let left_split = left_split.clone();
@@ -3020,7 +3064,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 DockId::TestResults => &tests,
                 DockId::FindResults => &find,
             };
-            if id.default_zone() == zone {
+            let attached = if id.default_zone() == zone {
                 match id {
                     DockId::Toolbox
                     | DockId::Symbols
@@ -3043,7 +3087,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     DockZone::Right => native_dock_runtime::attach_box(widget, &right_host),
                     DockZone::Bottom => native_dock_runtime::attach_box(widget, &bottom_host),
                 }
+            };
+            if attached {
+                // A single moved panel fills its host. Multiple panels become
+                // independent, draggable nested GtkPaned sections.
+                native_dock_runtime::rebalance_side_host(&left_host);
+                native_dock_runtime::rebalance_side_host(&right_host);
             }
+            attached
         })
     };
     #[cfg(target_os = "linux")]
@@ -3237,6 +3288,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let document_workspace = document_workspace.clone();
         let tab_mode = tab_mode.clone();
         let active_side_tab = active_side_tab.clone();
+        let left_stacked = left_stacked.clone();
+        let right_stacked = right_stacked.clone();
+        let left_stack_counts = left_stack_counts.clone();
+        let right_stack_counts = right_stack_counts.clone();
         move || {
             let layout = model.borrow();
             #[cfg(target_os = "linux")]
@@ -3322,6 +3377,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         && !is_detached(*id)
                 });
             let remembered = sizes.get();
+            if right_solution && right_properties {
+                let right = layout.sections_in(native_docking::DockZone::Right);
+                let properties_first = right
+                    .iter()
+                    .position(|section| section.id == native_docking::DockId::Properties)
+                    < right
+                        .iter()
+                        .position(|section| section.id == native_docking::DockId::Solution);
+                inspector.set_position(right_split_position(
+                    split_extent(&inspector, 795.0),
+                    remembered.properties,
+                    properties_first,
+                ));
+            }
             #[cfg(target_os = "linux")]
             {
                 use gtk4::prelude::*;
@@ -3373,6 +3442,63 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
                 bottom_dock_host.set_visible(has_bottom_guests);
+                left_stacked.set_visible(left_open || has_left_guests);
+                right_stacked.set_visible(right_open);
+                let left_guest_count = layout
+                    .sections_in(native_docking::DockZone::Left)
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.id.default_zone() != native_docking::DockZone::Left
+                            && layout.visible(entry.id, active.get())
+                            && !is_detached(entry.id)
+                    })
+                    .count();
+                let right_guest_count = layout
+                    .sections_in(native_docking::DockZone::Right)
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.id.default_zone() != native_docking::DockZone::Right
+                            && layout.visible(entry.id, active.get())
+                            && !is_detached(entry.id)
+                    })
+                    .count();
+                let left_counts = (usize::from(left_open), left_guest_count);
+                if left_stack_counts.replace(left_counts) != left_counts
+                    && left_counts.0 > 0
+                    && left_counts.1 > 0
+                {
+                    let pair = left_stacked.clone();
+                    gtk4::glib::idle_add_local_once(move || {
+                        let height = pair.allocated_height();
+                        if height > 0 {
+                            pair.set_position(native_dock_runtime::equal_stack_position(
+                                height,
+                                left_counts.0,
+                                left_counts.1,
+                            ));
+                        }
+                    });
+                }
+                let right_counts = (
+                    usize::from(right_solution) + usize::from(right_properties),
+                    right_guest_count,
+                );
+                if right_stack_counts.replace(right_counts) != right_counts
+                    && right_counts.0 > 0
+                    && right_counts.1 > 0
+                {
+                    let pair = right_stacked.clone();
+                    gtk4::glib::idle_add_local_once(move || {
+                        let height = pair.allocated_height();
+                        if height > 0 {
+                            pair.set_position(native_dock_runtime::equal_stack_position(
+                                height,
+                                right_counts.0,
+                                right_counts.1,
+                            ));
+                        }
+                    });
+                }
             }
             if left_open || has_left_guests {
                 left_split.set_position(remembered.toolbox.max(155.0));
@@ -3498,8 +3624,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     for (index, tab) in right_tabs.iter().enumerate() {
         let tabs = right_tabs.clone();
         let active = right_active.clone();
-        let inspector = inspector.clone();
-        let model = dock_model.clone();
         #[cfg(target_os = "linux")]
         let show_auto_hide = show_auto_hide.clone();
         #[cfg(target_os = "linux")]
@@ -3530,22 +3654,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 for tab in &tabs {
                     tab.redraw();
                 }
-                let height = split_extent(&inspector, 795.0);
-                let order = model.borrow();
-                let right = order.sections_in(native_docking::DockZone::Right);
-                let properties_first = right
-                    .iter()
-                    .position(|s| s.id == native_docking::DockId::Properties)
-                    < right
-                        .iter()
-                        .position(|s| s.id == native_docking::DockId::Solution);
-                let focused_first =
-                    (index == 0 && !properties_first) || (index == 1 && properties_first);
-                inspector.set_position(if focused_first {
-                    (height - 200.0).max(110.0)
-                } else {
-                    180.0
-                });
+                // Selecting a tab must never override a pinned divider or
+                // shrink another pinned section to a hard-coded 180 pixels.
+                // Native GtkPaned owns the resize gesture and saved position.
             }
         });
     }
@@ -4681,6 +4792,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let startup_project = startup_project.clone();
         let solution_query = solution_query.clone();
         let displayed_paths = displayed_paths.clone();
+        let selected_explorer_path = selected_explorer_path.clone();
         let solution_descending = solution_descending.clone();
         let solution_list_mode = solution_list_mode.clone();
         let symbols_list = symbols_list.clone();
@@ -4694,6 +4806,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
             symbols_list.set_items(&project_symbols(&ide));
             tree.set_items(&items);
+            *selected_explorer_path.borrow_mut() = None;
             *displayed_paths.borrow_mut() = paths;
             let project_name = display_project_name(&ide);
             workspace_name.set_text(&project_name);
@@ -4896,12 +5009,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     tree.on_select({
         let displayed_paths = displayed_paths.clone();
+        let selected_explorer_path = selected_explorer_path.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
+        let status = status.clone();
         move |position| {
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(&position.to_vec()).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
+                *selected_explorer_path.borrow_mut() = Some(path.clone());
+                if path.is_dir() {
+                    status.set_text(&format!("Folder selected: {}", path.display()));
+                } else if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -4909,6 +5027,143 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        let tree_widget = tree.native_widget();
+        let selected = selected_explorer_path.clone();
+        let state = state.clone();
+        let refresh = refresh_project.clone();
+        let status = status.clone();
+        let open_source = open_source.clone();
+        let open_layout = open_layout.clone();
+        *explorer_menu_hook.borrow_mut() = Some(Rc::new(move |command| {
+            use native_model::FileAction;
+            use native_solution_explorer::MenuAction;
+            let root = {
+                let ide = state.borrow();
+                ide.project
+                    .as_ref()
+                    .and_then(|project| project.path.parent().map(Path::to_path_buf))
+                    .or_else(|| ide.workspace.folders.last().cloned())
+            };
+            let Some(root) = root else {
+                status.set_text("Open a workspace before using Explorer actions.");
+                return;
+            };
+            let Some(target) = selected.borrow().clone() else {
+                status.set_text("Select a file or folder before using Explorer actions.");
+                return;
+            };
+            if !target.exists() {
+                status.set_text("Selected explorer entry no longer exists. Refresh the project.");
+                return;
+            }
+            if command == MenuAction::Open {
+                if target.is_dir() {
+                    status.set_text(&format!("Selected folder: {}", target.display()));
+                } else if target.extension().and_then(|s| s.to_str()) == Some("hyui") {
+                    open_layout(target);
+                } else {
+                    open_source(target);
+                }
+                return;
+            }
+            if command == MenuAction::Reveal {
+                let directory = if target.is_dir() {
+                    target
+                } else {
+                    target.parent().unwrap_or(root.as_path()).to_path_buf()
+                };
+                match std::process::Command::new("xdg-open")
+                    .arg(directory)
+                    .spawn()
+                {
+                    Ok(_) => status.set_text("Opened the selected folder in the file manager."),
+                    Err(error) => status.set_text(&format!("Cannot open file manager: {error}")),
+                }
+                return;
+            }
+            let operate: Rc<dyn Fn(FileAction)> = Rc::new({
+                let selected = selected.clone();
+                let state = state.clone();
+                let refresh = refresh.clone();
+                let status = status.clone();
+                let target = target.clone();
+                let root = root.clone();
+                move |action| {
+                    if matches!(&action, FileAction::Rename(_) | FileAction::Delete) {
+                        let ide = state.borrow();
+                        let in_use = ide.workspace.selected.as_ref() == Some(&target)
+                            || ide
+                                .open_tabs()
+                                .iter()
+                                .any(|(_, path)| path == &target || path.starts_with(&target));
+                        if in_use {
+                            status.set_text(
+                                "Close this document/project before renaming or deleting it.",
+                            );
+                            return;
+                        }
+                        if ide.has_unsaved() {
+                            status.set_text(
+                                "Save all modified documents before changing explorer files.",
+                            );
+                            return;
+                        }
+                    }
+                    match native_model::file_action(&root, &target, action) {
+                        Ok(changed) => {
+                            *selected.borrow_mut() = Some(changed.clone());
+                            refresh();
+                            status.set_text(&format!("Explorer updated: {}", changed.display()));
+                        }
+                        Err(error) => status.set_text(&format!("Explorer: {error}")),
+                    }
+                }
+            });
+            match command {
+                MenuAction::NewFile | MenuAction::NewFolder | MenuAction::Rename => {
+                    let title = match command {
+                        MenuAction::NewFile => "Create file",
+                        MenuAction::NewFolder => "Create folder",
+                        _ => "Rename entry",
+                    };
+                    let suggested = match command {
+                        MenuAction::NewFile => "NewFile.hy".to_owned(),
+                        MenuAction::NewFolder => "NewFolder".to_owned(),
+                        _ => target
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                    };
+                    let operate = operate.clone();
+                    native_solution_explorer::ask_name(
+                        &tree_widget,
+                        title,
+                        &suggested,
+                        move |name| {
+                            let action = match command {
+                                MenuAction::NewFile => FileAction::NewFile(name),
+                                MenuAction::NewFolder => FileAction::NewFolder(name),
+                                _ => FileAction::Rename(name),
+                            };
+                            operate(action);
+                        },
+                    );
+                }
+                MenuAction::Delete => {
+                    let operate = operate.clone();
+                    native_solution_explorer::confirm_delete(&tree_widget, &target, move || {
+                        operate(FileAction::Delete);
+                    });
+                }
+                _ => {}
+            }
+        }));
+    }
 
     canvas.on_draw({
         let state = state.clone();
@@ -5685,6 +5940,10 @@ mod tests {
         let preferred = 220.0;
         assert_eq!(right_split_position(height, preferred, true), 220.0);
         assert_eq!(right_split_position(height, preferred, false), 574.0);
+        // An unmodified side stack shares its height evenly; a resize retains
+        // its custom height and is never reset by selecting another tab.
+        assert_eq!(right_split_position(806.0, 260.0, true), 400.0);
+        assert_eq!(right_split_position(806.0, 260.0, false), 400.0);
     }
 
     #[test]
@@ -5755,8 +6014,10 @@ mod tests {
             ui_xml::encode(&Layout::default()).unwrap().into_bytes(),
         )
         .unwrap();
-        let mut workspace = Workspace::default();
-        workspace.selected = Some(manifest.clone());
+        let mut workspace = Workspace {
+            selected: Some(manifest.clone()),
+            ..Workspace::default()
+        };
         workspace.projects.push(manifest.clone());
         let ide = Ide::from_workspace(workspace);
         assert!(ide.project.is_some());
@@ -5775,8 +6036,10 @@ mod tests {
         fs::create_dir_all(dir.path().join("views/dialogs")).unwrap();
         let layout = dir.path().join("views/dialogs/Main.hyui");
         fs::write(&layout, ui_xml::encode(&Layout::default()).unwrap()).unwrap();
-        let mut workspace = Workspace::default();
-        workspace.selected = Some(manifest);
+        let workspace = Workspace {
+            selected: Some(manifest),
+            ..Workspace::default()
+        };
         let ide = Ide::from_workspace(workspace);
         let (_, files) = file_items(&ide);
         assert!(files.contains(&layout.canonicalize().unwrap()));

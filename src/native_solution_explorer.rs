@@ -145,29 +145,21 @@ pub fn project(
     )
 }
 
-/// File system mutations are kept separate from GTK callbacks so the exact
-/// root restriction and overwrite rules can be unit-tested on every OS.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FileAction {
-    NewFile(String),
-    NewFolder(String),
-    Rename(String),
+/// Explorer actions invoked through the native context menu. File mutations
+/// always go through file_action() with a checked workspace root.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuAction {
+    Open,
+    NewFile,
+    NewFolder,
+    Rename,
     Delete,
+    Reveal,
 }
 
-fn validate_name(name: &str) -> Result<(), String> {
-    if name.is_empty()
-        || name == "."
-        || name == ".."
-        || name.contains('/')
-        || name.contains('\\')
-        || name.contains('\0')
-        || std::path::Path::new(name).components().count() != 1
-    {
-        return Err("Names must be a single file or folder name, without path separators".into());
-    }
-    Ok(())
-}
+#[cfg(target_os = "linux")]
+pub type MenuCallback = std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(MenuAction)>>>>;
 
 pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<PathBuf, String> {
     let root = root
@@ -237,7 +229,142 @@ pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<P
             selected
         }
     };
-    Ok(result)
+    let popover = gtk4::Popover::new();
+    popover.set_has_arrow(true);
+    popover.set_parent(tree);
+    let items = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    for (title, command) in [
+        ("Open", MenuAction::Open),
+        ("New File…", MenuAction::NewFile),
+        ("New Folder…", MenuAction::NewFolder),
+        ("Rename…", MenuAction::Rename),
+        ("Delete…", MenuAction::Delete),
+        ("Show in File Manager", MenuAction::Reveal),
+    ] {
+        let item = gtk4::Button::with_label(title);
+        item.add_css_class("flat");
+        let pop = popover.clone();
+        let callback = callback.clone();
+        item.connect_clicked(move |_| {
+            pop.popdown();
+            if let Some(action) = callback.borrow().as_ref() {
+                action(command);
+            }
+        });
+        items.append(&item);
+    }
+    popover.set_child(Some(&items));
+    let gesture = gtk4::GestureClick::new();
+    gesture.set_button(3);
+    gesture.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    gesture.connect_pressed(move |_, _, x, y| {
+        let Some(clicked_row) = list.row_at_y(y as i32) else {
+            return;
+        };
+        let selected = list.selected_row().map(|row| row.index());
+        if !crate::native_model::menu_targets_selected(Some(clicked_row.index()), selected) {
+            // Context actions must target the row beneath the pointer,
+            // even when it was not previously selected.
+            list.select_row(Some(&clicked_row));
+        }
+        popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        popover.popup();
+    });
+    tree.add_controller(gesture);
+}
+
+/// Non-blocking native modal prompt. GtkDialog is deprecated in GTK 4.10;
+/// a regular transient GtkWindow keeps the implementation supported.
+#[cfg(target_os = "linux")]
+pub fn ask_name(
+    anchor: &gtk4::Widget,
+    title: &str,
+    suggested: &str,
+    apply: impl Fn(String) + 'static,
+) {
+    use gtk4::prelude::*;
+    let dialog = gtk4::Window::new();
+    dialog.set_title(Some(title));
+    dialog.set_modal(true);
+    dialog.set_default_size(360, 130);
+    if let Some(window) = anchor
+        .root()
+        .and_then(|root| root.downcast::<gtk4::Window>().ok())
+    {
+        dialog.set_transient_for(Some(&window));
+    }
+    let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    contents.set_margin_top(12);
+    contents.set_margin_bottom(12);
+    contents.set_margin_start(12);
+    contents.set_margin_end(12);
+    let entry = gtk4::Entry::new();
+    entry.set_text(suggested);
+    contents.append(&entry);
+    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let cancel = gtk4::Button::with_label("Cancel");
+    let confirm = gtk4::Button::with_label("Apply");
+    let apply = std::rc::Rc::new(apply);
+    let dialog_on_enter = dialog.clone();
+    let apply_on_enter = apply.clone();
+    entry.connect_activate(move |entry| {
+        apply_on_enter(entry.text().to_string());
+        dialog_on_enter.close();
+    });
+    let dialog_on_apply = dialog.clone();
+    confirm.connect_clicked(move |_| {
+        apply(entry.text().to_string());
+        dialog_on_apply.close();
+    });
+    let dialog_on_cancel = dialog.clone();
+    cancel.connect_clicked(move |_| dialog_on_cancel.close());
+    actions.append(&cancel);
+    actions.append(&confirm);
+    contents.append(&actions);
+    dialog.set_child(Some(&contents));
+    dialog.present();
+}
+
+#[cfg(target_os = "linux")]
+pub fn confirm_delete(anchor: &gtk4::Widget, file: &Path, apply: impl Fn() + 'static) {
+    use gtk4::prelude::*;
+    let dialog = gtk4::Window::new();
+    dialog.set_title(Some("Confirm deletion"));
+    dialog.set_modal(true);
+    dialog.set_default_size(420, 140);
+    if let Some(window) = anchor
+        .root()
+        .and_then(|root| root.downcast::<gtk4::Window>().ok())
+    {
+        dialog.set_transient_for(Some(&window));
+    }
+    let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    contents.set_margin_top(12);
+    contents.set_margin_bottom(12);
+    contents.set_margin_start(12);
+    contents.set_margin_end(12);
+    let warning = gtk4::Label::new(Some(&format!(
+        "Permanently delete {}? This cannot be undone.",
+        file.display()
+    )));
+    warning.set_wrap(true);
+    contents.append(&warning);
+    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let cancel = gtk4::Button::with_label("Cancel");
+    let confirm = gtk4::Button::with_label("Delete");
+    confirm.add_css_class("destructive-action");
+    let dialog_on_delete = dialog.clone();
+    confirm.connect_clicked(move |_| {
+        apply();
+        dialog_on_delete.close();
+    });
+    let dialog_on_cancel = dialog.clone();
+    cancel.connect_clicked(move |_| dialog_on_cancel.close());
+    actions.append(&cancel);
+    actions.append(&confirm);
+    contents.append(&actions);
+    dialog.set_child(Some(&contents));
+    dialog.present();
 }
 
 #[cfg(test)]
