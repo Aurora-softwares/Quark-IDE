@@ -175,6 +175,16 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     icon.on_draw(move |painter| render_dock_icon(painter, id));
     row.append(&icon);
 
+    // Consistent, discoverable grab handle for every movable tool window.
+    let grab = ui.label("⋮⋮")?;
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        grab.native_widget().set_tooltip_text(Some("Drag the panel header to reorder its dock position."));
+    }
+    row.append(&grab);
+
     let title = ui.label(id.title())?;
     title.set_style(naui::TextStyle::Heading);
     row.append(&title);
