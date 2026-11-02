@@ -753,8 +753,15 @@ pub fn render(
     // makes the preview float in the middle of the Design surface.
     outer.set_padding(Padding::all(0.0));
     let window = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-    window.set_spacing(8.0);
-    window.set_padding(Padding::all(12.0));
+    // Match Hydrogen's GtkView: the application body is a vertical box with
+    // 20px spacing and Window.padding (24px when unspecified).
+    window.set_spacing(20.0);
+    let body_padding = root
+        .attribute("padding")
+        .and_then(|v| v.parse::<f64>().ok())
+        .unwrap_or(24.0)
+        .clamp(0.0, 120.0);
+    window.set_padding(Padding::all(body_padding));
     let width = root
         .attribute("width")
         .and_then(|v| v.parse::<f64>().ok())
@@ -771,86 +778,117 @@ pub fn render(
     window.set_sizing(
         Sizing::new()
             .width(Length::Fixed(width))
-            .min_height((height - 34.0).max(120.0)),
+            .min_height((height - if cfg!(target_os = "linux") { 48.0 } else { 34.0 }).max(120.0)),
     );
     // A visible window frame, kept inside the design viewport. The body
     // itself is composed of platform-native widgets.
-    let titlebar = ui.canvas().map_err(|e| e.to_string())?;
-    titlebar.set_sizing(
-        Sizing::new()
-            .width(Length::Fixed(width))
-            .height(Length::Fixed(34.0)),
-    );
-    let title = root
-        .attribute("title")
-        .unwrap_or("Hydrogen Window")
-        .to_owned();
-    let select = on_select.clone();
-    titlebar.on_draw(move |paint| {
-        paint.fill_rect(
-            naui::Rect::new(0.0, 0.0, paint.width(), paint.height()),
-            naui::Color::rgb(0x45, 0x47, 0x50),
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+
+        // Exactly the HeaderBar class used by Hydrogen's GTK application,
+        // but without window-manager buttons: this is an embedded child of
+        // Quark, so working close/minimise controls would target the IDE.
+        let header = libadwaita::HeaderBar::new();
+        header.set_show_start_title_buttons(false);
+        header.set_show_end_title_buttons(false);
+        let title = root.attribute("title").unwrap_or("Hydrogen Window");
+        header.set_title_widget(Some(&gtk4::Label::new(Some(title))));
+        header.set_tooltip_text(Some("Design-only native header; use OS Window for actual window controls"));
+        header.set_width_request(width as i32);
+        let host = outer
+            .native_widget()
+            .downcast::<gtk4::Box>()
+            .map_err(|_| "Native GTK preview host is not a GtkBox")?;
+        // Libadwaita's card style follows the user's light/dark system
+        // palette and visually separates the design window from Quark.
+        host.add_css_class("card");
+        host.append(&header);
+        let selected = on_select.clone();
+        let gesture = gtk4::GestureClick::new();
+        gesture.connect_pressed(move |_, _, _, _| selected(Vec::new()));
+        header.add_controller(gesture);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let titlebar = ui.canvas().map_err(|e| e.to_string())?;
+        titlebar.set_sizing(
+            Sizing::new()
+                .width(Length::Fixed(width))
+                .height(Length::Fixed(34.0)),
         );
-        paint.fill_rect(
-            naui::Rect::new(0.0, 33.0, paint.width(), 1.0),
-            naui::Color::rgb(0x70, 0x72, 0x7a),
-        );
-        // The embedded title bar is nonfunctional preview chrome: only
-        // Hydrogen's external OS Window action creates real window chrome.
-        // Use familiar host-platform controls so the designer reads like
-        // a window rather than a generic form on a canvas.
-        #[cfg(target_os = "macos")]
-        for (x, color) in [
-            (16.0, naui::Color::rgb(0xff, 0x60, 0x57)),
-            (36.0, naui::Color::rgb(0xff, 0xbd, 0x2e)),
-            (56.0, naui::Color::rgb(0x28, 0xc8, 0x40)),
-        ] {
-            paint.fill_circle(naui::Point::new(x, 17.0), 5.3, color);
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let edge = paint.width();
-            let light = naui::Color::rgb(0xc6, 0xc8, 0xd0);
-            paint.line(
-                naui::Point::new(edge - 77.0, 17.0),
-                naui::Point::new(edge - 65.0, 17.0),
-                light,
-                1.4,
+        let title = root
+            .attribute("title")
+            .unwrap_or("Hydrogen Window")
+            .to_owned();
+        let select = on_select.clone();
+        titlebar.on_draw(move |paint| {
+            paint.fill_rect(
+                naui::Rect::new(0.0, 0.0, paint.width(), paint.height()),
+                naui::Color::rgb(0x45, 0x47, 0x50),
             );
-            paint.stroke_rect(naui::Rect::new(edge - 48.0, 12.0, 11.0, 10.0), light, 1.2);
-            paint.line(
-                naui::Point::new(edge - 22.0, 12.0),
-                naui::Point::new(edge - 12.0, 22.0),
-                light,
-                1.5,
+            paint.fill_rect(
+                naui::Rect::new(0.0, 33.0, paint.width(), 1.0),
+                naui::Color::rgb(0x70, 0x72, 0x7a),
             );
-            paint.line(
-                naui::Point::new(edge - 12.0, 12.0),
-                naui::Point::new(edge - 22.0, 22.0),
-                light,
-                1.5,
+            // The embedded title bar is nonfunctional preview chrome: only
+            // Hydrogen's external OS Window action creates real window chrome.
+            // Use familiar host-platform controls so the designer reads like
+            // a window rather than a generic form on a canvas.
+            #[cfg(target_os = "macos")]
+            for (x, color) in [
+                (16.0, naui::Color::rgb(0xff, 0x60, 0x57)),
+                (36.0, naui::Color::rgb(0xff, 0xbd, 0x2e)),
+                (56.0, naui::Color::rgb(0x28, 0xc8, 0x40)),
+            ] {
+                paint.fill_circle(naui::Point::new(x, 17.0), 5.3, color);
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let edge = paint.width();
+                let light = naui::Color::rgb(0xc6, 0xc8, 0xd0);
+                paint.line(
+                    naui::Point::new(edge - 77.0, 17.0),
+                    naui::Point::new(edge - 65.0, 17.0),
+                    light,
+                    1.4,
+                );
+                paint.stroke_rect(naui::Rect::new(edge - 48.0, 12.0, 11.0, 10.0), light, 1.2);
+                paint.line(
+                    naui::Point::new(edge - 22.0, 12.0),
+                    naui::Point::new(edge - 12.0, 22.0),
+                    light,
+                    1.5,
+                );
+                paint.line(
+                    naui::Point::new(edge - 12.0, 12.0),
+                    naui::Point::new(edge - 22.0, 22.0),
+                    light,
+                    1.5,
+                );
+            }
+            paint.text(
+                &title,
+                naui::Point::new(
+                    if cfg!(target_os = "macos") {
+                        76.0
+                    } else {
+                        12.0
+                    },
+                    9.0,
+                ),
+                12.0,
+                naui::Color::rgb(0xf0, 0xf0, 0xf2),
             );
-        }
-        paint.text(
-            &title,
-            naui::Point::new(
-                if cfg!(target_os = "macos") {
-                    76.0
-                } else {
-                    12.0
-                },
-                9.0,
-            ),
-            12.0,
-            naui::Color::rgb(0xf0, 0xf0, 0xf2),
-        );
-    });
-    titlebar.on_pointer(move |event| {
-        if event.phase == naui::PointerPhase::Down {
-            select(Vec::new());
-        }
-    });
-    outer.append(&titlebar);
+        });
+        titlebar.on_pointer(move |event| {
+            if event.phase == naui::PointerPhase::Down {
+                select(Vec::new());
+            }
+        });
+        outer.append(&titlebar);
+    }
     render_children(
         ui,
         &window,
@@ -868,19 +906,22 @@ pub fn render(
         document,
     )?;
     outer.append(&window);
-    let frame_edge = ui.canvas().map_err(|e| e.to_string())?;
-    frame_edge.set_sizing(
-        Sizing::new()
-            .width(Length::Fixed(width))
-            .height(Length::Fixed(2.0)),
-    );
-    frame_edge.on_draw(|paint| {
-        paint.fill_rect(
-            naui::Rect::new(0.0, 0.0, paint.width(), 2.0),
-            naui::Color::rgb(0x70, 0x72, 0x7a),
+    #[cfg(not(target_os = "linux"))]
+    {
+        let frame_edge = ui.canvas().map_err(|e| e.to_string())?;
+        frame_edge.set_sizing(
+            Sizing::new()
+                .width(Length::Fixed(width))
+                .height(Length::Fixed(2.0)),
         );
-    });
-    outer.append(&frame_edge);
+        frame_edge.on_draw(|paint| {
+            paint.fill_rect(
+                naui::Rect::new(0.0, 0.0, paint.width(), 2.0),
+                naui::Color::rgb(0x70, 0x72, 0x7a),
+            );
+        });
+        outer.append(&frame_edge);
+    }
     Ok(outer)
 }
 
