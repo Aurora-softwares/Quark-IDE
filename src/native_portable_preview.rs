@@ -332,13 +332,12 @@ fn render_node(
                 .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
             input.set_sizing(
-                Sizing::new()
-                    .width(Length::Fill)
-                    .height(Length::Fixed(
-                        node.attribute("height")
-                            .and_then(|value| value.parse::<f64>().ok())
-                            .unwrap_or(100.0).clamp(48.0, 1200.0),
-                    )),
+                Sizing::new().width(Length::Fill).height(Length::Fixed(
+                    node.attribute("height")
+                        .and_then(|value| value.parse::<f64>().ok())
+                        .unwrap_or(100.0)
+                        .clamp(48.0, 1200.0),
+                )),
             );
             let selected = on_select.clone();
             input.on_change(move |_| selected(path.clone()));
