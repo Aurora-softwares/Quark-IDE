@@ -17,8 +17,7 @@ pub type SelectElement = Rc<dyn Fn(Vec<usize>)>;
 pub const DESIGN_VIEWPORT_INSET: f64 = 16.0;
 
 #[cfg(target_os = "linux")]
-const DESIGN_FRAME_CSS: &str =
-    "box.quark-design-frame { border-radius: 12px; \
+const DESIGN_FRAME_CSS: &str = "box.quark-design-frame { border-radius: 12px; \
       box-shadow: 0 6px 18px alpha(currentColor, 0.18); }";
 
 /// Install GTK-only appearance rules once per native display. Colours derive
@@ -45,7 +44,6 @@ fn install_gtk_design_shadow() {
         }
     });
 }
-
 
 /// The compiled application's startup tab is zero-based, while its
 /// displayed first page is page 1. Moving around the designer must never
