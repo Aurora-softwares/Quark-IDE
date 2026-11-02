@@ -139,6 +139,41 @@ fn build_stack(panels: &[gtk4::Widget]) -> gtk4::Widget {
     divider.upcast()
 }
 
+/// GTK's first_child()/next_sibling() can be traversed without mutating
+/// the container. Never use a "while first_child { remove }" loop: if a
+/// wrapper has reparented a widget behind the Box's back, gtk_box_remove()
+/// rejects it without advancing the loop (and floods stderr forever).
+///
+/// Checking direct ownership and visiting each snapshot item at most once
+/// also prevents removing a nested GtkPaned descendant as if it were a
+/// direct GtkBox child.
+fn remove_direct_box_children(host: &gtk4::Box) -> bool {
+    let container: gtk4::Widget = host.clone().upcast();
+    let mut children = Vec::new();
+    let mut child = host.first_child();
+    while let Some(widget) = child {
+        child = widget.next_sibling();
+        if widget.parent().as_ref() != Some(&container) {
+            eprintln!("Quark docking: attempted to clear a widget no longer owned by its GtkBox");
+            return false;
+        }
+        children.push(widget);
+        // Defensive bound if GTK's sibling links are temporarily inconsistent.
+        if children.len() > 4096 {
+            eprintln!("Quark docking: refusing to clear an unexpectedly large dock host");
+            return false;
+        }
+    }
+    for child in children {
+        if child.parent().as_ref() != Some(&container) {
+            eprintln!("Quark docking: dock host changed ownership during reflow");
+            return false;
+        }
+        host.remove(&child);
+    }
+    true
+}
+
 /// Stack an arbitrary number of moved panels in a vertical native splitter
 /// chain. Each live panel is reparented, never recreated, and single panels
 /// fill the entire host without leaving a redundant divider. Call only after
@@ -149,20 +184,30 @@ pub fn rebalance_side_host(host: &gtk4::Box) {
     while let Some(widget) = child {
         child = widget.next_sibling();
         collect_stacked_panels(&widget, &mut panels);
+        if panels.len() > 256 {
+            eprintln!("Quark docking: refusing an unexpectedly deep panel stack");
+            return;
+        }
     }
     if panels.is_empty() {
-        while let Some(child) = host.first_child() {
-            host.remove(&child);
-        }
+        let _ = remove_direct_box_children(host);
         return;
     }
     for widget in &panels {
         if !detach(widget) {
+            eprintln!("Quark docking: unable to detach panel from its current owner");
             return;
         }
     }
-    while let Some(child) = host.first_child() {
-        host.remove(&child);
+    if !remove_direct_box_children(host) {
+        // Never spin retrying gtk_box_remove() on the same non-child. Preserve
+        // the actual panel widgets even if their old split wrapper is stale.
+        for panel in &panels {
+            if panel.parent().is_none() {
+                host.append(panel);
+            }
+        }
+        return;
     }
     let stacked = build_stack(&panels);
     stacked.set_vexpand(true);
