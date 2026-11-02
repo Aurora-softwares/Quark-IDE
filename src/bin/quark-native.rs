@@ -81,7 +81,7 @@ mod symbols;
 mod ui_xml;
 
 use naui::{
-    Color, GridCell, Length, ListItem, MenuSpec, Orientation, Point, PointerPhase, Rect, Settings,
+    Color, GridCell, Length, ListItem, MenuSpec, Orientation, Padding, Point, PointerPhase, Rect, Settings,
     Sizing, Theme, ToolbarIcon, ToolbarItem, Track, TreeItem, Ui,
 };
 use std::{
