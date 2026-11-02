@@ -32,6 +32,131 @@ pub fn properties(source: &str, path: &[usize]) -> Result<(String, Vec<(String, 
     ))
 }
 
+/// Property metadata mirrors the allowed attributes in Hydrogen's
+/// tools/hyui/document.cpp. Values shown here are preview defaults only:
+/// they are not inserted into the application's XML until the user applies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PropertyField {
+    pub name: String,
+    pub value: String,
+    pub default: String,
+    pub explicitly_set: bool,
+    pub group: &'static str,
+}
+
+fn supported_fields(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "Window" => &["version","title","width","height","padding","theme","material","onLoad"],
+        "ColumnPanel" => &["gap"],
+        "RowPanel" => &["gap","breakpoint"],
+        "GridPanel" => &["gap","columns","minItemWidth"],
+        "ScrollView" => &["height","gap"],
+        "Panel" => &["title","padding","gap"],
+        "MenuBar" | "Separator" | "ContextMenu" => &[],
+        "Menu" => &["text"],
+        "MenuItem" => &["text","onClick","checked","shortcut"],
+        "Tabs" => &["value","onChange"],
+        "Tab" => &["title","gap"],
+        "Label" => &["text","role","tone"],
+        "Button" => &["text","onClick","primary"],
+        "Input" | "SearchInput" => &["text","placeholder","onChange","onSubmit"],
+        "PasswordInput" => &["placeholder","onChange","onSubmit"],
+        "FilePicker" => &["mode","text","onPick","onCancel"],
+        "TextArea" => &["text","placeholder","onChange","height"],
+        "CheckBox" | "Switch" => &["text","checked","onChange"],
+        "Select" | "RadioGroup" => &["items","value","onChange"],
+        "ListBox" => &["items","value","height","onChange"],
+        "Table" => &["columns","rows","value","height","onChange"],
+        "Image" => &["source","height"],
+        "Dialog" => &["title","text","buttons","open","value","onClose"],
+        "Slider" | "NumberInput" => &["value","minimum","maximum","onChange"],
+        "ProgressBar" => &["value","minimum","maximum","indeterminate"],
+        "Spinner" => &["running"],
+        "Spacer" => &["height"],
+        "Clipboard" => &["onRead"],
+        "State" => &["value"],
+        "Timer" => &["interval","running","onTick"],
+        _ => &[],
+    }
+}
+const COMMON_FIELDS: &[&str] = &[
+    "id","visible","enabled","fill","preferredWidth","accessibleName","tooltip",
+];
+
+fn default_value(kind: &str, name: &str) -> &'static str {
+    match (kind, name) {
+        ("Window", "version") => "1",
+        ("Window", "title") => "Hydrogen",
+        ("Window", "width") => "1100",
+        ("Window", "height") => "820",
+        ("Window", "padding") => "24",
+        ("Window", "theme") => "system",
+        ("Window", "material") => "auto",
+        ("Tabs", "value") => "0", // First tab shown to user as page 1.
+        ("GridPanel", "columns") => "3",
+        ("GridPanel", "minItemWidth") => "240",
+        ("RowPanel", "breakpoint") => "700",
+        ("Panel", "padding") => "20",
+        ("ScrollView", "height") => "200",
+        ("TextArea", "height") => "100",
+        ("ListBox" | "Table", "height") => "160",
+        ("Image", "height") => "72",
+        ("Spacer", "height") => "12",
+        ("Slider" | "NumberInput" | "ProgressBar", "minimum") => "0",
+        ("Slider" | "NumberInput" | "ProgressBar", "maximum") => "100",
+        ("Dialog", "buttons") => "OK",
+        ("Timer", "interval") => "1000",
+        ("Spinner", "running") => "true",
+        (_, "visible" | "enabled") => "true",
+        (_, "fill" | "checked" | "primary" | "indeterminate") => "false",
+        (_, "gap") => "12",
+        (_, "value") => "0",
+        _ => "",
+    }
+}
+
+/// All supported properties, including absent attributes that have never
+/// been set in the XML. Design-only page selection is deliberately absent:
+/// the Tabs.value attribute always represents the built application's start.
+pub fn available_properties(
+    source: &str,
+    path: &[usize],
+) -> Result<(String, Vec<PropertyField>), String> {
+    let parsed = Document::parse(source).map_err(|e| e.to_string())?;
+    if parsed.root_element().tag_name().name() != "Window" {
+        return Err("Expected a Hydrogen <Window> document".into());
+    }
+    let node = element_at(&parsed, path)?;
+    let kind = node.tag_name().name();
+    let mut fields = Vec::new();
+    for (name, group) in supported_fields(kind).iter().map(|s| (*s, "Build / Design"))
+        .chain(COMMON_FIELDS.iter().map(|s| (*s, "Common")))
+    {
+        let explicit = node.attribute(name);
+        let default = default_value(kind, name);
+        fields.push(PropertyField {
+            name: name.to_owned(),
+            value: explicit.unwrap_or(default).to_owned(),
+            default: default.to_owned(),
+            explicitly_set: explicit.is_some(),
+            group,
+        });
+    }
+    // Preserve unknown attributes imported from newer Hydrogen runtimes.
+    for attr in node.attributes() {
+        if !fields.iter().any(|p| p.name == attr.name()) {
+            fields.push(PropertyField {
+                name: attr.name().to_owned(),
+                value: attr.value().to_owned(),
+                default: String::new(),
+                explicitly_set: true,
+                group: "Other",
+            });
+        }
+    }
+    Ok((kind.to_owned(), fields))
+}
+
 fn valid_name(name: &str) -> bool {
     let mut chars = name.chars();
     chars
@@ -178,6 +303,24 @@ mod tests {
         assert!(revised.contains("width=\"900\""));
         assert!(set_attribute(xml, &[], "bad name", "x").is_err());
     }
+    #[test]
+    fn exposes_unset_runtime_and_design_attributes_without_changing_xml() {
+        let xml = r#"<Window version="1" title="Studio"><Tabs id="pages"><Tab title="First"/><Tab title="Second"/></Tabs><TextArea id="notes"/></Window>"#;
+        let (_, window) = available_properties(xml, &[]).unwrap();
+        assert!(window.iter().any(|f| f.name == "theme" && f.value == "system" && !f.explicitly_set));
+        let (_, tabs) = available_properties(xml, &[0]).unwrap();
+        assert!(tabs.iter().any(|f| f.name == "value" && f.value == "0" && !f.explicitly_set));
+        let (_, area) = available_properties(xml, &[1]).unwrap();
+        assert!(area.iter().any(|f| f.name == "height" && f.value == "100" && !f.explicitly_set));
+        assert!(!xml.contains("theme="));
+    }
+    #[test]
+    fn explicit_attribute_and_unknown_new_runtime_field_are_retained() {
+        let (_, fields) = available_properties("<Window title='App' futureSetting='on'/>", &[]).unwrap();
+        assert!(fields.iter().any(|f| f.name == "title" && f.explicitly_set));
+        assert!(fields.iter().any(|f| f.name == "futureSetting" && f.group == "Other"));
+    }
+
     #[test]
     fn rejects_stale_selection_without_touching_xml() {
         assert!(set_attribute("<Window/>", &[4], "text", "x").is_err());
