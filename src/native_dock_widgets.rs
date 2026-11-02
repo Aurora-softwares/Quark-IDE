@@ -128,20 +128,31 @@ pub fn enable_header_drag(
 ) {
     use gtk4::prelude::*;
     use naui::Widget as _;
+    enable_widget_drag(&header.row.native_widget(), id, on_drop);
+}
+
+/// Attach the same validated drag protocol to any native dock tab or header.
+#[cfg(target_os = "linux")]
+pub fn enable_widget_drag(
+    widget: &gtk4::Widget,
+    id: DockId,
+    on_drop: impl Fn(DockId) -> bool + 'static,
+) {
+    use gtk4::prelude::*;
     let source = gtk4::DragSource::new();
     source.set_actions(gtk4::gdk::DragAction::MOVE);
     let token = drag_token(id);
     source.connect_prepare(move |_, _, _| {
         Some(gtk4::gdk::ContentProvider::for_value(&token.to_value()))
     });
-    header.row.native_widget().add_controller(source);
+    widget.add_controller(source);
     let target = gtk4::DropTarget::new(String::static_type(), gtk4::gdk::DragAction::MOVE);
     target.connect_drop(move |_, value, _, _| {
         value.get::<String>().ok()
             .and_then(|token| parse_drag_token(&token))
             .is_some_and(|source| on_drop(source))
     });
-    header.row.native_widget().add_controller(target);
+    widget.add_controller(target);
 }
 
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
