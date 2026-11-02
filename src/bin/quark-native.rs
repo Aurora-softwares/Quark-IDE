@@ -13,6 +13,8 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
+#[path = "../native_compiler.rs"]
+mod native_compiler;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
 #[path = "../native_dock_widgets.rs"]
 mod native_dock_widgets;
@@ -507,7 +509,14 @@ fn run_task(
     ui: Ui,
 ) {
     let project = state.borrow().workspace.selected.clone();
-    let compiler = std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".into());
+    let compiler = match native_compiler::resolve() {
+        Ok(compiler) => compiler,
+        Err(error) => {
+            status.set_text(&error);
+            output.set_text(&error);
+            return;
+        }
+    };
     let project_dir = project
         .as_ref()
         .and_then(|path| path.parent().map(Path::to_path_buf))
@@ -1324,8 +1333,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             }
             let runtime = std::env::var("QUARK_HYUI_RUNTIME").unwrap_or_else(|_| "hyui".to_owned());
-            let compiler =
-                std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".to_owned());
+            let compiler = match native_compiler::resolve() {
+                Ok(executable) => executable,
+                Err(error) => {
+                    status.set_text(&error);
+                    return;
+                }
+            };
             let process =
                 native_hyui_preview::command(&runtime, &path, project.as_deref(), &compiler, kind);
             let mut command = match process {
