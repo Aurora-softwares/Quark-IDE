@@ -127,7 +127,6 @@ pub fn enable_header_drag(
     id: DockId,
     on_drop: impl Fn(DockId) -> bool + 'static,
 ) {
-    use gtk4::prelude::*;
     use naui::Widget as _;
     enable_widget_drag(&header.row.native_widget(), id, on_drop);
 }
