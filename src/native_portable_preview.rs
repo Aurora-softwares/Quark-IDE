@@ -632,6 +632,20 @@ fn render_node(
     Ok(())
 }
 
+/// Elements that are understood by Hydrogen but do not currently have
+/// a matching live native design-time widget. Keep this visible in the IDE
+/// status rather than silently presenting an incomplete window as exact.
+pub fn missing_native_controls(xml: &str) -> Result<Vec<String>, String> {
+    let parsed = roxmltree::Document::parse(xml).map_err(|e| e.to_string())?;
+    let mut missing = std::collections::BTreeSet::new();
+    for node in parsed.descendants().filter(|node| node.is_element()) {
+        if matches!(node.tag_name().name(), "Spinner" | "Popover" | "Toolbar") {
+            missing.insert(node.tag_name().name().to_owned());
+        }
+    }
+    Ok(missing.into_iter().collect())
+}
+
 pub fn render(
     ui: &Ui,
     xml: &str,
@@ -779,6 +793,16 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn warns_about_controls_without_a_true_design_time_widget() {
+        let xml = "<Window><Button text=\"Hi\"/><Spinner/><Popover/><Toolbar/><Spinner/></Window>";
+        assert_eq!(
+            missing_native_controls(xml).unwrap(),
+            ["Popover", "Spinner", "Toolbar"]
+        );
+        assert!(missing_native_controls("<Window><Tabs><Tab><TextArea/></Tab></Tabs></Window>").unwrap().is_empty());
+    }
 
     #[test]
     fn relative_ui_image_assets_resolve_from_document_directory() {
