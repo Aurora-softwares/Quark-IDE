@@ -3467,7 +3467,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let visible_tab_capacity = visible_tab_capacity.clone();
         let status = status.clone();
         let symbols_list = symbols_list.clone();
-        move |path| {
+        // Run UI modifications on the next UI task rather than inside a native
+        // file-menu / AppKit selection callback.
+        let sender = ui.tasks().channel(move |path: PathBuf| {
             let result = state.borrow_mut().open_source(&path);
             match result {
                 Ok(()) => {
@@ -3490,6 +3492,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
                 Err(error) => status.set_text(&format!("Open failed: {error}")),
             }
+        });
+        move |path| {
+            let _ = sender.send(path);
         }
     });
 
@@ -3505,7 +3510,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let design_tab_selection = design_tab_selection.clone();
         let selected_xml_path = selected_xml_path.clone();
         let reload_preview = reload_preview.clone();
-        move |path| {
+        // Run UI modifications on the next UI task rather than inside a native
+        // file-menu / AppKit selection callback.
+        let sender = ui.tasks().channel(move |path: PathBuf| {
             let different_document = state
                 .borrow()
                 .layout
@@ -3540,6 +3547,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
                 Err(error) => status.set_text(&format!("Cannot open layout: {error}")),
             }
+        });
+        move |path| {
+            let _ = sender.send(path);
         }
     });
 
