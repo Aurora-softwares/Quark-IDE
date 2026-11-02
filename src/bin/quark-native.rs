@@ -2346,7 +2346,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move || {
             let mut parser = parser.borrow_mut();
             let position = parser.screen().scrollback();
-            parser.screen_mut().set_scrollback(position.saturating_add(15));
+            parser
+                .screen_mut()
+                .set_scrollback(position.saturating_add(15));
             display.redraw();
         }
     });
