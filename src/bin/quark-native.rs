@@ -1393,6 +1393,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 if field.group != last_group {
                     last_group = field.group;
                     if let Ok(group_heading) = ui.label(last_group) {
+                        group_heading.set_style(naui::TextStyle::Heading);
+                        group_heading.set_color(naui::TextColor::Accent);
                         native_property_content.append(&group_heading);
                     }
                 }
@@ -1425,14 +1427,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     row.append(&label);
                 }
                 if let Ok(value_field) = ui.text_input(&display_value) {
+                    let edit_row = match ui.stack(Orientation::Horizontal) {
+                        Ok(row) => row,
+                        Err(_) => continue,
+                    };
+                    edit_row.set_spacing(4.0);
+                    value_field.set_sizing(Sizing::fill_width());
                     let draft = Rc::new(RefCell::new(display_value));
                     value_field.on_change({
                         let draft = draft.clone();
                         move |next| *draft.borrow_mut() = next.to_owned()
                     });
-                    row.append(&value_field);
-                    if let Ok(apply_button) = ui.button(&format!("Apply {name}")) {
+                    edit_row.append(&value_field);
+                    if let Ok(apply_button) = ui.button("✓") {
                         let update = apply_xml_property.clone();
+                        #[cfg(target_os = "linux")]
+                        {
+                            use gtk4::prelude::*;
+                            use naui::Widget as _;
+                            apply_button.native_widget().set_tooltip_text(
+                                Some("Apply this property to the Hydrogen UI XML"),
+                            );
+                        }
                         apply_button.on_click(move || {
                             let chosen = draft.borrow().clone();
                             if human_tab_index {
@@ -1445,8 +1461,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                                 update(name.clone(), chosen);
                             }
                         });
-                        row.append(&apply_button);
+                        edit_row.append(&apply_button);
                     }
+                    row.append(&edit_row);
                 }
                 native_property_content.append(&row);
             }
