@@ -2277,8 +2277,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 auto_hide_popovers.borrow().get(&id)
                     .is_some_and(|popover| popover.is_visible())
             };
-            #[cfg(not(target_os = "linux"))]
-            let in_popover = |_id: native_docking::DockId| false;
             #[cfg(target_os = "linux")]
             let is_detached = |id: native_docking::DockId| {
                 floating_windows.borrow().contains_key(&id) || in_popover(id)
