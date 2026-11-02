@@ -1,7 +1,7 @@
 //! Lightweight namespace/type outline for Hydrogen source files.
 //! This is a lexical explorer, not a full compiler parser. Ignore braces and
 //! declarations inside strings/comments; let the compiler/LSP own semantics.
-use crate::editor::{tokenize, TokenKind};
+use crate::hydrogen_lexer::{tokenize, TokenKind};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -132,7 +132,7 @@ pub fn add_source(outline: &mut SymbolNode, path: &Path, source: &str) {
     let mut pending: Option<Pending> = None;
     let mut found_type = false;
     let mut declared_namespace: Option<Vec<String>> = None;
-    let mut idx = 0;
+    let mut idx: usize = 0;
     while idx < tokens.len() {
         match tokens[idx] {
             "namespace" => {
