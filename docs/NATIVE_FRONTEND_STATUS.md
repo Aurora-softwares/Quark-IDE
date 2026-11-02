@@ -44,6 +44,12 @@ A selected host Hydrogen compiler is used to build an Australis `.hyproj`. The A
 - GTK Editor preferences and portable Editor/Build controls can be saved. GTK word wrapping is applied on editor construction. **Dynamic wrap updates, accurate gutter line-number visibility, tab-width rendering, and full portable UI parity remain unfinished.**
 - These commits require CI and manual platform smoke before being described as validated. They do not complete #88, #91, #92, #93 or #94.
 
+## GTK editor preference refinements (branch agent/native-editor-preferences-live-20261102)
+
+- GTK now sets actual Pango tab stops from Editor tab-width preferences (bounded 1–16) rather than persisting the value without applying it.
+- An editor-owned weak-widget timer checks the shared preferences for changes and reapplies wrapping and tab stops without requiring an editor reload; it stops when the view is destroyed. Syntax highlighting remains theme-aware.
+- Accurate scroll-synced line number gutters, direct AppKit/WinUI editor options and complete Settings parity still require implementation and visual review. This work does **not** close #93.
+
 ## Required checks before any Release merge
 
 Run on each supported OS, using a compatible Rust toolchain:
