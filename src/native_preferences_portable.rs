@@ -21,15 +21,12 @@ fn write(path: &Path, value: &Value) -> Result<(), String> {
 }
 
 fn update(path: &Path, section: &str, field: &str, value: Value) -> Result<(), String> {
-    crate::native_settings::update(path, |preferences| {
-        let mut document = serde_json::to_value(&*preferences)
-            .expect("validated settings must serialize");
-        document[section][field] = value;
-        if let Ok(changed) = serde_json::from_value(document) {
-            *preferences = changed;
-        }
-    })
-    .map(|_| ())
+    let mut document = serde_json::to_value(crate::native_settings::try_load(path)?)
+        .map_err(|error| error.to_string())?;
+    document[section][field] = value;
+    let preferences: crate::native_settings::Preferences =
+        serde_json::from_value(document).map_err(|error| error.to_string())?;
+    crate::native_settings::save(path, &preferences)
 }
 
 /// Apply a saved theme before the editor window opens. The native backend
