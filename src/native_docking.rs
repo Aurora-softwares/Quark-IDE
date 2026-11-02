@@ -371,8 +371,9 @@ impl DockTargets {
     }
 }
 
-/// Ephemeral interaction state. Unpinned sections overlay the editor and
-/// dismiss when focus moves elsewhere; never persist the open popup.
+/// Ephemeral interaction state. An unpinned section expands temporarily
+/// from its tab rail and dismisses when focus moves elsewhere. The open
+/// state is never saved alongside dock locations or preferred dimensions.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DockInteraction {
     pub active_popup: Option<DockId>,
