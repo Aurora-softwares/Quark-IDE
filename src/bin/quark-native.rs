@@ -2279,6 +2279,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             };
             let left_open = layout.visible(selected_left, active.get())
+                && !floating_windows.borrow().contains_key(&selected_left)
                 && layout.section(selected_left).is_some_and(|s| s.zone == native_docking::DockZone::Left);
             let right_solution = layout.section(native_docking::DockId::Solution)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
@@ -2296,11 +2297,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let has_left_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Left
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
-                    && layout.visible(*id, active.get()));
+                    && layout.visible(*id, active.get())
+                    && !floating_windows.borrow().contains_key(id));
             let has_bottom_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Bottom
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
-                    && layout.visible(*id, active.get()));
+                    && layout.visible(*id, active.get())
+                    && !floating_windows.borrow().contains_key(id));
             let right_open = right_solution || right_properties || has_right_guests;
             let bottom_open = has_bottom_guests || [
                 native_docking::DockId::Output,
@@ -2310,7 +2313,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 native_docking::DockId::FindResults,
             ].iter().any(|id| layout.section(*id).is_some_and(|s|
                 s.zone == native_docking::DockZone::Bottom)
-                && layout.visible(*id, active.get()));
+                && layout.visible(*id, active.get())
+                && !floating_windows.borrow().contains_key(id));
             let remembered = sizes.get();
             #[cfg(target_os = "linux")]
             {
@@ -2328,7 +2332,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     native_docking::DockId::FindResults,
                 ].iter().any(|id| layout.section(*id).is_some_and(|s|
                     s.zone == native_docking::DockZone::Bottom)
-                    && layout.visible(*id, active.get()));
+                    && layout.visible(*id, active.get())
+                    && !floating_windows.borrow().contains_key(id));
                 bottom_pages.native_widget().set_visible(bottom_original_visible);
                 for (id, widget) in &dock_widgets {
                     widget.set_visible(layout.visible(*id, active.get())
