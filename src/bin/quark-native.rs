@@ -4025,6 +4025,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let result_editor = editor.clone();
             let result_status = status.clone();
             let result_output = output.clone();
+            let worker_path = path.clone();
             let sender = ui.tasks().channel(move |(log, formatted): (native_commands::ResultLog, Option<String>)| {
                 result_output.set_text(&log.text);
                 if !log.success {
@@ -4052,7 +4053,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     result_status.set_text("Document changed while formatting; reopen it to see the result.");
                 }
             });
-            let worker_path = path.clone();
             std::thread::spawn(move || {
                 let log = native_commands::format_document(&compiler, &worker_path);
                 let formatted = if log.success {
