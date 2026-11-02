@@ -2832,10 +2832,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             .expect("native bottom dock must be a GTK Box");
         // Side guests are vertical neighbours of the primary panels, not
         // additional columns squeezed into the editor or side rail.
-        let left_primary = left_content.native_widget();
-        let right_primary = inspector.native_widget();
-        assert!(native_dock_runtime::detach(&left_primary));
-        assert!(native_dock_runtime::detach(&right_primary));
+        // naui 0.8 wraps every native widget inside its own NauiSizeBin.
+        // Stack::append() parents that *bin* in the GtkBox; the inner widget
+        // remains parented to the bin and must never be detached directly.
+        // Relocate the original SizeBins to preserve sizing and ownership.
+        let left_primary: gtk4::Widget = left_content.size_bin().upcast();
+        let right_primary: gtk4::Widget = inspector.size_bin().upcast();
+        assert!(
+            native_dock_runtime::detach(&left_primary),
+            "Cannot move the left primary size bin into its dock splitter"
+        );
+        assert!(
+            native_dock_runtime::detach(&right_primary),
+            "Cannot move the right primary size bin into its dock splitter"
+        );
         let left_pair = gtk4::Paned::new(gtk4::Orientation::Vertical);
         left_pair.set_start_child(Some(&left_primary));
         left_pair.set_end_child(Some(&left));
@@ -3024,18 +3034,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
         use gtk4::glib::object::Cast;
         use naui::Widget as _;
-        let toolbox = toolbox.native_widget();
-        let symbols = symbols_section.native_widget();
-        let search = code_search_view.native_widget();
-        let server = server_view.native_widget();
-        let data = data_view.native_widget();
-        let solution = solution_pane.native_widget();
-        let properties = properties_pane.native_widget();
-        let output = output_section.native_widget();
-        let errors = error_section.native_widget();
-        let debug = debug_section.native_widget();
-        let tests = test_section.native_widget();
-        let find = find_section.native_widget();
+        let toolbox: gtk4::Widget = toolbox.size_bin().upcast();
+        let symbols: gtk4::Widget = symbols_section.size_bin().upcast();
+        let search: gtk4::Widget = code_search_view.size_bin().upcast();
+        let server: gtk4::Widget = server_view.size_bin().upcast();
+        let data: gtk4::Widget = data_view.size_bin().upcast();
+        let solution: gtk4::Widget = solution_pane.size_bin().upcast();
+        let properties: gtk4::Widget = properties_pane.size_bin().upcast();
+        let output: gtk4::Widget = output_section.size_bin().upcast();
+        let errors: gtk4::Widget = error_section.size_bin().upcast();
+        let debug: gtk4::Widget = debug_section.size_bin().upcast();
+        let tests: gtk4::Widget = test_section.size_bin().upcast();
+        let find: gtk4::Widget = find_section.size_bin().upcast();
         let bottom_home = bottom_pages
             .native_widget()
             .downcast::<gtk4::Box>()
