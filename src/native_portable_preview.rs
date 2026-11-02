@@ -12,6 +12,41 @@ pub type DesignTabs = Rc<RefCell<HashMap<Vec<usize>, usize>>>;
 
 pub type SelectElement = Rc<dyn Fn(Vec<usize>)>;
 
+/// Space between the fixed-size Hydrogen design window (including its shadow)
+/// and the available editor viewport. Deliberately not part of Window.padding.
+pub const DESIGN_VIEWPORT_INSET: f64 = 16.0;
+
+#[cfg(target_os = "linux")]
+const DESIGN_FRAME_CSS: &str =
+    "box.quark-design-frame { border-radius: 12px; \
+      box-shadow: 0 6px 18px alpha(currentColor, 0.18); }";
+
+/// Install GTK-only appearance rules once per native display. Colours derive
+/// from currentColor, so no dark-mode colours are baked into the designer.
+#[cfg(target_os = "linux")]
+fn install_gtk_design_shadow() {
+    use gtk4::prelude::*;
+    thread_local! {
+        static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    INSTALLED.with(|installed| {
+        if installed.get() {
+            return;
+        }
+        if let Some(display) = gtk4::gdk::Display::default() {
+            let provider = gtk4::CssProvider::new();
+            provider.load_from_data(DESIGN_FRAME_CSS);
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+            installed.set(true);
+        }
+    });
+}
+
+
 /// The compiled application's startup tab is zero-based, while its
 /// displayed first page is page 1. Moving around the designer must never
 /// mutate that startup value.
@@ -833,7 +868,9 @@ pub fn render(
             .map_err(|_| "Native GTK preview host is not a GtkBox")?;
         // Libadwaita's card style follows the user's light/dark system
         // palette and visually separates the design window from Quark.
+        install_gtk_design_shadow();
         host.add_css_class("card");
+        host.add_css_class("quark-design-frame");
         host.append(&header);
         let selected = on_select.clone();
         let gesture = gtk4::GestureClick::new();
@@ -1023,6 +1060,35 @@ mod tests {
         for kind in ["Window", "Panel", "ColumnPanel", "GridPanel", "Tabs", "Tab"] {
             assert!(!design_press_claims_activation(kind), "{kind}");
         }
+    }
+
+    #[test]
+    fn design_window_inset_leaves_room_for_shadows_without_changing_xml_geometry() {
+        let xml = r#"<Window width="800" height="600" padding="24"><Label text="Hi"/></Window>"#;
+        let root = roxmltree::Document::parse(xml).unwrap();
+        let root = root.root_element();
+        let width: f64 = root.attribute("width").unwrap().parse().unwrap();
+        let height: f64 = root.attribute("height").unwrap().parse().unwrap();
+        assert!(DESIGN_VIEWPORT_INSET >= 12.0);
+        assert!(DESIGN_VIEWPORT_INSET <= 24.0);
+        assert_eq!(width, 800.0);
+        assert_eq!(height, 600.0);
+        let extent = (
+            width + DESIGN_VIEWPORT_INSET * 2.0,
+            height + DESIGN_VIEWPORT_INSET * 2.0,
+        );
+        assert!(extent.0 > width && extent.1 > height);
+        assert!(xml.contains("padding=\"24\""));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn gtk_shadow_uses_native_theme_colours_and_keeps_background_unmodified() {
+        assert!(DESIGN_FRAME_CSS.contains("box.quark-design-frame"));
+        assert!(DESIGN_FRAME_CSS.contains("box-shadow"));
+        assert!(DESIGN_FRAME_CSS.contains("currentColor"));
+        assert!(!DESIGN_FRAME_CSS.contains("#"));
+        assert!(!DESIGN_FRAME_CSS.contains("background:"));
     }
 
     #[test]
