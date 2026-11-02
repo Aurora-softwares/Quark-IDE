@@ -238,6 +238,123 @@ pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<P
     Ok(result)
 }
 
+/// Explorer actions invoked through the native context menu. File mutations
+/// always go through file_action() with a checked workspace root.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuAction {
+    Open,
+    NewFile,
+    NewFolder,
+    Rename,
+    Delete,
+    Reveal,
+}
+
+/// Attach the OS's native secondary-click menu to the Solution Explorer.
+/// The IDE supplies a callback to bind the selection to safe file operations.
+#[cfg(target_os = "linux")]
+pub fn install_context_menu(
+    tree: &gtk4::Widget,
+    callback: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(MenuAction)>>>>,
+) {
+    use gtk4::prelude::*;
+    let popover = gtk4::Popover::new();
+    popover.set_has_arrow(true);
+    popover.set_parent(tree);
+    let items = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
+    for (title, command) in [
+        ("Open", MenuAction::Open),
+        ("New File…", MenuAction::NewFile),
+        ("New Folder…", MenuAction::NewFolder),
+        ("Rename…", MenuAction::Rename),
+        ("Delete…", MenuAction::Delete),
+        ("Show in File Manager", MenuAction::Reveal),
+    ] {
+        let item = gtk4::Button::with_label(title);
+        item.add_css_class("flat");
+        let pop = popover.clone();
+        let callback = callback.clone();
+        item.connect_clicked(move |_| {
+            pop.popdown();
+            if let Some(action) = callback.borrow().as_ref() {
+                action(command);
+            }
+        });
+        items.append(&item);
+    }
+    popover.set_child(Some(&items));
+    let gesture = gtk4::GestureClick::new();
+    gesture.set_button(3);
+    gesture.set_propagation_phase(gtk4::PropagationPhase::Capture);
+    gesture.connect_pressed(move |_, _, x, y| {
+        popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        popover.popup();
+    });
+    tree.add_controller(gesture);
+}
+
+/// A short, non-blocking native name prompt for create/rename operations.
+#[cfg(target_os = "linux")]
+pub fn ask_name(
+    anchor: &gtk4::Widget,
+    title: &str,
+    suggested: &str,
+    apply: impl Fn(String) + 'static,
+) {
+    use gtk4::prelude::*;
+    let dialog = gtk4::Dialog::new();
+    dialog.set_title(Some(title));
+    dialog.set_modal(true);
+    if let Some(window) = anchor.root().and_then(|root| root.downcast::<gtk4::Window>().ok()) {
+        dialog.set_transient_for(Some(&window));
+    }
+    let entry = gtk4::Entry::new();
+    entry.set_text(suggested);
+    entry.set_activates_default(true);
+    dialog.content_area().append(&entry);
+    dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
+    let confirm = dialog.add_button("Apply", gtk4::ResponseType::Accept);
+    confirm.set_can_default(true);
+    dialog.set_default_widget(Some(&confirm));
+    dialog.connect_response(move |dialog, response| {
+        if response == gtk4::ResponseType::Accept {
+            apply(entry.text().to_string());
+        }
+        dialog.close();
+    });
+    dialog.present();
+}
+
+#[cfg(target_os = "linux")]
+pub fn confirm_delete(
+    anchor: &gtk4::Widget,
+    file: &Path,
+    apply: impl Fn() + 'static,
+) {
+    use gtk4::prelude::*;
+    let dialog = gtk4::Dialog::new();
+    dialog.set_title(Some("Confirm deletion"));
+    dialog.set_modal(true);
+    if let Some(window) = anchor.root().and_then(|root| root.downcast::<gtk4::Window>().ok()) {
+        dialog.set_transient_for(Some(&window));
+    }
+    let warning = gtk4::Label::new(Some(&format!(
+        "Permanently delete {}? This cannot be undone.",
+        file.display()
+    )));
+    warning.set_wrap(true);
+    dialog.content_area().append(&warning);
+    dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
+    dialog.add_button("Delete", gtk4::ResponseType::Accept);
+    dialog.connect_response(move |dialog, response| {
+        if response == gtk4::ResponseType::Accept {
+            apply();
+        }
+        dialog.close();
+    });
+    dialog.present();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
