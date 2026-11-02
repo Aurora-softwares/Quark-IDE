@@ -1177,9 +1177,23 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // exact OS chrome, control spacing and responsive layout. It runs in
     // its own genuine OS window instead of masquerading as an embedded
     // preview. No shell interpolation, no automatic project file writes.
+    let preview_result_sender = ui.tasks().channel({
+        let status = status.clone();
+        move |result: Result<String, String>| {
+            status.set_text(match &result {
+                Ok(_) => "Native Hydrogen preview closed",
+                Err(_) => "Native Hydrogen preview failed — see terminal for details",
+            });
+            if let Err(error) = result {
+                eprintln!("Quark native preview: {error}");
+                status.set_text(&format!("Hydrogen UI preview failed: {error}"));
+            }
+        }
+    });
     let launch_hydrogen_preview: Rc<dyn Fn(native_hyui_preview::PreviewKind)> = Rc::new({
         let state = state.clone();
         let status = status.clone();
+        let preview_result_sender = preview_result_sender.clone();
         move |kind| {
             let (path, draft, project) = {
                 let ide = state.borrow();
@@ -1208,21 +1222,44 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".to_owned());
             let process =
                 native_hyui_preview::command(&runtime, &path, project.as_deref(), &compiler, kind);
-            match process.and_then(|mut command| command.spawn().map(|_| ()).map_err(|e| {
-                format!(
-                    "Could not start Hydrogen's native runtime: {e}. Set QUARK_HYUI_RUNTIME to the hyui executable."
-                )
-            })) {
-                Ok(()) => status.set_text(match kind {
-                    native_hyui_preview::PreviewKind::Window => {
-                        "Opening the exact OS window with saved XML defaults"
+            let command = match process {
+                Ok(command) => command,
+                Err(error) => {
+                    status.set_text(&error);
+                    return;
+                }
+            };
+            status.set_text(match kind {
+                native_hyui_preview::PreviewKind::Window => {
+                    "Launching Hydrogen's actual native OS window…"
+                }
+                native_hyui_preview::PreviewKind::Application => {
+                    "Building and launching Hydrogen's real interactive application…"
+                }
+            });
+            let result_sender = preview_result_sender.clone();
+            std::thread::spawn(move || {
+                // Wait off the UI thread. A real window may stay open for
+                // hours; failures must still reach the user instead of
+                // leaving the status stuck at 'Launching'.
+                let result = command.output().map_err(|error| {
+                    format!(
+                        "Cannot start the hyui runtime: {error}. Set QUARK_HYUI_RUNTIME to its executable."
+                    )
+                }).and_then(|output| {
+                    if output.status.success() {
+                        Ok("Native Hydrogen UI window closed".to_owned())
+                    } else {
+                        let detail = String::from_utf8_lossy(&output.stderr);
+                        Err(format!(
+                            "{} (exit {})",
+                            detail.trim().chars().take(360).collect::<String>(),
+                            output.status.code().unwrap_or(-1)
+                        ))
                     }
-                    native_hyui_preview::PreviewKind::Application => {
-                        "Hydrogen is compiling and launching the real interactive UI; see terminal for errors"
-                    }
-                }),
-                Err(error) => status.set_text(&error),
-            }
+                });
+                let _ = result_sender.send(result);
+            });
         }
     });
     open_true_preview.on_click({
