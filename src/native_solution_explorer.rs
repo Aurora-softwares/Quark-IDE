@@ -173,7 +173,9 @@ pub fn install_context_menu(
     };
     let popover = gtk4::Popover::new();
     popover.set_has_arrow(true);
-    popover.set_parent(tree);
+    // Do not parent a popover to GtkListBox itself. naui 0.8's Tree::rebuild
+    // walks first_child() and removes each as a row; a popover is not a
+    // GtkListBoxRow, so remove() warns repeatedly without removing anything.
     let items = gtk4::Box::new(gtk4::Orientation::Vertical, 2);
     for (title, command) in [
         ("Open", MenuAction::Open),
@@ -213,7 +215,20 @@ pub fn install_context_menu(
             list.select_row(Some(&clicked_row));
             context_selection.set(false);
         }
-        popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+        // Attach the menu beneath the clicked row rather than the listbox.
+        // The listbox then contains only valid rows when the tree rebuilds.
+        popover.popdown();
+        if popover.parent().is_some() {
+            popover.unparent();
+        }
+        popover.set_parent(&clicked_row);
+        let row_y = clicked_row.allocation().y();
+        popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(
+            x as i32,
+            (y as i32 - row_y).max(0),
+            1,
+            1,
+        )));
         popover.popup();
     });
     tree.add_controller(gesture);
