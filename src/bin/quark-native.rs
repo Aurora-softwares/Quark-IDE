@@ -797,12 +797,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     command_area.append(&command_strip);
     root.attach(&command_area, GridCell::new(0, 0));
 
-    let toolbox = ui.stack(Orientation::Vertical)?;
-    toolbox.set_spacing(7.0);
-    let toolbox_controls =
-        native_dock_widgets::section_header(ui, native_docking::DockId::Toolbox)?;
+    let (toolbox, toolbox_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Toolbox)?;
     let toolbox_heading = toolbox_controls.row.clone();
-    toolbox.append(&toolbox_heading);
     let toolbox_search = ui.search_input()?;
     toolbox_search.set_placeholder("Search controls");
     toolbox.append(&toolbox_search);
@@ -1322,15 +1319,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     centre.append(&pages);
     centre.set_sizing(Sizing::fill());
 
-    let solution_pane = ui.stack(Orientation::Vertical)?;
-    solution_pane.set_spacing(6.0);
-    let solution_controls =
-        native_dock_widgets::section_header(ui, native_docking::DockId::Solution)?;
+    let (solution_pane, solution_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Solution)?;
     let solution_heading = solution_controls.row.clone();
     let refresh_solution = ui.button("⟳")?;
     let collapse_solution = solution_controls.collapse.clone();
     solution_heading.append(&refresh_solution);
-    solution_pane.append(&solution_heading);
     let solution_search = ui.search_input()?;
     solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
     solution_pane.append(&solution_search);
@@ -1343,12 +1337,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     solution_pane.append(&tree);
     solution_pane.set_sizing(Sizing::fill());
 
-    let properties_pane = ui.stack(Orientation::Vertical)?;
-    properties_pane.set_spacing(7.0);
-    let properties_controls =
-        native_dock_widgets::section_header(ui, native_docking::DockId::Properties)?;
+    let (properties_pane, properties_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Properties)?;
     let properties_toolbar = properties_controls.row.clone();
-    properties_pane.append(&properties_toolbar);
     let flat_properties = ui.stack(Orientation::Vertical)?;
     flat_properties.set_spacing(7.0);
     let selected_name = ui.text_input("")?;
@@ -1683,8 +1674,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     inspector.set_min_sizes(110.0, 150.0);
     retain_trailing_size(&inspector);
 
-    let bottom = ui.stack(Orientation::Vertical)?;
-    let output_controls = native_dock_widgets::section_header(ui, native_docking::DockId::Output)?;
+    let (bottom, output_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Output)?;
     let bottom_tabs = output_controls.row.clone();
     bottom_tabs.set_spacing(8.0);
     let output_tab = ui.button("Output")?;
@@ -1697,8 +1688,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     bottom_tabs.append(&debug_tab);
     bottom_tabs.append(&test_tab);
     bottom_tabs.append(&find_tab);
-    bottom.append(&bottom_tabs);
-
     let bottom_pages = ui.stack(Orientation::Vertical)?;
     bottom_pages.set_sizing(Sizing::fill());
     let output = ui.label("")?;
