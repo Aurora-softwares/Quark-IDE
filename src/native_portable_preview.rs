@@ -187,8 +187,9 @@ fn render_node(
                 let select = on_select.clone();
                 tabs.on_select(move |index| {
                     design_tabs.borrow_mut().insert(path.clone(), index);
-                    // Selecting another page for design never writes XML.
-                    select(Vec::new());
+                    // Select Tabs in the Properties inspector, not Window.
+                    // Design-only navigation never writes Tabs.value.
+                    select(path.clone());
                 });
             }
             row.append(&tabs);
