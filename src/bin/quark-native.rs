@@ -548,6 +548,43 @@ fn run_task(
     });
 }
 
+/// Soft Hydrogen accents decorate native controls without replacing their
+/// OS input, focus, accessibility or keyboard behaviour. Windows and macOS
+/// keep their system accent controls; this CSS affects the GTK backend only.
+#[cfg(target_os = "linux")]
+fn apply_native_accent(build: &naui::Button, run: &naui::Button) {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    thread_local! {
+        static INSTALLED: Cell<bool> = const { Cell::new(false) };
+    }
+    INSTALLED.with(|installed| {
+        if !installed.replace(true) {
+            if let Some(display) = gtk4::gdk::Display::default() {
+                let provider = gtk4::CssProvider::new();
+                provider.load_from_data(
+                    "button.quark-build { background: alpha(#32d4e2, 0.16); \
+                       border: 1px solid alpha(#32d4e2, 0.30); border-radius: 8px; } \
+                     button.quark-build:hover { background: alpha(#32d4e2, 0.24); } \
+                     button.quark-run { background: alpha(#9e71eb, 0.16); \
+                       border: 1px solid alpha(#9e71eb, 0.30); border-radius: 8px; } \
+                     button.quark-run:hover { background: alpha(#9e71eb, 0.25); }"
+                );
+                gtk4::style_context_add_provider_for_display(
+                    &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                );
+            }
+        }
+    });
+    build.native_widget().add_css_class("quark-build");
+    run.native_widget().add_css_class("quark-run");
+    build.native_widget().set_tooltip_text(Some("Build the selected Hydrogen project"));
+    run.native_widget().set_tooltip_text(Some("Build and run without attaching a debugger"));
+}
+
+#[cfg(not(target_os = "linux"))]
+fn apply_native_accent(_build: &naui::Button, _run: &naui::Button) {}
+
 /// GTK's native paned widget can preserve its trailing child while the
 /// editor absorbs OS-window growth. The user can still drag its separator.
 #[cfg(target_os = "linux")]
@@ -679,6 +716,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // support is a separate milestone, so no selection is silently invented.
     let command_strip = ui.stack(Orientation::Horizontal)?;
     command_strip.set_spacing(8.0);
+    // Three unobtrusive electron/orbital/quark marks bring identity to the
+    // system-native command strip, instead of styling every control.
+    let brand_mark = ui.canvas()?;
+    brand_mark.set_sizing(Sizing::new().width(Length::Fixed(24.0)).height(Length::Fixed(25.0)));
+    brand_mark.on_draw(|p| {
+        for (index, (red, green, blue)) in [
+            native_shell::HYDROGEN_CYAN,
+            native_shell::ORBIT_BLUE,
+            native_shell::QUARK_VIOLET,
+        ].into_iter().enumerate() {
+            p.fill_rect(
+                Rect::new(2.0 + index as f64 * 7.0, 5.0, 4.0, 16.0),
+                Color::rgb(red, green, blue),
+            );
+        }
+    });
+    command_strip.append(&brand_mark);
+    let brand_name = ui.label("Quark")?;
+    brand_name.set_style(naui::TextStyle::Heading);
+    brand_name.set_color(naui::TextColor::Accent);
+    command_strip.append(&brand_name);
     let configuration = ui.combo_box()?;
     configuration.set_items(&["Debug", "Release"]);
     configuration.set_selected(0);
@@ -693,6 +751,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let debug_button = ui.button("▶ Start debugging")?;
     debug_button.set_enabled(false); // Requires a verified native debugger adapter.
     let publish_button = ui.button("Publish binaries")?;
+    apply_native_accent(&build_button, &run_button);
     command_strip.append(&ui.label("Configuration:")?);
     command_strip.append(&configuration);
     command_strip.append(&architecture);
@@ -730,6 +789,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let mut toolbox_headers = Vec::new();
     for category in ["Common Controls", "Containers", "Display"] {
         let heading = ui.label(category)?;
+        heading.set_style(naui::TextStyle::Heading);
+        heading.set_color(naui::TextColor::Accent);
         toolbox_items.append(&heading);
         toolbox_headers.push((category, heading));
         for kind in ControlKind::ALL {
@@ -1806,7 +1867,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
 
     let status_bar = ui.stack(Orientation::Horizontal)?;
-    status_bar.append(&ui.label("✦ QUARK · HYDROGEN")?);
+    let status_brand = ui.label("● Quark · Hydrogen")?;
+    status_brand.set_color(naui::TextColor::Accent);
+    status_bar.append(&status_brand);
     status_bar.append(&status);
     status_bar.append(&workspace_name);
     root.attach(&status_bar, GridCell::new(0, 2));
