@@ -13,6 +13,10 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
+#[path = "../native_console.rs"]
+mod native_console;
+#[path = "../native_terminal.rs"]
+mod native_terminal;
 #[path = "../native_compiler.rs"]
 mod native_compiler;
 #[cfg(target_os = "linux")]
@@ -493,6 +497,22 @@ fn project_symbols(ide: &Ide) -> Vec<ListItem> {
     output
 }
 
+/// Present compiler and debugger output as ANSI-coloured read-only
+/// terminal text on GTK, with a portable text fallback on other platforms.
+fn set_console_text(label: &naui::Label, text: &str, palette: native_console::Palette) {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        if let Ok(native) = label.native_widget().downcast::<gtk4::Label>() {
+            native.set_markup(&native_console::markup(text, palette));
+            return;
+        }
+    }
+    let _ = palette;
+    label.set_text(text);
+}
+
 #[allow(clippy::too_many_arguments)] // UI control handles are intentionally passed together.
 fn run_task(
     task: native_commands::Task,
@@ -509,7 +529,7 @@ fn run_task(
         Ok(compiler) => compiler,
         Err(error) => {
             status.set_text(&error);
-            output.set_text(&error);
+            set_console_text(&output, &error, native_console::Palette::Output);
             return;
         }
     };
@@ -518,7 +538,7 @@ fn run_task(
         .and_then(|path| path.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("."));
     status.set_text(&format!("{}…", task.label()));
-    output.set_text(&format!("Running {}…", task.label()));
+    set_console_text(&output, &format!("Running {}…", task.label()), native_console::Palette::Output);
     let sender = ui
         .tasks()
         .channel(move |result: native_commands::ResultLog| {
@@ -548,7 +568,7 @@ fn run_task(
                     .collect::<Vec<_>>(),
             );
             *current_errors.borrow_mut() = parsed;
-            output.set_text(&result.text);
+            set_console_text(&output, &result.text, native_console::Palette::Output);
             status.set_text(if result.success {
                 "Operation completed successfully"
             } else {
@@ -4454,7 +4474,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let worker_path = path.clone();
             let sender = ui.tasks().channel(
                 move |(log, formatted): (native_commands::ResultLog, Option<String>)| {
-                    result_output.set_text(&log.text);
+                    set_console_text(&result_output, &log.text, native_console::Palette::Output);
                     if !log.success {
                         result_status.set_text("Hydrogen format failed — see Output.");
                         return;
