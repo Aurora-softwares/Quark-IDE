@@ -352,6 +352,43 @@ pub fn float_panel(
 mod stack_tests {
     use super::*;
 
+    /// Run under Xvfb with G_DEBUG=fatal-warnings. Exercise the same nested
+    /// GTK reparenting sequence that previously could spin on a non-child.
+    #[test]
+    #[ignore = "requires a native GTK display; invoked explicitly by Linux CI under Xvfb"]
+    fn moved_stacks_reparent_without_gtk_non_child_warnings() {
+        gtk4::init().expect("GTK test must run under a virtual display");
+        let left = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        let right = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
+        let first: gtk4::Widget = gtk4::Label::new(Some("Toolbox")).upcast();
+        let second: gtk4::Widget = gtk4::Label::new(Some("Symbols")).upcast();
+        let third: gtk4::Widget = gtk4::Label::new(Some("Properties")).upcast();
+        assert!(attach_box(&first, &left));
+        assert!(attach_box(&second, &left));
+        rebalance_side_host(&left);
+        assert!(left.first_child().unwrap().is::<gtk4::Paned>());
+        assert!(attach_box(&third, &left));
+        rebalance_side_host(&left);
+        assert!(left.first_child().unwrap().is::<gtk4::Paned>());
+        // Removing a nested leaf should not try to remove it from its
+        // grandparent Box or leave a divider containing detached widgets.
+        assert!(attach_box(&second, &right));
+        rebalance_side_host(&left);
+        rebalance_side_host(&right);
+        assert!(second.parent().is_some());
+        assert!(attach_box(&first, &right));
+        rebalance_side_host(&left);
+        rebalance_side_host(&right);
+        assert!(right.first_child().unwrap().is::<gtk4::Paned>());
+        assert!(attach_box(&third, &right));
+        rebalance_side_host(&left);
+        rebalance_side_host(&right);
+        assert!(left.first_child().is_none());
+        assert!(first.parent().is_some());
+        assert!(second.parent().is_some());
+        assert!(third.parent().is_some());
+    }
+
     #[test]
     fn pinned_sections_default_to_equal_heights() {
         assert_eq!(equal_stack_position(600, 1, 1), 300);
