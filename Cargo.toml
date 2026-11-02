@@ -36,7 +36,7 @@ strip = true
 # The supported application is always the OS-native frontend.
 # The previous egui application is isolated for regression/migration only.
 default = ["native-ui"]
-native-ui = ["dep:naui", "dep:gtk4", "dep:libadwaita"]
+native-ui = ["dep:naui", "dep:gtk4", "dep:libadwaita", "dep:rfd"]
 legacy-ui = ["dep:eframe", "dep:egui_extras", "dep:rfd"]
 
 [[bin]]
