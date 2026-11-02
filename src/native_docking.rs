@@ -155,7 +155,12 @@ impl Default for DockLayout {
         for id in DockId::ALL {
             // Default unpinned tool windows auto-hide after losing focus.
             // The user can pin any section to reserve its dock space.
-            let pinned = matches!(id, DockId::Solution | DockId::Properties);
+            let pinned = matches!(
+                id,
+                DockId::Toolbox | DockId::Symbols | DockId::Solution | DockId::Properties
+                    | DockId::Output | DockId::ErrorList | DockId::Debug
+                    | DockId::TestResults | DockId::FindResults
+            );
             layout.register(DockSection::new(id, id.default_zone()).pinned(pinned));
         }
         layout
