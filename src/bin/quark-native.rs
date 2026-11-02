@@ -726,6 +726,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // support is a separate milestone, so no selection is silently invented.
     let command_strip = ui.stack(Orientation::Horizontal)?;
     command_strip.set_spacing(8.0);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        command_strip.native_widget().set_halign(gtk4::Align::Start);
+    }
     // Three unobtrusive electron/orbital/quark marks bring identity to the
     // system-native command strip, instead of styling every control.
     let brand_mark = ui.canvas()?;
@@ -859,6 +865,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Side rail: generous targets with indicators separate from the text.
     let left_rail = ui.stack(Orientation::Vertical)?;
     left_rail.set_spacing(4.0);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        left_rail.native_widget().set_valign(gtk4::Align::Start);
+    }
     left_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
     let tab_mode = Rc::new(Cell::new(Page::Design));
     let active_side_tab = Rc::new(Cell::new(0_usize));
@@ -1734,6 +1746,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let right_active = Rc::new(Cell::new(0_usize));
     let right_rail = ui.stack(Orientation::Vertical)?;
     right_rail.set_spacing(4.0);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        right_rail.native_widget().set_valign(gtk4::Align::Start);
+    }
     right_rail.set_sizing(Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)));
     let mut right_tabs = Vec::new();
     for (index, label, height) in [
@@ -1757,11 +1775,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let active = right_active.clone();
             drawing_area.set_draw_func(move |_, cairo, _width, allocated_height| {
                 if active.get() == index {
-                    cairo.set_source_rgb(0.53, 0.49, 0.64);
+                    cairo.set_source_rgb(0.42, 0.32, 0.73);
                     cairo.rectangle(1.0, 6.0, 3.0, f64::from(allocated_height) - 12.0);
                     let _ = cairo.fill();
                 }
-                cairo.set_source_rgb(0.78, 0.78, 0.81);
+                let dark = gtk4::Settings::default()
+                    .map(|settings| settings.is_gtk_application_prefer_dark_theme())
+                    .unwrap_or(false);
+                if dark { cairo.set_source_rgb(0.84, 0.84, 0.88); }
+                else { cairo.set_source_rgb(0.28, 0.29, 0.36); }
                 cairo.select_font_face(
                     "Sans",
                     gtk4::cairo::FontSlant::Normal,
