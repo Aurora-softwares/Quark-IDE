@@ -77,7 +77,7 @@ fn render_dock_icon(p: &mut Painter, id: DockId) {
 /// All sections therefore share the same border, spacing and title chrome.
 pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHeader)> {
     let panel = ui.stack(Orientation::Vertical)?;
-    panel.set_spacing(5.0);
+    panel.set_spacing(2.0);
     panel.set_sizing(Sizing::fill());
     let header = section_header(ui, id)?;
     panel.append(&header.row);
@@ -100,8 +100,22 @@ pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHead
                     let css = gtk4::CssProvider::new();
                     css.load_from_data(
                         ".quark-dock-panel { border: 1px solid alpha(@theme_fg_color, 0.14); }
-                         .quark-dock-header { border-bottom: 1px solid alpha(@theme_fg_color, 0.16); }
-                         .quark-dock-title { color: @theme_fg_color; }
+                         .quark-dock-header {
+                            border-bottom: 1px solid alpha(@theme_fg_color, 0.16);
+                            min-height: 26px; padding: 0 2px;
+                         }
+                         .quark-dock-title {
+                            color: @theme_fg_color;
+                            font-size: 11px; font-weight: 600;
+                         }
+                         .quark-dock-grab {
+                            color: alpha(@theme_fg_color, 0.55); font-size: 10px;
+                         }
+                         .quark-dock-header button {
+                            min-height: 20px; min-width: 20px;
+                            padding: 0 2px; margin: 0;
+                            font-size: 11px; border-radius: 3px;
+                         }
                          .quark-side-tab { color: @theme_fg_color; background: alpha(@theme_fg_color, 0.035); }"
                     );
                     gtk4::style_context_add_provider_for_display(
@@ -194,11 +208,11 @@ pub fn enable_dynamic_drag(widget: &gtk4::Widget, resolve: impl Fn() -> DockId +
 
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     let row = ui.stack(Orientation::Horizontal)?;
-    row.set_spacing(5.0);
+    row.set_spacing(3.0);
     row.set_sizing(
         Sizing::new()
             .width(Length::Fill)
-            .height(Length::Fixed(34.0)),
+            .height(Length::Fixed(26.0)),
     );
 
     // Consistent left-aligned 26px icon slot; icon colours are deliberately
@@ -206,8 +220,8 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     let icon = ui.canvas()?;
     icon.set_sizing(
         Sizing::new()
-            .width(Length::Fixed(27.0))
-            .height(Length::Fixed(30.0)),
+            .width(Length::Fixed(25.0))
+            .height(Length::Fixed(25.0)),
     );
     icon.on_draw(move |painter| render_dock_icon(painter, id));
     row.append(&icon);
@@ -220,6 +234,7 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         use naui::Widget as _;
         grab.native_widget()
             .set_tooltip_text(Some("Drag the panel header to reorder its dock position."));
+        grab.native_widget().add_css_class("quark-dock-grab");
     }
     row.append(&grab);
 
@@ -234,15 +249,15 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     row.append(&title);
 
     let pin = ui.button("♢")?;
-    pin.set_sizing(Sizing::new().width(Length::Fixed(34.0)));
+    pin.set_sizing(Sizing::new().width(Length::Fixed(24.0)));
     row.append(&pin);
 
     let float = ui.button("⇱")?;
-    float.set_sizing(Sizing::new().width(Length::Fixed(32.0)));
+    float.set_sizing(Sizing::new().width(Length::Fixed(24.0)));
     row.append(&float);
 
     let collapse = ui.button("⌄")?;
-    collapse.set_sizing(Sizing::new().width(Length::Fixed(34.0)));
+    collapse.set_sizing(Sizing::new().width(Length::Fixed(24.0)));
     row.append(&collapse);
 
     #[cfg(target_os = "linux")]
