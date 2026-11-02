@@ -158,7 +158,9 @@ pub fn open_auto_hide(
         existing.clone()
     } else {
         let popup = gtk4::Popover::new();
-        popup.set_autohide(true);
+        // Keep the popup interactive across focus transfers from the rail.
+        // The editor and other tabs explicitly dismiss it instead.
+        popup.set_autohide(false);
         popup.set_has_arrow(false);
         popup.set_position(position);
         popup.set_size_request(
