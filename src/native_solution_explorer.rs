@@ -171,6 +171,22 @@ fn anchor_context_menu(popover: &gtk4::Popover, row: &gtk4::ListBoxRow, x: i32, 
         popover.unparent();
     }
     popover.set_parent(row);
+    // naui's Tree::rebuild destroys ListBoxRows. A GtkPopover is a native
+    // child of its anchor, not a GtkListBoxRow child managed by naui. Release
+    // it as soon as the row leaves its list, before GTK finalizes the row.
+    // Keep only a weak reference so this observer cannot retain the popup.
+    let popup = popover.downgrade();
+    row.connect_notify_local(Some("parent"), move |row, _| {
+        if row.parent().is_some() {
+            return;
+        }
+        if let Some(popup) = popup.upgrade() {
+            if popup.parent().as_ref() == Some(row) {
+                popup.popdown();
+                popup.unparent();
+            }
+        }
+    });
     popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(
         x,
         (y - row.allocation().y()).max(0),
@@ -389,9 +405,11 @@ mod tests {
         assert_eq!(popover.parent(), Some(first.clone().upcast()));
         assert!(list.first_child().unwrap().is::<gtk4::ListBoxRow>());
         list.remove(&first);
+        assert!(popover.parent().is_none());
         anchor_context_menu(&popover, &second, 4, 8);
         assert_eq!(popover.parent(), Some(second.clone().upcast()));
         list.remove(&second);
+        assert!(popover.parent().is_none());
         assert!(list.row_at_index(0).is_none());
     }
 
