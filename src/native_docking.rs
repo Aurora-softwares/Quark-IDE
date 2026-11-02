@@ -502,12 +502,15 @@ mod tests {
     #[test]
     fn auto_hide_visibility_respects_pin_and_active_focus() {
         let mut layout = DockLayout::default();
-        assert!(!layout.visible(DockId::Toolbox, None));
-        assert!(layout.visible(DockId::Toolbox, Some(DockId::Toolbox)));
-        assert!(!layout.visible(DockId::Toolbox, Some(DockId::Output)));
-        assert!(layout.visible(DockId::Solution, None));
-        layout.pin(DockId::Toolbox, true);
         assert!(layout.visible(DockId::Toolbox, None));
+        assert!(layout.visible(DockId::Symbols, None));
+        assert!(layout.visible(DockId::Solution, None));
+        assert!(layout.visible(DockId::Output, None));
+        assert!(!layout.visible(DockId::Search, None));
+        assert!(layout.visible(DockId::Search, Some(DockId::Search)));
+        assert!(!layout.visible(DockId::Search, Some(DockId::Output)));
+        layout.pin(DockId::Search, true);
+        assert!(layout.visible(DockId::Search, None));
     }
 
     #[test]
@@ -579,7 +582,8 @@ mod tests {
             assert!(!layout.section(id).unwrap().collapsed);
         }
         assert!(layout.section(DockId::Solution).unwrap().pinned);
-        assert!(!layout.section(DockId::Toolbox).unwrap().pinned);
+        assert!(layout.section(DockId::Toolbox).unwrap().pinned);
+        assert!(layout.section(DockId::Symbols).unwrap().pinned);
     }
 
     #[test]
