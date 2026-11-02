@@ -1855,11 +1855,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let debug_tab = ui.button("Debug")?;
     let test_tab = ui.button("Test Results")?;
     let find_tab = ui.button("Find Results")?;
+    let terminal_tab = ui.button("Terminal")?;
     bottom_tabs.append(&output_tab);
     bottom_tabs.append(&errors_tab);
     bottom_tabs.append(&debug_tab);
     bottom_tabs.append(&test_tab);
     bottom_tabs.append(&find_tab);
+    bottom_tabs.append(&terminal_tab);
     let bottom_pages = ui.stack(Orientation::Vertical)?;
     bottom_pages.set_sizing(Sizing::fill());
     let output = ui.label("")?;
@@ -1876,6 +1878,37 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let debug_view = ui.label("No debugger attached")?;
     let tests_view = ui.label("No test run selected")?;
     let find_view = ui.label("No search results")?;
+    // The Terminal is not a shell command executor: its lifetime is a native
+    // PTY session shared by GTK, AppKit and WinUI. Linux also feeds keypresses
+    // directly into the PTY for interactive full-screen programs.
+    let terminal_section = ui.stack(Orientation::Vertical)?;
+    terminal_section.set_sizing(Sizing::fill());
+    let terminal_output = ui.label("Starting interactive terminal…")?;
+    let terminal_scroll = ui.scroll()?;
+    terminal_scroll.set_sizing(Sizing::fill());
+    terminal_scroll.set_child(&terminal_output);
+    terminal_section.append(&terminal_scroll);
+    let terminal_input_row = ui.stack(Orientation::Horizontal)?;
+    let terminal_input = ui.text_input("")?;
+    terminal_input.set_placeholder("Shell input (press Send on non-GTK platforms)");
+    let terminal_send = ui.button("Send ↵")?;
+    terminal_input_row.append(&terminal_input);
+    terminal_input_row.append(&terminal_send);
+    #[cfg(not(target_os = "linux"))]
+    terminal_section.append(&terminal_input_row);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let widget = terminal_output.native_widget();
+        widget.set_focusable(true);
+        widget.set_can_focus(true);
+        widget.set_hexpand(true);
+        widget.set_vexpand(true);
+        let key = gtk4::EventControllerKey::new();
+        key.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        widget.add_controller(key);
+    }
     // Each bottom tool is a complete dock section. Tabs only choose which
     // section is shown in the bottom host; they never own its content.
     let (output_section, output_page_controls) =
@@ -1949,6 +1982,93 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
+    }
+
+    // Keep one PTY session alive for the duration of the IDE. The worker
+    // exclusively owns the PTY handles, and UI input/output crosses channels.
+    let (terminal_input_sender, terminal_input_receiver) =
+        std::sync::mpsc::channel::<Vec<u8>>();
+    let terminal_parser = Rc::new(RefCell::new(vt100::Parser::new(26, 100, 2000)));
+    let terminal_sender = ui.tasks().channel({
+        let parser = terminal_parser.clone();
+        let display = terminal_output.clone();
+        move |bytes: Vec<u8>| {
+            parser.borrow_mut().process(&bytes);
+            let rendered = parser.borrow().screen().contents_formatted_basic();
+            set_console_text(&display, &rendered, native_console::Palette::Output);
+        }
+    });
+    let terminal_dir = state.borrow().workspace.selected.as_ref()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    std::thread::spawn(move || {
+        let session = match native_terminal::Session::spawn(&terminal_dir) {
+            Ok(session) => session,
+            Err(error) => {
+                let _ = terminal_sender.send(format!("Terminal startup failed: {error}").into_bytes());
+                return;
+            }
+        };
+        loop {
+            match terminal_input_receiver.try_recv() {
+                Ok(data) => {
+                    if session.send(&data).is_err() { break; }
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+            let data = session.poll();
+            if !data.is_empty() && terminal_sender.send(data).is_err() { break; }
+            std::thread::sleep(std::time::Duration::from_millis(28));
+        }
+    });
+    terminal_send.on_click({
+        let send = terminal_input_sender.clone();
+        let entry = terminal_input.clone();
+        move || {
+            let value = entry.text();
+            if !value.is_empty() {
+                let _ = send.send(format!("{value}\r").into_bytes());
+                entry.set_text("");
+            }
+        }
+    });
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let widget = terminal_output.native_widget();
+        let controller = gtk4::EventControllerKey::new();
+        let send = terminal_input_sender.clone();
+        controller.connect_key_pressed(move |_, key, _, modifiers| {
+            use gtk4::gdk::Key;
+            let code: Option<Vec<u8>> = match key {
+                Key::Return | Key::KP_Enter => Some(vec![b'\r']),
+                Key::BackSpace => Some(vec![0x7f]),
+                Key::Tab => Some(vec![b'\t']),
+                Key::Escape => Some(vec![0x1b]),
+                Key::Up => Some(b"\x1b[A".to_vec()),
+                Key::Down => Some(b"\x1b[B".to_vec()),
+                Key::Right => Some(b"\x1b[C".to_vec()),
+                Key::Left => Some(b"\x1b[D".to_vec()),
+                Key::Home => Some(b"\x1b[H".to_vec()),
+                Key::End => Some(b"\x1b[F".to_vec()),
+                Key::Delete => Some(b"\x1b[3~".to_vec()),
+                Key::Page_Up => Some(b"\x1b[5~".to_vec()),
+                Key::Page_Down => Some(b"\x1b[6~".to_vec()),
+                _ => key.to_unicode().map(|ch| {
+                    if modifiers.contains(gtk4::gdk::ModifierType::CONTROL_MASK)
+                        && ch.is_ascii_alphabetic() {
+                        vec![(ch.to_ascii_uppercase() as u8 - b'A') + 1]
+                    } else { ch.to_string().into_bytes() }
+                }),
+            };
+            if let Some(bytes) = code {
+                let _ = send.send(bytes);
+                gtk4::glib::Propagation::Stop
+            } else { gtk4::glib::Propagation::Proceed }
+        });
+        widget.add_controller(controller);
     }
 
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
