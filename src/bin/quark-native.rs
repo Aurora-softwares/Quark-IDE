@@ -1469,8 +1469,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use gtk4::prelude::*;
         use naui::Widget as _;
         design_heading.native_widget().set_tooltip_text(Some(
-            "Interact with native controls to select them. Use the Properties hierarchy \
-             to select containers, hidden elements and static text.",
+            "Design preview is not a running application. Select controls and edit \
+             their values using Properties; use OS Window to see the running UI.",
         ));
     }
     let canvas = ui.canvas()?;
@@ -1481,6 +1481,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Windows (WinUI 3) and Linux (GTK). The canvas remains for flat layouts.
     let portable_preview = ui.stack(Orientation::Vertical)?;
     portable_preview.set_spacing(6.0);
+    // A fixed-size design window belongs at the viewport origin. GTK's
+    // default child alignment can otherwise centre it in a wide editor.
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        portable_preview.native_widget().set_halign(gtk4::Align::Start);
+        portable_preview.native_widget().set_valign(gtk4::Align::Start);
+    }
     let portable_scroll = ui.scroll()?;
     portable_scroll.set_sizing(Sizing::fill());
     portable_scroll.set_child(&portable_preview);
@@ -1863,6 +1872,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+    // Defer tab navigation until the native selector callback has returned:
+    // rebuilding a view synchronously can destroy the active GTK/WinUI widget.
+    let change_design_page_later = ui.tasks().channel({
+        let design_tab_selection = design_tab_selection.clone();
+        let reload_preview = reload_preview.clone();
+        move |(path, page): (Vec<usize>, usize)| {
+            design_tab_selection.borrow_mut().insert(path, page);
+            if let Some(refresh) = reload_preview.borrow().as_ref() {
+                refresh();
+            }
+        }
+    });
     let apply_xml_property: Rc<dyn Fn(String, String)> = Rc::new({
         let state = state.clone();
         let selected_xml_path = selected_xml_path.clone();
@@ -1916,6 +1937,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let selected_xml_path = selected_xml_path.clone();
         let apply_xml_property = apply_xml_property.clone();
         let select_element_later = select_element_later.clone();
+        let design_tab_selection = design_tab_selection.clone();
+        let change_design_page_later = change_design_page_later.clone();
         move || {
             native_property_content.clear();
             let Some(xml) = state
@@ -1952,6 +1975,39 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
             if let Ok(title) = ui.label(&format!("{kind} · Properties")) {
                 native_property_content.append(&title);
+            }
+            if kind == "Tabs" {
+                if let Ok(pages) = native_ui_properties::design_tab_pages(&xml, &path) {
+                    if !pages.is_empty() {
+                        if let Ok(label) = ui.label("Design page (preview only; does not change startup)") {
+                            native_property_content.append(&label);
+                        }
+                        if let Ok(navigator) = ui.combo_box() {
+                            let labels = pages.iter().map(String::as_str).collect::<Vec<_>>();
+                            navigator.set_items(&labels);
+                            let startup = fields
+                                .iter()
+                                .find(|field| field.name == "value")
+                                .and_then(|field| field.value.parse::<usize>().ok())
+                                .unwrap_or(0);
+                            let selected = design_tab_selection
+                                .borrow()
+                                .get(&path)
+                                .copied()
+                                .unwrap_or(startup)
+                                .min(pages.len() - 1);
+                            navigator.set_selected(selected);
+                            let dispatch = change_design_page_later.clone();
+                            let selected_path = path.clone();
+                            navigator.on_select(move |page| {
+                                if page < pages.len() {
+                                    let _ = dispatch.send((selected_path.clone(), page));
+                                }
+                            });
+                            native_property_content.append(&navigator);
+                        }
+                    }
+                }
             }
             let mut last_group = "";
             for field in fields {
