@@ -101,7 +101,8 @@ fn xml_spans(source: &str) -> Vec<(Syntax, usize, usize)> {
             i += 1;
         }
         let tag_start = i;
-        while i < chars.len() && (chars[i].is_alphanumeric() || matches!(chars[i], '-' | '_' | ':')) {
+        while i < chars.len() && (chars[i].is_alphanumeric() || matches!(chars[i], '-' | '_' | ':'))
+        {
             i += 1;
         }
         if tag_start != i {
@@ -125,7 +126,8 @@ fn xml_spans(source: &str) -> Vec<(Syntax, usize, usize)> {
                 spans.push((Syntax::String, start, i));
             } else {
                 let start = i;
-                while i < chars.len() && !chars[i].is_whitespace()
+                while i < chars.len()
+                    && !chars[i].is_whitespace()
                     && !matches!(chars[i], '=' | '>' | '/' | '"' | '\'')
                 {
                     i += 1;
@@ -166,7 +168,11 @@ fn apply_highlight(buffer: &gtk4::TextBuffer, xml: bool) {
     }
     let table = buffer.tag_table();
     buffer.remove_all_tags(&buffer.start_iter(), &buffer.end_iter());
-    let spans = if xml { xml_spans(&text) } else { hydrogen_spans(&text) };
+    let spans = if xml {
+        xml_spans(&text)
+    } else {
+        hydrogen_spans(&text)
+    };
     for (kind, begin, end) in spans {
         let tag = if let Some(tag) = table.lookup(kind.name()) {
             tag
@@ -207,7 +213,9 @@ mod tests {
     #[test]
     fn hydrogen_highlights_language_keywords() {
         let spans = hydrogen_spans("public class Program { string text = \"hello\"; }");
-        assert!(spans.iter().any(|x| x.0 == Syntax::Keyword || x.0 == Syntax::Modifier));
+        assert!(spans
+            .iter()
+            .any(|x| x.0 == Syntax::Keyword || x.0 == Syntax::Modifier));
         assert!(spans.iter().any(|x| x.0 == Syntax::String));
     }
 }
