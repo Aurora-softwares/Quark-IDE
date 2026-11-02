@@ -9,10 +9,22 @@ const FONT_SIZE: f64 = 13.0;
 const BG: (u8, u8, u8) = (17, 20, 26);
 const FG: (u8, u8, u8) = (222, 228, 236);
 const ANSI: [(u8, u8, u8); 16] = [
-    (28, 33, 40), (232, 98, 106), (147, 207, 121), (231, 190, 98),
-    (116, 163, 232), (198, 146, 232), (108, 198, 209), (222, 228, 236),
-    (91, 100, 116), (255, 121, 133), (173, 232, 137), (255, 212, 125),
-    (145, 189, 248), (220, 174, 255), (139, 222, 234), (255, 255, 255),
+    (28, 33, 40),
+    (232, 98, 106),
+    (147, 207, 121),
+    (231, 190, 98),
+    (116, 163, 232),
+    (198, 146, 232),
+    (108, 198, 209),
+    (222, 228, 236),
+    (91, 100, 116),
+    (255, 121, 133),
+    (173, 232, 137),
+    (255, 212, 125),
+    (145, 189, 248),
+    (220, 174, 255),
+    (139, 222, 234),
+    (255, 255, 255),
 ];
 
 fn rgb(color: (u8, u8, u8)) -> Color {
@@ -66,10 +78,7 @@ pub fn paint(screen: &vt100::Screen, painter: &mut Painter) {
             if cell.is_wide_continuation() {
                 continue;
             }
-            let (mut fg, mut bg) = (
-                resolve(cell.fgcolor(), FG),
-                resolve(cell.bgcolor(), BG),
-            );
+            let (mut fg, mut bg) = (resolve(cell.fgcolor(), FG), resolve(cell.bgcolor(), BG));
             if cell.inverse() {
                 std::mem::swap(&mut fg, &mut bg);
             }
@@ -89,10 +98,7 @@ pub fn paint(screen: &vt100::Screen, painter: &mut Painter) {
                 painter.text(cell.contents(), Point::new(x, y + 1.0), FONT_SIZE, rgb(fg));
             }
             if cell.underline() {
-                painter.fill_rect(
-                    Rect::new(x, y + CELL_HEIGHT - 2.0, width, 1.0),
-                    rgb(fg),
-                );
+                painter.fill_rect(Rect::new(x, y + CELL_HEIGHT - 2.0, width, 1.0), rgb(fg));
             }
         }
     }
@@ -151,10 +157,7 @@ mod tests {
         terminal.process(b"\x1b[?1049l");
         assert!(!terminal.screen().alternate_screen());
         assert!(terminal.screen().contents().contains('☃'));
-        terminal.set_size(
-            NonZeroU16::new(10).unwrap(),
-            NonZeroU16::new(40).unwrap(),
-        );
+        terminal.set_size(NonZeroU16::new(10).unwrap(), NonZeroU16::new(40).unwrap());
         assert_eq!(viewport_size(10, 40), (360.0, 180.0));
     }
 }
