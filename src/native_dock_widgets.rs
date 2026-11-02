@@ -94,7 +94,7 @@ pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHead
                 if let Some(display) = gtk4::gdk::Display::default() {
                     let css = gtk4::CssProvider::new();
                     css.load_from_data(
-                        ".quark-dock-panel { border: 1px solid alpha(@theme_fg_color, 0.10); } \\
+                        ".quark-dock-panel { border: 1px solid alpha(@theme_fg_color, 0.10); } 
                          .quark-dock-header { border-bottom: 1px solid alpha(@theme_fg_color, 0.10); }"
                     );
                     gtk4::style_context_add_provider_for_display(
