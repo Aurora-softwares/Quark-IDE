@@ -7,6 +7,7 @@ pub enum Palette {
     Tests,
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn escape(s: &str) -> String {
     let mut escaped = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -21,12 +22,15 @@ fn escape(s: &str) -> String {
     }
     escaped
 }
+#[cfg(any(target_os = "linux", test))]
 const NORMAL: [&str; 8] = [
     "#161b22", "#e06c75", "#98c379", "#e5c07b", "#61afef", "#c678dd", "#56b6c2", "#abb2bf",
 ];
+#[cfg(any(target_os = "linux", test))]
 const BRIGHT: [&str; 8] = [
     "#5c6370", "#ff7b86", "#b5e890", "#ffda83", "#83c5ff", "#d9a1ff", "#8be4ee", "#ffffff",
 ];
+#[cfg(any(target_os = "linux", test))]
 fn rgb(number: u16) -> String {
     if number < 16 {
         return if number < 8 {
@@ -78,6 +82,7 @@ pub fn remove_escape_sequences(raw: &str) -> String {
     text
 }
 
+#[cfg(any(target_os = "linux", test))]
 pub fn markup(raw: &str, palette: Palette) -> String {
     let bytes = raw.as_bytes();
     let mut out = String::new();
