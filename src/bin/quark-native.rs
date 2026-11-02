@@ -569,6 +569,40 @@ enum BuildEvent {
     Chunk(Vec<u8>),
     Finished(native_commands::ResultLog),
 }
+/// Keep a running compiler's newest progress visible, without stealing
+/// the scrollbar from someone who has deliberately scrolled up to read logs.
+fn set_live_output(
+    label: &naui::Label,
+    scroll: &naui::Scroll,
+    text: &str,
+    force_follow: bool,
+) {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        if let Ok(scroller) = scroll.native_widget().downcast::<gtk4::ScrolledWindow>() {
+            let adjustment = scroller.vadjustment();
+            let follow = force_follow
+                || adjustment.value() + adjustment.page_size() >= adjustment.upper() - 32.0;
+            set_console_text(label, text, native_console::Palette::Output);
+            if follow {
+                // Layout height is recalculated after the label receives its
+                // next VT100 frame; schedule the adjustment after allocation.
+                gtk4::glib::idle_add_local_once(move || {
+                    adjustment.set_value(
+                        (adjustment.upper() - adjustment.page_size()).max(adjustment.lower()),
+                    );
+                });
+            }
+            return;
+        }
+    }
+    let _ = (scroll, force_follow);
+    set_console_text(label, text, native_console::Palette::Output);
+}
+
+
 
 // The latest launched task owns the Output pane; earlier tasks may finish
 // in the background, but must not overwrite a newer build's progress.
@@ -581,6 +615,7 @@ fn run_task(
     task: native_commands::Task,
     state: Rc<RefCell<Ide>>,
     output: naui::Label,
+    output_scroll: naui::Scroll,
     test_output: naui::Label,
     status: naui::Label,
     _error_list: naui::List,
@@ -599,7 +634,7 @@ fn run_task(
         Ok(compiler) => compiler,
         Err(error) => {
             status.set_text(&error);
-            set_console_text(&output, &error, native_console::Palette::Output);
+            set_live_output(&output, &output_scroll, &error, true);
             return;
         }
     };
@@ -608,11 +643,7 @@ fn run_task(
         .and_then(|path| path.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("."));
     status.set_text(&format!("{}…", task.label()));
-    set_console_text(
-        &output,
-        &format!("Running {}…", task.label()),
-        native_console::Palette::Output,
-    );
+    set_live_output(&output, &output_scroll, &format!("Running {}…", task.label()), true);
     // A real terminal parser, rather than appending raw lines, is essential:
     // carriage returns, erase-in-line and spinner frames replace their own
     // cell positions. It also buffers partial UTF-8 and ANSI sequences.
@@ -643,7 +674,7 @@ fn run_task(
                 };
                 // Redraw the *same* viewport on every chunk. Do not append a
                 // newline when Hydrogen emits \r or cursor-control sequences.
-                set_console_text(&output, &rendered, native_console::Palette::Output);
+                set_live_output(&output, &output_scroll, &rendered, false);
             }
             BuildEvent::Finished(result) => {
                 let parsed = problems::parse(&result.text, &project_dir);
@@ -662,13 +693,14 @@ fn run_task(
                     } else {
                         "failed"
                     };
-                    set_console_text(
+                    set_live_output(
                         &output,
+                        &output_scroll,
                         &format!("{rendered}\n\n{} {outcome}.", task.label()),
-                        native_console::Palette::Output,
+                        false,
                     );
                 } else {
-                    set_console_text(&output, &result.text, native_console::Palette::Output);
+                    set_live_output(&output, &output_scroll, &result.text, false);
                 }
                 if task == native_commands::Task::Test {
                     set_console_text(&test_output, &result.text, native_console::Palette::Tests);
@@ -5556,6 +5588,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let task_action: Rc<dyn Fn(native_commands::Task)> = Rc::new({
         let state = state.clone();
         let output = output.clone();
+        let output_scroll = output_scroll.clone();
         let tests_view = tests_view.clone();
         let status = status.clone();
         let error_list = error_list.clone();
@@ -5597,6 +5630,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 task,
                 state.clone(),
                 output.clone(),
+                output_scroll.clone(),
                 tests_view.clone(),
                 status.clone(),
                 error_list.clone(),
