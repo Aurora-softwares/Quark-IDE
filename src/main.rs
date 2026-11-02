@@ -4,10 +4,10 @@ mod command;
 mod designer;
 mod diagnostics;
 mod editor;
-mod hydrogen_lexer;
 #[cfg(test)]
 mod feature_tests;
 mod hydrogen;
+mod hydrogen_lexer;
 #[cfg(test)]
 #[allow(dead_code)]
 mod native_commands;
