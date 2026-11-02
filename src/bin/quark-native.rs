@@ -900,6 +900,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     centre.set_spacing(0.0);
     let document_tabs = ui.stack(Orientation::Horizontal)?;
     document_tabs.set_spacing(3.0);
+    let document_overflow = ui.stack(Orientation::Horizontal)?;
+    document_overflow.set_spacing(2.0);
+    let document_bar = ui.grid()?;
+    document_bar.set_sizing(Sizing::fill_width());
+    document_bar.set_column_track(0, Track::FILL);
+    document_bar.set_column_track(1, Track::Fixed(0.0));
+    document_bar.set_row_track(0, Track::Fixed(30.0));
+    document_bar.attach(&document_tabs, GridCell::new(0, 0));
+    document_bar.attach(&document_overflow, GridCell::new(1, 0));
     let tab_offset = Rc::new(Cell::new(0_usize));
     type TabSelector = Rc<dyn Fn(Page, PathBuf)>;
     let tab_selector: Rc<RefCell<Option<TabSelector>>> = Rc::new(RefCell::new(None));
@@ -1841,6 +1850,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let state = state.clone();
         let centre = centre.clone();
         let document_tabs = document_tabs.clone();
+        let document_overflow = document_overflow.clone();
+        let document_bar = document_bar.clone();
         let tab_accent = tab_accent.clone();
         let pages = pages.clone();
         let empty_workspace = empty_workspace.clone();
@@ -1887,6 +1898,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             left_panel(0);
             centre.clear();
             document_tabs.clear();
+            document_overflow.clear();
 
             const VISIBLE_TABS: usize = 3;
             let maximum_offset = tabs.len().saturating_sub(VISIBLE_TABS);
@@ -1949,7 +1961,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             redraw(page);
                         }
                     });
-                    document_tabs.append(&previous);
+                    document_overflow.append(&previous);
                 }
                 if let Ok(next) = ui.button("›") {
                     next.set_enabled(offset < maximum_offset);
@@ -1963,12 +1975,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             redraw(page);
                         }
                     });
-                    document_tabs.append(&next);
+                    document_overflow.append(&next);
                 }
             }
-            if !tabs.is_empty() {
+            if tabs.len() > VISIBLE_TABS {
                 if let Ok(all) = ui.combo_box() {
-                    let mut labels = vec!["∨".to_owned()];
+                    let mut labels = vec!["⌄".to_owned()];
                     labels.extend(tabs.iter().map(|(_, path)| {
                         path.file_name()
                             .map(|name| name.to_string_lossy().into_owned())
@@ -1976,6 +1988,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }));
                     all.set_items(&labels.iter().map(String::as_str).collect::<Vec<_>>());
                     all.set_selected(0);
+                    all.set_sizing(Sizing::new().width(Length::Fixed(44.0)));
                     let choices = tabs.clone();
                     let selector = tab_selector.clone();
                     all.on_select(move |selected| {
@@ -1987,9 +2000,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             }
                         }
                     });
-                    document_tabs.append(&all);
+                    document_overflow.append(&all);
                 }
-                centre.append(&document_tabs);
+            }
+            if !tabs.is_empty() {
+                document_bar.set_column_track(
+                    1,
+                    Track::Fixed(if tabs.len() > VISIBLE_TABS { 122.0 } else { 0.0 }),
+                );
+                centre.append(&document_bar);
                 centre.append(&tab_accent);
             }
             if page == Page::Design {
