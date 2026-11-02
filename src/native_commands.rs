@@ -478,11 +478,13 @@ fn invoke_hydrogen_streaming(
 
 /// Existing one-shot callers retain their exact result contract; native UI
 /// callers can subscribe to raw output chunks without waiting for exit.
+type OutputCallback<'a> = Option<&'a mut dyn FnMut(&[u8])>;
+
 fn invoke_hydrogen_maybe_streaming(
     program: &str,
     cwd: &Path,
     args: &[String],
-    emit: &mut Option<&mut dyn FnMut(&[u8])>,
+    emit: &mut OutputCallback<'_>,
 ) -> Result<std::process::Output, String> {
     if let Some(emit) = emit.as_deref_mut() {
         invoke_hydrogen_streaming(program, cwd, args, emit)
@@ -500,6 +502,7 @@ pub fn run_streaming(
     run_with_output(task, compiler, project, Some(&mut emit))
 }
 
+#[cfg(test)]
 pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     run_with_output(task, compiler, project, None)
 }
@@ -508,7 +511,7 @@ fn run_with_output(
     task: Task,
     compiler: &str,
     project: Option<&Path>,
-    mut emit: Option<&mut dyn FnMut(&[u8])>,
+    mut emit: OutputCallback<'_>,
 ) -> ResultLog {
     let Some(project) = project else {
         return ResultLog::error("Open a Hydrogen project before building or running.");
