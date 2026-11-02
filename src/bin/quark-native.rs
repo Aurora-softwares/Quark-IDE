@@ -1499,8 +1499,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let solution_list_mode = Rc::new(Cell::new(false));
     #[cfg(target_os = "linux")]
     let sync_explorer_controls: Rc<dyn Fn()> = Rc::new({
-        use naui::Widget as _;
         use gtk4::prelude::*;
+        use naui::Widget as _;
         let ascending = sort_ascending.native_widget();
         let descending = sort_descending.native_widget();
         let tree_button = show_tree.native_widget();
@@ -1509,11 +1509,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let list = solution_list_mode.clone();
         move || {
             for (widget, selected) in [
-                (&ascending, !sort.get()), (&descending, sort.get()),
-                (&tree_button, !list.get()), (&list_button, list.get()),
+                (&ascending, !sort.get()),
+                (&descending, sort.get()),
+                (&tree_button, !list.get()),
+                (&list_button, list.get()),
             ] {
-                if selected { widget.add_css_class("quark-explorer-tool-selected"); }
-                else { widget.remove_css_class("quark-explorer-tool-selected"); }
+                if selected {
+                    widget.add_css_class("quark-explorer-tool-selected");
+                } else {
+                    widget.remove_css_class("quark-explorer-tool-selected");
+                }
             }
         }
     });
@@ -1527,7 +1532,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        explorer_toolbar.native_widget().add_css_class("quark-explorer-toolbar");
+        explorer_toolbar
+            .native_widget()
+            .add_css_class("quark-explorer-toolbar");
         for (button, description) in [
             (&sort_ascending, "Sort files A to Z"),
             (&sort_descending, "Sort files Z to A"),
@@ -1537,7 +1544,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             button.native_widget().add_css_class("quark-explorer-tool");
             button.native_widget().set_tooltip_text(Some(description));
         }
-        solution_search.native_widget().add_css_class("quark-explorer-search");
+        solution_search
+            .native_widget()
+            .add_css_class("quark-explorer-search");
         tree.native_widget().add_css_class("quark-solution-tree");
         if let Some(display) = gtk4::gdk::Display::default() {
             let provider = gtk4::CssProvider::new();
@@ -1572,10 +1581,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                  .quark-solution-tree row:selected {
                     background: alpha(@theme_fg_color, 0.13);
                     color: @theme_fg_color;
-                 }"
+                 }",
             );
             gtk4::style_context_add_provider_for_display(
-                &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                &display,
+                &provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
     }
@@ -2134,7 +2145,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         ] {
             header.row.native_widget().set_visible(false);
         }
-        bottom_tabs.native_widget().add_css_class("quark-bottom-tabs");
+        bottom_tabs
+            .native_widget()
+            .add_css_class("quark-bottom-tabs");
         bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
         bottom_tabs.native_widget().set_vexpand(false);
         bottom_tabs.native_widget().set_halign(gtk4::Align::Start);
@@ -2150,7 +2163,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             native.add_css_class("quark-bottom-tab");
             native.set_tooltip_text(Some(description));
         }
-        output_tab.native_widget().add_css_class("quark-bottom-tab-active");
+        output_tab
+            .native_widget()
+            .add_css_class("quark-bottom-tab-active");
         bottom_pages.native_widget().set_vexpand(true);
         output_scroll.native_widget().set_vexpand(true);
         for scroller in [
@@ -2262,12 +2277,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move |event: native_terminal::Input| {
             match event {
                 native_terminal::Input::Bytes(bytes) => parser.borrow_mut().process(&bytes),
-                native_terminal::Input::Resize { rows, cols } => {
-                    parser.borrow_mut().set_size(
-                        std::num::NonZeroU16::new(rows.max(1)).unwrap(),
-                        std::num::NonZeroU16::new(cols.max(1)).unwrap(),
-                    )
-                }
+                native_terminal::Input::Resize { rows, cols } => parser.borrow_mut().set_size(
+                    std::num::NonZeroU16::new(rows.max(1)).unwrap(),
+                    std::num::NonZeroU16::new(cols.max(1)).unwrap(),
+                ),
             }
             let rendered = parser.borrow().screen().contents_formatted_basic();
             set_console_text(&display, &rendered, native_console::Palette::Output);
@@ -4210,11 +4223,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     {
                         use gtk4::prelude::*;
                         use naui::Widget as _;
-                        let area = tab.native_widget()
+                        let area = tab
+                            .native_widget()
                             .downcast::<gtk4::DrawingArea>()
                             .expect("native document tab must be a GTK drawing area");
                         area.add_css_class("quark-document-tab");
-                        if selected { area.add_css_class("quark-document-tab-active"); }
+                        if selected {
+                            area.add_css_class("quark-document-tab-active");
+                        }
                         area.set_tooltip_text(Some(&filename));
                         let label = filename.clone();
                         area.set_draw_func(move |area, cairo, width, height| {
@@ -4239,7 +4255,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             cairo.set_source_rgba(fr, fg, fb, if selected { 0.35 } else { 0.20 });
                             cairo.set_line_width(1.0);
                             cairo.rectangle(
-                                0.5, 0.5, f64::from(width) - 1.0,
+                                0.5,
+                                0.5,
+                                f64::from(width) - 1.0,
                                 f64::from(height) - 0.5,
                             );
                             let _ = cairo.stroke();
@@ -4247,8 +4265,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             if selected {
                                 cairo.set_source_rgb(0.53, 0.38, 0.83);
                                 cairo.rectangle(
-                                    0.0, f64::from(height) - 3.0,
-                                    f64::from(width), 3.0,
+                                    0.0,
+                                    f64::from(height) - 3.0,
+                                    f64::from(width),
+                                    3.0,
                                 );
                                 let _ = cairo.fill();
                             }
