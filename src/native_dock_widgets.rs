@@ -167,12 +167,22 @@ pub fn enable_widget_drag(
     });
     widget.add_controller(source);
     let target = gtk4::DropTarget::new(String::static_type(), gtk4::gdk::DragAction::MOVE);
+    let on_drop = std::rc::Rc::new(on_drop);
     target.connect_drop(move |_, value, _, _| {
-        value
+        let Some(id) = value
             .get::<String>()
             .ok()
             .and_then(|token| parse_drag_token(&token))
-            .is_some_and(&on_drop)
+        else {
+            return false;
+        };
+        // Do not reorder/reparent the native source while its DnD gesture is
+        // still finishing. This avoids "stuck" drags after mouse release.
+        let callback = on_drop.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            callback(id);
+        });
+        true
     });
     widget.add_controller(target);
 }
