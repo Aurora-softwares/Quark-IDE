@@ -11,11 +11,13 @@ pub struct Preferences {
     pub editor: Editor,
     pub debugging: Debugging,
     pub build: Build,
+    pub hydrogen: Hydrogen,
 }
 impl Default for Preferences {
     fn default() -> Self {
         Self { appearance: Appearance::default(), editor: Editor::default(),
-               debugging: Debugging::default(), build: Build::default() }
+               debugging: Debugging::default(), build: Build::default(),
+               hydrogen: Hydrogen::default() }
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +41,14 @@ pub struct Debugging { pub stop_on_exception: bool, pub show_debug_output: bool 
 impl Default for Debugging {
     fn default() -> Self { Self { stop_on_exception: true, show_debug_output: true } }
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct Hydrogen {
+    /// Absolute executable selected by the user; None enables automatic
+    /// QUARK_HYDROGEN_COMPILER / PATH discovery.
+    pub executable: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Build { pub save_before_build: bool, pub show_output: bool }
@@ -171,6 +181,152 @@ pub fn show(path: PathBuf) {
     checkbox(&build, "Save modified files before building", preferences.build.save_before_build, false);
     checkbox(&build, "Show output after building", preferences.build.show_output, false);
     notebook.append_page(&build, Some(&gtk4::Label::new(Some("Build & Run"))));
+
+    let hydrogen = section();
+    heading(
+        &hydrogen,
+        "Hydrogen Compiler",
+        "Choose the Hydrogen executable used for Build, Run and native UI previews. The executable does not need to be on PATH.",
+    );
+    let path_label = gtk4::Label::new(Some("Compiler executable"));
+    path_label.set_xalign(0.0);
+    hydrogen.append(&path_label);
+    let path_entry = gtk4::Entry::new();
+    path_entry.set_hexpand(true);
+    path_entry.set_placeholder_text(Some("Automatic: QUARK_HYDROGEN_COMPILER, then hy on PATH"));
+    path_entry.set_text(preferences.hydrogen.executable.as_deref().unwrap_or(""));
+    let path_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    path_row.append(&path_entry);
+    let browse = gtk4::Button::with_label("Browse…");
+    path_row.append(&browse);
+    hydrogen.append(&path_row);
+    let message = gtk4::Label::new(Some(
+        "Leave blank for automatic discovery. Select the executable itself, not the project directory.",
+    ));
+    message.set_wrap(true);
+    message.set_xalign(0.0);
+    message.add_css_class("dim-label");
+    hydrogen.append(&message);
+    let controls = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let save_compiler = gtk4::Button::with_label("Save compiler path");
+    let test_compiler = gtk4::Button::with_label("Test compiler");
+    let automatic = gtk4::Button::with_label("Use automatic discovery");
+    controls.append(&save_compiler);
+    controls.append(&test_compiler);
+    controls.append(&automatic);
+    hydrogen.append(&controls);
+    let feedback = gtk4::Label::new(None);
+    feedback.set_wrap(true);
+    feedback.set_selectable(true);
+    feedback.set_xalign(0.0);
+    hydrogen.append(&feedback);
+    browse.connect_clicked({
+        let entry = path_entry.clone();
+        move |_| {
+            if let Some(selected) = rfd::FileDialog::new()
+                .set_title("Select Hydrogen compiler executable")
+                .pick_file()
+            {
+                entry.set_text(&selected.to_string_lossy());
+            }
+        }
+    });
+    save_compiler.connect_clicked({
+        let state = state.clone();
+        let file = path.clone();
+        let entry = path_entry.clone();
+        let feedback = feedback.clone();
+        move |_| {
+            let raw = entry.text().trim().to_owned();
+            let candidate = if raw.is_empty() { None } else { Some(raw) };
+            if let Some(ref value) = candidate {
+                if let Err(error) = crate::native_compiler::validate_explicit(value) {
+                    feedback.set_text(&error);
+                    return;
+                }
+            }
+            let mut prefs = state.borrow_mut();
+            prefs.hydrogen.executable = candidate;
+            match save(&file, &prefs) {
+                Ok(()) => feedback.set_text("Compiler preference saved. New builds will use this executable."),
+                Err(error) => feedback.set_text(&format!("Could not save compiler preference: {error}")),
+            }
+        }
+    });
+    automatic.connect_clicked({
+        let state = state.clone();
+        let file = path.clone();
+        let entry = path_entry.clone();
+        let feedback = feedback.clone();
+        move |_| {
+            let mut prefs = state.borrow_mut();
+            prefs.hydrogen.executable = None;
+            match save(&file, &prefs) {
+                Ok(()) => {
+                    entry.set_text("");
+                    feedback.set_text("Automatic compiler discovery enabled.");
+                }
+                Err(error) => feedback.set_text(&format!("Could not save compiler preference: {error}")),
+            }
+        }
+    });
+    test_compiler.connect_clicked({
+        let entry = path_entry.clone();
+        let feedback = feedback.clone();
+        let file = path.clone();
+        move |_| {
+            // Resolve the current entry, including unsaved edits.
+            let raw = entry.text().trim().to_owned();
+            let resolved = if raw.is_empty() {
+                crate::native_compiler::resolve_at(&file)
+            } else {
+                crate::native_compiler::validate_explicit(&raw).map(|_| raw)
+            };
+            let executable = match resolved {
+                Ok(value) => value,
+                Err(error) => {
+                    feedback.set_text(&error);
+                    return;
+                }
+            };
+            feedback.set_text("Checking Hydrogen executable…");
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let result = std::process::Command::new(&executable)
+                    .arg("--version")
+                    .output()
+                    .map(|output| {
+                        let detail = String::from_utf8_lossy(
+                            if !output.stdout.is_empty() { &output.stdout } else { &output.stderr },
+                        ).trim().to_owned();
+                        if output.status.success() {
+                            format!("Compiler started successfully: {detail}")
+                        } else {
+                            format!("Compiler exited with {}: {detail}", output.status)
+                        }
+                    })
+                    .unwrap_or_else(|error| format!("Unable to execute Hydrogen: {error}"));
+                let _ = sender.send(result);
+            });
+            let feedback = feedback.clone();
+            gtk4::glib::timeout_add_local(
+                std::time::Duration::from_millis(80),
+                move || match receiver.try_recv() {
+                    Ok(result) => {
+                        feedback.set_text(&result);
+                        gtk4::glib::ControlFlow::Break
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) =>
+                        gtk4::glib::ControlFlow::Continue,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        feedback.set_text("Compiler check did not return a result.");
+                        gtk4::glib::ControlFlow::Break
+                    }
+                },
+            );
+        }
+    });
+    notebook.append_page(&hydrogen, Some(&gtk4::Label::new(Some("Hydrogen"))));
 
     let general = section();
     heading(&general, "Application", "Settings are stored separately from project and workspace files.");
