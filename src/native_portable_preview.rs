@@ -395,8 +395,8 @@ fn render_node(
                     .and_then(|v| v.parse::<usize>().ok())
                     .unwrap_or(0);
                 let design_override = design_tabs.borrow().get(&path).copied();
-                let chosen = design_tab_index(runtime_default, design_override, pages.len())
-                    .unwrap_or(0);
+                let chosen =
+                    design_tab_index(runtime_default, design_override, pages.len()).unwrap_or(0);
                 #[cfg(target_os = "linux")]
                 {
                     use gtk4::prelude::*;
@@ -798,9 +798,15 @@ pub fn render(
     // tab has only a few controls. The preview scrolls inside Quark instead
     // of stretching across and losing its frame.
     window.set_sizing(
-        Sizing::new()
-            .width(Length::Fixed(width))
-            .min_height((height - if cfg!(target_os = "linux") { 48.0 } else { 34.0 }).max(120.0)),
+        Sizing::new().width(Length::Fixed(width)).min_height(
+            (height
+                - if cfg!(target_os = "linux") {
+                    48.0
+                } else {
+                    34.0
+                })
+            .max(120.0),
+        ),
     );
     // A visible window frame, kept inside the design viewport. The body
     // itself is composed of platform-native widgets.
@@ -817,7 +823,9 @@ pub fn render(
         header.set_show_end_title_buttons(false);
         let title = root.attribute("title").unwrap_or("Hydrogen Window");
         header.set_title_widget(Some(&gtk4::Label::new(Some(title))));
-        header.set_tooltip_text(Some("Design-only native header; use OS Window for actual window controls"));
+        header.set_tooltip_text(Some(
+            "Design-only native header; use OS Window for actual window controls",
+        ));
         header.set_width_request(width as i32);
         let host = outer
             .native_widget()
@@ -1007,7 +1015,9 @@ mod tests {
 
     #[test]
     fn interactive_controls_claim_design_presses_but_containers_do_not() {
-        for kind in ["Button", "Input", "Slider", "CheckBox", "ListBox", "Table", "Select"] {
+        for kind in [
+            "Button", "Input", "Slider", "CheckBox", "ListBox", "Table", "Select",
+        ] {
             assert!(design_press_claims_activation(kind), "{kind}");
         }
         for kind in ["Window", "Panel", "ColumnPanel", "GridPanel", "Tabs", "Tab"] {
