@@ -378,6 +378,23 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn hydrogen_test_task_uses_configured_compiler_and_captures_results() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("QuarkTests.hyproj");
+        fs::write(&project, "type='linux'\nsources=['Main.hy']").unwrap();
+        let compiler = dir.path().join("hydrogen-test-wrapper");
+        fs::write(&compiler, "#!/bin/sh\nprintf 'PASS: Quark PTY test\\n'\n").unwrap();
+        fs::set_permissions(&compiler, fs::Permissions::from_mode(0o755)).unwrap();
+        let result = run(Task::Test, &compiler.to_string_lossy(), Some(&project));
+        assert!(result.success, "{}", result.text);
+        assert!(result.text.contains("PASS: Quark PTY test"));
+        assert!(result.text.contains("Hydrogen test"));
+        assert!(!dir.path().join(".quark/build").exists());
+    }
+
     #[test]
     fn publish_requires_a_successful_fresh_build_not_a_stale_binary() {
         let dir = tempfile::tempdir().unwrap();
