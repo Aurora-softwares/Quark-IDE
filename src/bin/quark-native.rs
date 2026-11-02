@@ -1979,7 +1979,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if kind == "Tabs" {
                 if let Ok(pages) = native_ui_properties::design_tab_pages(&xml, &path) {
                     if !pages.is_empty() {
-                        if let Ok(label) = ui.label("Design page (preview only; does not change startup)") {
+                        if let Ok(label) =
+                            ui.label("Design page (preview only; does not change startup)")
+                        {
                             native_property_content.append(&label);
                         }
                         if let Ok(navigator) = ui.combo_box() {
