@@ -5252,7 +5252,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let window = window.clone();
         let reset_window_layout = reset_window_layout.clone();
         #[cfg(not(target_os = "linux"))]
-        let ui = ui.clone();
+        let open_portable_settings = ui.tasks().channel({
+            let ui = ui.clone();
+            let status = status.clone();
+            move |(): ()| {
+                if let Err(error) = native_preferences_portable::show(
+                    &ui, workspace_file().with_file_name("native-preferences.json")
+                ) {
+                    status.set_text(&format!("Cannot open native settings: {error}"));
+                }
+            }
+        });
         move |menu, action| match (menu, action) {
             (0, 0) => show_new_project(),
             (0, 1) => {
@@ -5370,10 +5380,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     workspace_file().with_file_name("native-preferences.json"),
                 );
                 #[cfg(not(target_os = "linux"))]
-                if let Err(error) = native_preferences_portable::show(
-                    &ui, workspace_file().with_file_name("native-preferences.json")
-                ) {
-                    status.set_text(&format!("Cannot open native settings: {error}"));
+                {
+                    // Do not mutate AppKit or WinUI view trees while the
+                    // native menu dispatcher is still delivering its event.
+                    let _ = open_portable_settings.send(());
                 }
             }
             (10, 0) => status.set_text("Native extension management is planned."),
