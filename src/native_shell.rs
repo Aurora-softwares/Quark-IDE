@@ -61,6 +61,12 @@ pub const SIDE_TAB_HEIGHTS: [f64; 3] = [118.0, 106.0, 86.0];
 pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
 pub const CODE_SIDE_TABS: [&str; 2] = ["SYMBOLS", "SEARCH"];
 
+/// The document switcher and scroll controls are hidden until needed.
+pub fn document_overflow(open_count: usize, visible_capacity: usize) -> bool {
+    visible_capacity > 0 && open_count > visible_capacity
+}
+
+
 /// Quark's palette: Hydrogen electron cyan, orbital blue, quark violet.
 pub const HYDROGEN_CYAN: (u8, u8, u8) = (50, 212, 226);
 pub const ORBIT_BLUE: (u8, u8, u8) = (51, 103, 214);
@@ -101,6 +107,15 @@ pub fn position(menu: &str, action: &str) -> Option<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn document_overflow_controls_are_hidden_until_tabs_exceed_capacity() {
+        assert!(!document_overflow(0, 3));
+        assert!(!document_overflow(1, 3));
+        assert!(!document_overflow(3, 3));
+        assert!(document_overflow(4, 3));
+        assert!(!document_overflow(4, 0));
+    }
 
     #[test]
     fn side_rail_presets_are_compact_and_context_sensitive() {
