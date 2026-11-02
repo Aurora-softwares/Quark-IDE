@@ -1351,7 +1351,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let bottom_pages = ui.stack(Orientation::Vertical)?;
     bottom_pages.set_sizing(Sizing::fill());
-    let output = ui.label("Ready. Open a Hydrogen project to build, run or publish.")?;
+    let output = ui.label("")?;
     let output_scroll = ui.scroll()?;
     output_scroll.set_sizing(Sizing::fill());
     output_scroll.set_child(&output);
@@ -1363,11 +1363,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     errors_view.append(&error_summary);
     errors_view.append(&error_list);
     let debug_view =
-        ui.label("Debugger not yet attached. Source-level Hydrogen debug support is planned.")?;
+        ui.label("No debugger attached")?;
     let tests_view =
-        ui.label("Test Explorer integration is planned. Use the Hydrogen CLI in the meantime.")?;
+        ui.label("No test run selected")?;
     let find_view =
-        ui.label("Search results appear here after the solution search service is connected.")?;
+        ui.label("No search results")?;
     bottom_pages.append(&output_scroll);
     bottom.append(&bottom_pages);
     bottom.set_sizing(Sizing::fill());
