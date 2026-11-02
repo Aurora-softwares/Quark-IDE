@@ -316,6 +316,7 @@ pub fn confirm_delete(anchor: &gtk4::Widget, file: &Path, apply: impl Fn() + 'st
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::native_model::{file_action, FileAction};
     #[test]
     fn file_actions_create_rename_and_delete_without_overwriting_existing_entries() {
         let dir = tempfile::tempdir().unwrap();
