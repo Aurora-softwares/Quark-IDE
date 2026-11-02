@@ -380,7 +380,78 @@ fn render_node(
             );
             row.append(&scroll);
         }
-        "RowPanel" | "MenuBar" | "Menu" => {
+        "MenuBar" => {
+            // The Hydrogen GTK runtime uses GtkMenuButton for each top-level
+            // Menu. Rendering its MenuItems as ordinary push buttons makes
+            // the whole document look unlike the real application.
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+
+                let bar = row
+                    .native_widget()
+                    .downcast::<gtk4::Box>()
+                    .map_err(|_| "Native GTK menu host is not a GtkBox")?;
+                bar.set_spacing(8);
+                for (index, menu) in node
+                    .children()
+                    .filter(|child| child.is_element() && child.has_tag_name("Menu"))
+                    .enumerate()
+                {
+                    let button = gtk4::MenuButton::new();
+                    button.set_label(menu.attribute("text").unwrap_or("Menu"));
+                    let popover = gtk4::Popover::new();
+                    let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+                    for item in menu
+                        .children()
+                        .filter(|child| child.is_element() && child.has_tag_name("MenuItem"))
+                    {
+                        let item_label = gtk4::Label::new(item.attribute("text"));
+                        item_label.set_xalign(0.0);
+                        item_label.set_margin_start(8);
+                        item_label.set_margin_end(8);
+                        item_label.set_margin_top(4);
+                        item_label.set_margin_bottom(4);
+                        contents.append(&item_label);
+                    }
+                    popover.set_child(Some(&contents));
+                    button.set_popover(Some(&popover));
+
+                    // This is a selection-only design surface, not an app
+                    // whose menus should dispatch user-defined commands.
+                    let capture = gtk4::GestureClick::new();
+                    capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
+                    let selected = on_select.clone();
+                    let mut selected_path = path.clone();
+                    selected_path.push(index);
+                    capture.connect_pressed(move |gesture, _, _, _| {
+                        selected(selected_path.clone());
+                        gesture.set_state(gtk4::EventSequenceState::Claimed);
+                    });
+                    button.add_controller(capture);
+                    let keys = gtk4::EventControllerKey::new();
+                    keys.set_propagation_phase(gtk4::PropagationPhase::Capture);
+                    keys.connect_key_pressed(|_, _, _, _| gtk4::glib::Propagation::Stop);
+                    button.add_controller(keys);
+                    bar.append(&button);
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                render_children(
+                    ui,
+                    &row,
+                    node,
+                    &path,
+                    on_select,
+                    design_tabs,
+                    available_width,
+                    document,
+                )?;
+            }
+        }
+        "RowPanel" | "Menu" => {
             let direction = if kind == "RowPanel"
                 && available_width
                     < node
@@ -1200,6 +1271,29 @@ mod tests {
         let parsed = roxmltree::Document::parse(xml).unwrap();
         let widths = row_child_widths(parsed.root_element(), 720.0, 20.0);
         assert_eq!(widths, vec![240.0, 220.0, 0.0, 220.0]);
+    }
+
+    #[test]
+    fn hydrogen_studio_declares_top_level_native_menu_groups() {
+        let xml = include_str!("../tests/fixtures/Studio.hyui");
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let bar = parsed
+            .root_element()
+            .children()
+            .find(|child| child.has_tag_name("MenuBar"))
+            .unwrap();
+        let groups = bar
+            .children()
+            .filter(|child| child.is_element() && child.has_tag_name("Menu"))
+            .map(|menu| menu.attribute("text").unwrap_or(""))
+            .collect::<Vec<_>>();
+        assert_eq!(groups, ["Studio", "Help"]);
+        assert_eq!(
+            bar.children()
+                .filter(|child| child.has_tag_name("MenuItem"))
+                .count(),
+            0
+        );
     }
 
     #[test]
