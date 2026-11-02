@@ -308,6 +308,24 @@ pub fn property_choices(kind: &str, name: &str, fields: &[PropertyField]) -> Vec
     Vec::new()
 }
 
+/// Convert user-facing Properties values to the Hydrogen runtime schema.
+/// Tabs use human page numbers in Properties, while XML stores zero-based
+/// indices. No live editor should write an invalid/partial page value.
+pub fn runtime_property_value(kind: &str, name: &str, input: &str) -> Result<String, String> {
+    if kind == "Tabs" && name == "value" {
+        let page = input
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| "Startup page must be a positive whole number".to_owned())?;
+        if page == 0 {
+            return Err("Startup page must be 1 or greater".into());
+        }
+        Ok((page - 1).to_string())
+    } else {
+        Ok(input.to_owned())
+    }
+}
+
 /// An editor-only element navigator. Includes hidden and non-visual
 /// elements so every supported property remains reachable without drawing
 /// artificial selection buttons over the live application preview.
@@ -757,6 +775,33 @@ mod tests {
         assert!(property_choices("Select", "items", &fields).is_empty());
         let (_, input) = available_properties(xml, &[1]).unwrap();
         assert!(property_choices("Input", "text", &input).is_empty());
+    }
+
+    #[test]
+    fn live_tab_page_edit_is_one_based_but_round_trips_in_xml() {
+        let xml = r#"<Window><Tabs value="0"><Tab title="Home"/><Tab title="Settings"/></Tabs></Window>"#;
+        let runtime = runtime_property_value("Tabs", "value", "2").unwrap();
+        assert_eq!(runtime, "1");
+        let changed = set_attribute(xml, &[0], "value", &runtime).unwrap();
+        assert!(changed.contains("<Tabs value=\"1\""));
+        assert!(changed.contains("<Tab title=\"Settings\""));
+        let display = available_properties(&changed, &[0]).unwrap().1
+            .into_iter().find(|field| field.name == "value").unwrap();
+        assert_eq!(display.value, "1");
+        assert_eq!(runtime_property_value("Tabs", "value", "1").unwrap(), "0");
+    }
+
+    #[test]
+    fn live_edits_refuse_partial_pages_without_mutating_existing_document() {
+        let original = r#"<Window><Tabs value="0"><Tab title="First"/></Tabs><Input text="Old" onChange="Handle"/></Window>"#;
+        for invalid in ["", "0", "-1", "abc", "1.5"] {
+            assert!(runtime_property_value("Tabs", "value", invalid).is_err());
+            assert!(original.contains("value=\"0\""));
+        }
+        assert_eq!(runtime_property_value("Input", "text", "New & <value>").unwrap(), "New & <value>");
+        let changed = set_attribute(original, &[1], "text", "New & <value>").unwrap();
+        assert!(changed.contains("New &amp; &lt;value&gt;"));
+        assert!(changed.contains("onChange=\"Handle\""));
     }
 
     #[test]
