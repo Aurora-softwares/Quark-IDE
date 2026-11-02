@@ -2222,6 +2222,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         native_docking::DockId, gtk4::Window,
     >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
     #[cfg(target_os = "linux")]
+    let auto_hide_popovers: Rc<RefCell<std::collections::HashMap<
+        native_docking::DockId, gtk4::Popover,
+    >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
+    #[cfg(target_os = "linux")]
     let dock_widgets = {
         use naui::Widget as _;
         [
@@ -2246,6 +2250,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let dock_widgets = dock_widgets.clone();
         #[cfg(target_os = "linux")]
         let floating_windows = floating_windows.clone();
+        #[cfg(target_os = "linux")]
+        let auto_hide_popovers = auto_hide_popovers.clone();
         let sizes = pane_sizes.clone();
         let left_content = left_content.clone();
         #[cfg(target_os = "linux")]
@@ -2265,6 +2271,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active_side_tab = active_side_tab.clone();
         move || {
             let layout = model.borrow();
+            #[cfg(target_os = "linux")]
+            let in_popover = |id: native_docking::DockId| {
+                auto_hide_popovers.borrow().get(&id)
+                    .is_some_and(|popover| popover.is_visible())
+            };
+            #[cfg(not(target_os = "linux"))]
+            let in_popover = |_id: native_docking::DockId| false;
             let selected_left = if tab_mode.get() == Page::Code {
                 if active_side_tab.get() == 1 {
                     native_docking::DockId::Search
@@ -2280,30 +2293,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             };
             let left_open = layout.visible(selected_left, active.get())
                 && !floating_windows.borrow().contains_key(&selected_left)
+                && !in_popover(selected_left)
                 && layout.section(selected_left).is_some_and(|s| s.zone == native_docking::DockZone::Left);
             let right_solution = layout.section(native_docking::DockId::Solution)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Solution, active.get())
-                && !floating_windows.borrow().contains_key(&native_docking::DockId::Solution);
+                && !floating_windows.borrow().contains_key(&native_docking::DockId::Solution)
+                && !in_popover(native_docking::DockId::Solution);
             let right_properties = layout.section(native_docking::DockId::Properties)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Properties, active.get())
-                && !floating_windows.borrow().contains_key(&native_docking::DockId::Properties);
+                && !floating_windows.borrow().contains_key(&native_docking::DockId::Properties)
+                && !in_popover(native_docking::DockId::Properties);
             let has_right_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Right
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id));
+                    && !floating_windows.borrow().contains_key(id)
+                    && !in_popover(*id));
             let has_left_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Left
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id));
+                    && !floating_windows.borrow().contains_key(id)
+                    && !in_popover(*id));
             let has_bottom_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Bottom
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id));
+                    && !floating_windows.borrow().contains_key(id)
+                    && !in_popover(*id));
             let right_open = right_solution || right_properties || has_right_guests;
             let bottom_open = has_bottom_guests || [
                 native_docking::DockId::Output,
@@ -2314,7 +2333,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             ].iter().any(|id| layout.section(*id).is_some_and(|s|
                 s.zone == native_docking::DockZone::Bottom)
                 && layout.visible(*id, active.get())
-                && !floating_windows.borrow().contains_key(id));
+                && !floating_windows.borrow().contains_key(id)
+                    && !in_popover(*id));
             let remembered = sizes.get();
             #[cfg(target_os = "linux")]
             {
@@ -2333,11 +2353,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 ].iter().any(|id| layout.section(*id).is_some_and(|s|
                     s.zone == native_docking::DockZone::Bottom)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id));
+                    && !floating_windows.borrow().contains_key(id)
+                    && !in_popover(*id));
                 bottom_pages.native_widget().set_visible(bottom_original_visible);
                 for (id, widget) in &dock_widgets {
                     widget.set_visible(layout.visible(*id, active.get())
-                        || floating_windows.borrow().contains_key(id));
+                        || floating_windows.borrow().contains_key(id)
+                        || in_popover(*id));
                 }
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
@@ -2369,6 +2391,48 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     #[cfg(target_os = "linux")]
     *dock_refresh_hook.borrow_mut() = Some(refresh_docks.clone());
     refresh_docks();
+    #[cfg(target_os = "linux")]
+    let show_auto_hide: Rc<dyn Fn(native_docking::DockId, gtk4::Widget)> = {
+        use gtk4::prelude::*;
+        let model = dock_model.clone();
+        let widgets = dock_widgets.clone();
+        let popovers = auto_hide_popovers.clone();
+        let route = route_dock.clone();
+        let refresh = refresh_docks.clone();
+        let active = active_dock.clone();
+        Rc::new(move |id, anchor| {
+            if model.borrow().section(id).is_some_and(|s| s.pinned) { return; }
+            let Some((_, widget)) = widgets.iter().find(|(entry, _)| *entry == id) else {
+                return;
+            };
+            let zone = model.borrow().section(id).map(|s| s.zone)
+                .unwrap_or(id.default_zone());
+            let position = match zone {
+                native_docking::DockZone::Left => gtk4::PositionType::Right,
+                native_docking::DockZone::Right => gtk4::PositionType::Left,
+                native_docking::DockZone::Bottom => gtk4::PositionType::Top,
+            };
+            let old = popovers.borrow().get(&id).cloned();
+            let redock = {
+                let model = model.clone();
+                let route = route.clone();
+                let refresh = refresh.clone();
+                Rc::new(move || {
+                    let current = model.borrow().section(id).map(|s| s.zone)
+                        .unwrap_or(id.default_zone());
+                    route(id, current);
+                    refresh();
+                })
+            };
+            if let Some(popover) = native_dock_runtime::open_auto_hide(
+                &anchor, widget, old.as_ref(), position, redock,
+            ) {
+                popovers.borrow_mut().insert(id, popover);
+                active.set(None);
+                refresh();
+            }
+        })
+    };
     #[cfg(target_os = "linux")]
     {
         use gtk4::prelude::*;
