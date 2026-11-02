@@ -22,6 +22,9 @@ def check_startup(binary: Path, seconds: float = 5.0) -> None:
         env["GDK_BACKEND"] = "x11"
         env["GSETTINGS_BACKEND"] = "memory"
         env["LIBGL_ALWAYS_SOFTWARE"] = "1"
+        # Xvfb runners have no org.a11y.Bus service. Disable only the
+        # inaccessible test accessibility transport, not GTK warnings.
+        env["GTK_A11Y"] = "none"
         # Treat GTK parenting warnings (including "Tried to remove non-child")
         # as a startup failure instead of silently printing thousands of lines.
         env["G_DEBUG"] = "fatal-warnings"
