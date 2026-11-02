@@ -55,9 +55,9 @@ pub const MENUS: &[(&str, &[&str])] = &[
     ("Help", &["About Quark"]),
 ];
 
-/// Text-only vertical rail; upright glyphs fit in a narrow 18px gutter.
-pub const SIDE_RAIL_WIDTH: f64 = 26.0;
-pub const SIDE_TAB_HEIGHTS: [f64; 3] = [100.0, 90.0, 70.0];
+/// Comfortable native tool-rail labels with a separate selection indicator.
+pub const SIDE_RAIL_WIDTH: f64 = 42.0;
+pub const SIDE_TAB_HEIGHTS: [f64; 3] = [118.0, 106.0, 86.0];
 pub const DESIGN_SIDE_TABS: [&str; 3] = ["TOOLBOX", "SERVER", "DATA"];
 pub const CODE_SIDE_TABS: [&str; 2] = ["SYMBOLS", "SEARCH"];
 
@@ -104,8 +104,8 @@ mod tests {
 
     #[test]
     fn side_rail_presets_are_compact_and_context_sensitive() {
-        assert_eq!(SIDE_RAIL_WIDTH, 26.0);
-        assert_eq!(SIDE_TAB_HEIGHTS, [100.0, 90.0, 70.0]);
+        assert_eq!(SIDE_RAIL_WIDTH, 42.0);
+        assert_eq!(SIDE_TAB_HEIGHTS, [118.0, 106.0, 86.0]);
         assert_eq!(DESIGN_SIDE_TABS, ["TOOLBOX", "SERVER", "DATA"]);
         assert_eq!(CODE_SIDE_TABS, ["SYMBOLS", "SEARCH"]);
         assert!(!CODE_SIDE_TABS.contains(&"TOOLBOX"));
