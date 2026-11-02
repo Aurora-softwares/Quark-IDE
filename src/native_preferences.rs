@@ -1,111 +1,11 @@
-//! Persistent preferences for the native GTK Quark frontend.
-//! Keep application preferences separate from workspace and docking state.
+//! GTK platform settings editor backed by the cross-platform preferences schema.
 use gtk4::prelude::*;
-use serde::{Deserialize, Serialize};
-use std::{
-    cell::RefCell,
-    fs,
-    path::{Path, PathBuf},
-    rc::Rc,
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
+pub use crate::native_settings::{
+    load, Appearance, Build, Debugging, Editor, Hydrogen, Preferences, ThemeChoice,
 };
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Preferences {
-    pub appearance: Appearance,
-    pub editor: Editor,
-    pub debugging: Debugging,
-    pub build: Build,
-    pub hydrogen: Hydrogen,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Appearance {
-    pub theme: ThemeChoice,
-    pub compact_controls: bool,
-}
-impl Default for Appearance {
-    fn default() -> Self {
-        Self {
-            theme: ThemeChoice::System,
-            compact_controls: false,
-        }
-    }
-}
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ThemeChoice {
-    #[default]
-    System,
-    Light,
-    Dark,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Editor {
-    pub tab_width: u8,
-    pub show_line_numbers: bool,
-    pub word_wrap: bool,
-}
-impl Default for Editor {
-    fn default() -> Self {
-        Self {
-            tab_width: 4,
-            show_line_numbers: true,
-            word_wrap: false,
-        }
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Debugging {
-    pub stop_on_exception: bool,
-    pub show_debug_output: bool,
-}
-impl Default for Debugging {
-    fn default() -> Self {
-        Self {
-            stop_on_exception: true,
-            show_debug_output: true,
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Hydrogen {
-    /// Absolute executable selected by the user; None enables automatic
-    /// QUARK_HYDROGEN_COMPILER / PATH discovery.
-    pub executable: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
-pub struct Build {
-    pub save_before_build: bool,
-    pub show_output: bool,
-}
-impl Default for Build {
-    fn default() -> Self {
-        Self {
-            save_before_build: true,
-            show_output: true,
-        }
-    }
-}
-pub fn load(path: &Path) -> Preferences {
-    fs::read(path)
-        .ok()
-        .and_then(|data| serde_json::from_slice::<Preferences>(&data).ok())
-        .unwrap_or_default()
-}
-fn save(path: &Path, preferences: &Preferences) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    let bytes = serde_json::to_vec_pretty(preferences).map_err(|error| error.to_string())?;
-    let temp = path.with_extension("json.tmp");
-    fs::write(&temp, bytes).map_err(|error| error.to_string())?;
-    fs::rename(&temp, path).map_err(|error| error.to_string())
+fn save(path: &std::path::Path, preferences: &Preferences) -> Result<(), String> {
+    crate::native_settings::save(path, preferences)
 }
 pub fn apply_theme(preferences: &Preferences) {
     if let Some(settings) = gtk4::Settings::default() {
@@ -204,22 +104,51 @@ pub fn show(path: PathBuf) {
     heading(
         &editor,
         "Editor",
-        "Editor behaviour will become configurable as native editing features are integrated.",
+        "Editor preferences apply to newly opened native source editors.",
     );
     let line_numbers = checkbox(
         &editor,
-        "Show line numbers (planned)",
+        "Show line numbers",
         preferences.editor.show_line_numbers,
-        false,
+        true,
     );
-    line_numbers.set_tooltip_text(Some("Not yet connected to the native code editor."));
-    let wrap = checkbox(
-        &editor,
-        "Word wrap (planned)",
-        preferences.editor.word_wrap,
-        false,
-    );
-    wrap.set_tooltip_text(Some("Not yet connected to the native code editor."));
+    {
+        let state = state.clone();
+        let path = path.clone();
+        line_numbers.connect_toggled(move |button| {
+            state.borrow_mut().editor.show_line_numbers = button.is_active();
+            if let Err(error) = save(&path, &state.borrow()) {
+                eprintln!("Quark: could not save editor preference: {error}");
+            }
+        });
+    }
+    let wrap = checkbox(&editor, "Word wrap", preferences.editor.word_wrap, true);
+    {
+        let state = state.clone();
+        let path = path.clone();
+        wrap.connect_toggled(move |button| {
+            state.borrow_mut().editor.word_wrap = button.is_active();
+            if let Err(error) = save(&path, &state.borrow()) {
+                eprintln!("Quark: could not save editor preference: {error}");
+            }
+        });
+    }
+    let tab_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    tab_row.append(&gtk4::Label::new(Some("Tab width (1–16)")));
+    let tab_width = gtk4::SpinButton::with_range(1.0, 16.0, 1.0);
+    tab_width.set_value(f64::from(preferences.editor.tab_width));
+    {
+        let state = state.clone();
+        let path = path.clone();
+        tab_width.connect_value_changed(move |spin| {
+            state.borrow_mut().editor.tab_width = spin.value_as_int() as u8;
+            if let Err(error) = save(&path, &state.borrow()) {
+                eprintln!("Quark: could not save tab width: {error}");
+            }
+        });
+    }
+    tab_row.append(&tab_width);
+    editor.append(&tab_row);
     notebook.append_page(&editor, Some(&gtk4::Label::new(Some("Editor"))));
 
     let debugging = section();
@@ -242,20 +171,40 @@ pub fn show(path: PathBuf) {
     heading(
         &build,
         "Build & Run",
-        "Build preferences will be enabled when they are connected to the build runner.",
+        "Changes take effect on the next build or run.",
     );
-    checkbox(
+    let save_before = checkbox(
         &build,
         "Save modified files before building",
         preferences.build.save_before_build,
-        false,
+        true,
     );
-    checkbox(
+    {
+        let state = state.clone();
+        let path = path.clone();
+        save_before.connect_toggled(move |button| {
+            state.borrow_mut().build.save_before_build = button.is_active();
+            if let Err(error) = save(&path, &state.borrow()) {
+                eprintln!("Quark: could not save build preference: {error}");
+            }
+        });
+    }
+    let show_output = checkbox(
         &build,
         "Show output after building",
         preferences.build.show_output,
-        false,
+        true,
     );
+    {
+        let state = state.clone();
+        let path = path.clone();
+        show_output.connect_toggled(move |button| {
+            state.borrow_mut().build.show_output = button.is_active();
+            if let Err(error) = save(&path, &state.borrow()) {
+                eprintln!("Quark: could not save build preference: {error}");
+            }
+        });
+    }
     notebook.append_page(&build, Some(&gtk4::Label::new(Some("Build & Run"))));
 
     let hydrogen = section();
