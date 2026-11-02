@@ -2462,36 +2462,52 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         );
     }
 
-    // Detached GTK windows retain the original live tool widget. Closing
-    // one reattaches it to the last saved docking zone without rebuilding.
+    // Every registered tool can float without duplicating its native widget.
+    // Closing it redocks to the last saved zone; Reset Layout closes detached
+    // windows before restoring the default host arrangement.
+    #[cfg(target_os = "linux")]
+    let floating_windows: Rc<RefCell<std::collections::HashMap<
+        native_docking::DockId, gtk4::Window,
+    >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
     #[cfg(target_os = "linux")]
     {
         use naui::Widget as _;
-        let floating = Rc::new(RefCell::new(std::collections::HashSet::new()));
         for (id, header, widget) in [
             (native_docking::DockId::Toolbox, &toolbox_controls, toolbox.native_widget()),
+            (native_docking::DockId::Symbols, &symbols_controls, symbols_section.native_widget()),
+            (native_docking::DockId::Search, &search_controls, code_search_view.native_widget()),
+            (native_docking::DockId::Server, &server_controls, server_view.native_widget()),
+            (native_docking::DockId::Data, &data_controls, data_view.native_widget()),
             (native_docking::DockId::Solution, &solution_controls, solution_pane.native_widget()),
             (native_docking::DockId::Properties, &properties_controls, properties_pane.native_widget()),
+            (native_docking::DockId::Output, &output_page_controls, output_section.native_widget()),
+            (native_docking::DockId::ErrorList, &error_controls, error_section.native_widget()),
+            (native_docking::DockId::Debug, &debug_controls, debug_section.native_widget()),
+            (native_docking::DockId::TestResults, &test_controls, test_section.native_widget()),
+            (native_docking::DockId::FindResults, &find_controls, find_section.native_widget()),
         ] {
             let model = dock_model.clone();
             let route = route_dock.clone();
             let refresh = refresh_docks.clone();
-            let open = floating.clone();
+            let open = floating_windows.clone();
             let status = status.clone();
             header.float.on_click(move || {
-                if !open.borrow_mut().insert(id) {
-                    status.set_text("This tool already has a floating window.");
+                if let Some(existing) = open.borrow().get(&id) {
+                    use gtk4::prelude::*;
+                    existing.present();
                     return;
                 }
                 let source_zone = model.borrow().section(id).map(|section| section.zone)
                     .unwrap_or(id.default_zone());
                 let redock = {
-                    let open = open.clone();
+                    let open = Rc::downgrade(&open);
                     let route = route.clone();
                     let refresh = refresh.clone();
                     let status = status.clone();
                     Rc::new(move |id: native_docking::DockId| {
-                        open.borrow_mut().remove(&id);
+                        if let Some(open) = open.upgrade() {
+                            open.borrow_mut().remove(&id);
+                        }
                         if route(id, source_zone) {
                             refresh();
                             status.set_text(&format!("{} docked again.", id.title()));
@@ -2500,17 +2516,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         }
                     })
                 };
-                if native_dock_runtime::float_panel(id, &widget, redock).is_some() {
+                if let Some(window) = native_dock_runtime::float_panel(id, &widget, redock) {
+                    open.borrow_mut().insert(id, window);
                     status.set_text(&format!("{} detached to a native window.", id.title()));
                 } else {
-                    open.borrow_mut().remove(&id);
                     status.set_text("Cannot detach this tool from its current host.");
                 }
             });
         }
-        // The bottom output group has several independently selected pages;
-        // do not detach that entire composite until every page has its own
-        // dock host and header.
+        // The composite toolbar is not itself a tool; Output has its own
+        // independently movable and floatable section below the toolbar.
         output_controls.float.set_enabled(false);
     }
 
@@ -2678,6 +2693,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let dock_path = dock_path.clone();
         let active_dock = active_dock.clone();
         #[cfg(target_os = "linux")]
+        let floating_windows = floating_windows.clone();
+        #[cfg(target_os = "linux")]
+        let route_dock = route_dock.clone();
+        #[cfg(target_os = "linux")]
         let inspector = inspector.clone();
         #[cfg(target_os = "linux")]
         let solution_pane = solution_pane.clone();
@@ -2701,6 +2720,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let new_layout = native_docking::DockLayout::default();
             #[cfg(target_os = "linux")]
             {
+                use gtk4::prelude::*;
+                // Close detached tools first so they have a valid native host.
+                let windows = floating_windows.borrow().values().cloned().collect::<Vec<_>>();
+                for window in windows { window.close(); }
+                // Restore every live panel to its original native parent.
+                for id in native_docking::DockId::ALL {
+                    if id == native_docking::DockId::Solution
+                        || id == native_docking::DockId::Properties { continue; }
+                    route_dock(id, id.default_zone());
+                }
                 apply_right_dock_order(
                     &inspector, &solution_pane, &properties_pane, false,
                 );
