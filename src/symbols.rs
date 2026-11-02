@@ -44,6 +44,47 @@ enum Scope {
     Other,
 }
 
+/// Hydrogen uses identifiers for return types, member types and user-defined
+/// types. Ignore control-flow and declaration modifiers to avoid reporting
+/// expressions such as "return Call()" as function definitions.
+fn identifier(token: &str) -> bool {
+    token.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+        && token.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+fn possible_type(token: &str) -> bool {
+    identifier(token)
+        && !matches!(
+            token,
+            "return" | "throw" | "yield" | "await" | "new" | "if" | "else"
+                | "while" | "for" | "foreach" | "switch" | "case" | "break"
+                | "continue" | "using" | "namespace" | "class" | "struct"
+                | "interface" | "enum" | "public" | "private" | "protected"
+                | "internal" | "static" | "readonly" | "const" | "virtual"
+                | "override" | "abstract" | "async"
+        )
+}
+
+fn has_method_body(tokens: &[&str], open_paren: usize) -> bool {
+    let mut depth = 0_usize;
+    for token in tokens.iter().skip(open_paren) {
+        match *token {
+            "(" => depth += 1,
+            ")" => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    // Method declarations may end in a semicolon (interfaces,
+                    // abstract methods) as well as opening a body.
+                    return true;
+                }
+            }
+            "{" | ";" if depth == 0 => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
 /// Each declaration becomes a selectable item under its namespace and any
 /// containing types. Files without type declarations appear under namespace.
 pub fn add_source(outline: &mut SymbolNode, path: &Path, source: &str) {
@@ -159,7 +200,48 @@ pub fn add_source(outline: &mut SymbolNode, path: &Path, source: &str) {
             ";" => {
                 pending = None;
             }
-            _ => {}
+            _ => {
+                // Recognise typed fields, locals and callable declarations.
+                // This is an outline, not a semantic symbol table: the
+                // compiler handles overloads, type resolution and references.
+                if possible_type(tokens[idx])
+                    && tokens.get(idx + 1).is_some_and(|next| identifier(next))
+                {
+                    let following = tokens.get(idx + 2).copied();
+                    let scope = {
+                        let mut path = namespace.clone();
+                        path.extend(types.iter().cloned());
+                        path
+                    };
+                    let kind = if following == Some("(")
+                        && has_method_body(&tokens, idx + 2)
+                    {
+                        Some(if types.is_empty() { "function" } else { "method" })
+                    } else if matches!(following, Some("=" | ";" | ","))
+                        && (!stack.is_empty() || !types.is_empty())
+                    {
+                        Some(if types.is_empty() || stack.iter().any(|scope| matches!(scope, Scope::Other)) {
+                            "variable"
+                        } else {
+                            "field"
+                        })
+                    } else {
+                        None
+                    };
+                    if let Some(kind) = kind {
+                        outline.add(
+                            &scope,
+                            SymbolItem {
+                                name: tokens[idx + 1].to_owned(),
+                                path: path.to_path_buf(),
+                                kind,
+                            },
+                        );
+                        found_type = true;
+                        idx += 1;
+                    }
+                }
+            }
         }
         idx += 1;
     }
@@ -183,6 +265,36 @@ pub fn add_source(outline: &mut SymbolNode, path: &Path, source: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn outline_exposes_members_functions_and_local_variables_in_open_source() {
+        let mut tree = SymbolNode::default();
+        add_source(
+            &mut tree,
+            Path::new("Program.hy"),
+            "namespace App { class Program { int count; void Run() { int local = 3; } } void Utility() {} }",
+        );
+        let app = &tree.branches["App"];
+        assert!(app.items.iter().any(|item| item.name == "Program" && item.kind == "class"));
+        assert!(app.items.iter().any(|item| item.name == "Utility" && item.kind == "function"));
+        let members = &app.branches["Program"].items;
+        assert!(members.iter().any(|item| item.name == "count" && item.kind == "field"));
+        assert!(members.iter().any(|item| item.name == "Run" && item.kind == "method"));
+        assert!(members.iter().any(|item| item.name == "local" && item.kind == "variable"));
+    }
+
+    #[test]
+    fn outline_does_not_treat_calls_comments_or_strings_as_declarations() {
+        let mut tree = SymbolNode::default();
+        add_source(
+            &mut tree,
+            Path::new("Program.hy"),
+            "class Program { void Main() { // int Fake;\n string message = \"void Hidden() {}\"; return Call(); } }",
+        );
+        let members = &tree.branches["Program"].items;
+        assert!(members.iter().any(|item| item.name == "Main"));
+        assert!(!members.iter().any(|item| item.name == "Fake" || item.name == "Hidden" || item.name == "Call"));
+    }
+
     #[test]
     fn groups_namespace_and_class() {
         let mut tree = SymbolNode::default();
