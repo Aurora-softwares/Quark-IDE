@@ -44,12 +44,11 @@ A selected host Hydrogen compiler is used to build an Australis `.hyproj`. The A
 - GTK Editor preferences and portable Editor/Build controls can be saved. GTK word wrapping is applied on editor construction. **Dynamic wrap updates, accurate gutter line-number visibility, tab-width rendering, and full portable UI parity remain unfinished.**
 - These commits require CI and manual platform smoke before being described as validated. They do not complete #88, #91, #92, #93 or #94.
 
-## Terminal and startup smoke work (branch agent/terminal-vt100-native-20261102)
+## GTK editor preference refinements (branch agent/native-editor-preferences-live-20261102)
 
-- Shared native terminal output now uses an actual VT100 cell Canvas instead of a flattened ANSI-stripped label, with dark palette, per-cell foreground/background, 16/256/RGB colours, cursor, underlines, inverse/dim/bold, wide characters and alternate-screen state; GTK, AppKit and WinUI use the same renderer.
-- Explicit History/Live controls scroll the parser's retained screen; PTY resize messages resize both the VT100 grid and its canvas. Mac/Windows **direct keyboard event forwarding** and clipboard selection are **still unfinished**, so issue #92 remains open.
-- `scripts/native-startup-smoke.py` with Xvfb adds a bounded real GTK process lifetime check to the Linux native CI job. It does not click through the IDE or verify the macOS/Windows native windows. Issue #94 is still open until its GUI interaction matrix is verified.
-- This branch must pass CI across all runners and native visual testing before integration.
+- GTK now sets actual Pango tab stops from Editor tab-width preferences (bounded 1–16) rather than persisting the value without applying it.
+- An editor-owned weak-widget timer checks the shared preferences for changes and reapplies wrapping and tab stops without requiring an editor reload; it stops when the view is destroyed. Syntax highlighting remains theme-aware.
+- Accurate scroll-synced line number gutters, direct AppKit/WinUI editor options and complete Settings parity still require implementation and visual review. This work does **not** close #93.
 
 ## Required checks before any Release merge
 

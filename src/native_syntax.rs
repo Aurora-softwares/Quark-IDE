@@ -205,21 +205,53 @@ fn apply_highlight(buffer: &gtk4::TextBuffer, xml: bool) {
     }
 }
 
-/// Apply persisted editor preferences to the actual GTK text view.
+/// GTK TextView's tab stops are pixel positions. The source editor uses a
+/// monospaced 8px base cell for default text scaling and repeats that width.
+fn editor_tab_stops(width: u8) -> gtk4::pango::TabArray {
+    let mut stops = gtk4::pango::TabArray::new(1, true);
+    stops.set_tab(
+        0,
+        gtk4::pango::TabAlign::Left,
+        i32::from(width.clamp(1, 16)) * 8,
+    );
+    stops
+}
+
+fn configure_editor(view: &gtk4::TextView, preferences: &crate::native_settings::Editor) {
+    view.set_wrap_mode(if preferences.word_wrap {
+        gtk4::WrapMode::WordChar
+    } else {
+        gtk4::WrapMode::None
+    });
+    view.set_accepts_tab(true);
+    view.set_tabs(&editor_tab_stops(preferences.tab_width));
+}
+
+/// Apply saved wrapping/tab stops initially, then reload if Settings changes
+/// while the editor is open. The weak TextView ends polling on window close.
 pub fn apply_editor_preferences(
     area: &naui::TextArea,
     preferences: &crate::native_settings::Editor,
 ) {
-    if let Some(view) = text_view(&area.native_widget()) {
-        view.set_wrap_mode(if preferences.word_wrap {
-            gtk4::WrapMode::WordChar
-        } else {
-            gtk4::WrapMode::None
-        });
-        view.set_property("accepts-tab", true);
-        // A tab stop remains an explicit formatting preference for future
-        // source indentation; it does not rewrite existing document contents.
-    }
+    let Some(view) = text_view(&area.native_widget()) else {
+        return;
+    };
+    configure_editor(&view, preferences);
+    let view = view.downgrade();
+    let mut previous = preferences.clone();
+    gtk4::glib::timeout_add_local(std::time::Duration::from_millis(400), move || {
+        let Some(view) = view.upgrade() else {
+            return gtk4::glib::ControlFlow::Break;
+        };
+        let file = crate::workspace_file().with_file_name("native-preferences.json");
+        if let Ok(next) = crate::native_settings::try_load(&file) {
+            if next.editor != previous {
+                configure_editor(&view, &next.editor);
+                previous = next.editor;
+            }
+        }
+        gtk4::glib::ControlFlow::Continue
+    });
 }
 
 pub fn install(area: &naui::TextArea, xml: bool) {
@@ -243,6 +275,14 @@ pub fn install(area: &naui::TextArea, xml: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn editor_tab_width_controls_actual_pango_tab_stop() {
+        assert_eq!(editor_tab_stops(4).tab(0).1, 32);
+        assert_eq!(editor_tab_stops(8).tab(0).1, 64);
+        assert_eq!(editor_tab_stops(0).tab(0).1, 8);
+        assert_eq!(editor_tab_stops(100).tab(0).1, 128);
+    }
+
     #[test]
     fn xml_highlights_tag_attributes_and_escaped_strings() {
         let spans = xml_spans("<Window title=\"Hello &amp; world\" width='800'/>");
