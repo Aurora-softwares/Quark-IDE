@@ -621,6 +621,10 @@ fn run_task(
         std::num::NonZeroU16::new(180).unwrap(),
         2000,
     )));
+    // Plain stdout/stderr pipes do not perform the terminal ONLCR
+    // translation. Without this, VT100 LF preserves the previous column:
+    // 'Compiled N methods' lines form a diagonal across the window.
+    let pipe_endings = Rc::new(RefCell::new(native_console::PipeLineEndings::default()));
     let had_chunks = Rc::new(Cell::new(false));
     let sender = ui.tasks().channel(move |event: BuildEvent| {
         if !ACTIVE_BUILD_JOB.with(|active| active.get() == job_id) {
@@ -634,7 +638,7 @@ fn run_task(
                 had_chunks.set(true);
                 let rendered = {
                     let mut parser = parser.borrow_mut();
-                    parser.process(&bytes);
+                    parser.process(&pipe_endings.borrow_mut().normalize(&bytes));
                     parser.screen().contents_formatted_basic()
                 };
                 // Redraw the *same* viewport on every chunk. Do not append a
