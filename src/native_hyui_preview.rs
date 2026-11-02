@@ -95,7 +95,10 @@ mod tests {
         assert_eq!(args[2], "--source");
         assert_eq!(args[4..], ["--compiler", "hydrogen-stage1"]);
         let canonical_directory = directory.path().canonicalize().unwrap();
-        assert_eq!(process.get_current_dir(), Some(canonical_directory.as_path()));
+        assert_eq!(
+            process.get_current_dir(),
+            Some(canonical_directory.as_path())
+        );
     }
 
     #[test]
