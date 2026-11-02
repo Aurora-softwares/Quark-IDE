@@ -725,6 +725,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if kind.category() == category {
                 let button = ui.button(kind.title())?;
                 button.set_sizing(Sizing::fill_width());
+                #[cfg(target_os = "linux")]
+                {
+                    use gtk4::prelude::*;
+                    use naui::Widget as _;
+                    button.native_widget().set_tooltip_text(Some(
+                        "Select this control, then click the visual design surface to place it.",
+                    ));
+                }
                 toolbox_items.append(&button);
                 toolbox_buttons.push((kind, button));
             }
@@ -839,6 +847,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             }
         });
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let hint = match index {
+                0 => "Toolbox or Symbols",
+                1 => "Server Explorer or Search",
+                _ => "Data Sources",
+            };
+            tab.native_widget().set_tooltip_text(Some(hint));
+        }
         left_rail.append(&tab);
         side_tabs.push(tab);
     }
@@ -954,6 +973,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     design_surface.set_row_track(1, Track::FILL);
     let design_heading = ui.label("DESIGN")?;
     design_surface.attach(&design_heading, GridCell::new(0, 0));
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        design_heading.native_widget().set_tooltip_text(Some(
+            "Click the preview window frame or a diamond handle to select it. \
+             Edit the selected element in Properties or switch to XML Source.",
+        ));
+    }
     let canvas = ui.canvas()?;
     canvas.set_sizing(Sizing::fill());
     let canvas_width = Rc::new(Cell::new(0.0_f64));
@@ -979,6 +1007,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     xml_visual_tab.on_pointer({
         let designer = designer.clone();
         let design_surface = design_surface.clone();
+        let reload_preview = reload_preview.clone();
         let design_mode = design_mode.clone();
         let visual_tab = xml_visual_tab.clone();
         let source_tab = xml_text_tab.clone();
@@ -987,6 +1016,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 design_mode.set(true);
                 designer.clear();
                 designer.append(&design_surface);
+                if let Some(refresh) = reload_preview.borrow().as_ref() {
+                    refresh();
+                }
                 visual_tab.redraw();
                 source_tab.redraw();
             }
@@ -1431,6 +1463,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             }
         });
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            tab.native_widget().set_tooltip_text(Some(
+                if index == 0 {
+                    "Focus Solution Explorer; drag the divider to resize."
+                } else {
+                    "Focus Properties; drag the divider to resize."
+                },
+            ));
+        }
         right_rail.append(&tab);
         right_tabs.push(tab);
     }
@@ -1653,6 +1697,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let design_tabs = design_tabs.clone();
         let design_mode = design_mode.clone();
         let design_surface = design_surface.clone();
+        let reload_preview = reload_preview.clone();
         let xml_visual_tab = xml_visual_tab.clone();
         let xml_text_tab = xml_text_tab.clone();
         let tab_mode = tab_mode.clone();
