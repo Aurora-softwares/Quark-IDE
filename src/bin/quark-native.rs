@@ -1938,8 +1938,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             refresh();
         }
     });
-    let debug_view = ui.label("No debugger attached")?;
+    let debug_view = ui.label("No debugger attached. Debug output will appear here when a native debugger session is available.")?;
+    let debug_scroll = ui.scroll()?;
+    debug_scroll.set_sizing(Sizing::fill());
+    debug_scroll.set_child(&debug_view);
     let tests_view = ui.label("No test run selected")?;
+    let test_scroll = ui.scroll()?;
+    test_scroll.set_sizing(Sizing::fill());
+    test_scroll.set_child(&tests_view);
     let find_view = ui.label("No search results")?;
     // The Terminal is not a shell command executor: its lifetime is a native
     // PTY session shared by GTK, AppKit and WinUI. Linux also feeds keypresses
@@ -1979,10 +1985,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     error_section.append(&errors_view);
     let (debug_section, debug_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Debug)?;
-    debug_section.append(&debug_view);
+    debug_section.append(&debug_scroll);
     let (test_section, test_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::TestResults)?;
-    test_section.append(&tests_view);
+    test_section.append(&test_scroll);
     let (find_section, find_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::FindResults)?;
     find_section.append(&find_view);
@@ -2012,6 +2018,26 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
         bottom_pages.native_widget().set_vexpand(true);
         output_scroll.native_widget().set_vexpand(true);
+        for scroller in [&output_scroll, &debug_scroll, &test_scroll, &terminal_scroll] {
+            let view = scroller.native_widget();
+            view.add_css_class("quark-terminal-surface");
+            view.set_vexpand(true);
+            if let Ok(scroll) = view.downcast::<gtk4::ScrolledWindow>() {
+                scroll.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
+                scroll.vadjustment().set_step_increment(18.0);
+            }
+        }
+        for label in [&output, &debug_view, &tests_view, &terminal_output] {
+            if let Ok(text) = label.native_widget().downcast::<gtk4::Label>() {
+                text.set_xalign(0.0);
+                text.set_yalign(0.0);
+                text.set_valign(gtk4::Align::Start);
+                text.set_halign(gtk4::Align::Start);
+                text.set_wrap(false);
+                text.set_selectable(false);
+                text.add_css_class("quark-console-output");
+            }
+        }
         if let Ok(scroller) = output_scroll
             .native_widget()
             .downcast::<gtk4::ScrolledWindow>()
@@ -2034,7 +2060,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         if let Some(display) = gtk4::gdk::Display::default() {
             let provider = gtk4::CssProvider::new();
             provider.load_from_data(
-                ".quark-console-output { font-family: monospace; font-size: 12px; color: @theme_fg_color; }                  .quark-bottom-tabs { border-bottom: 1px solid alpha(@theme_fg_color, 0.16); }"
+                ".quark-console-output {
+                    font-family: monospace; font-size: 12px; color: #d9e1eb;
+                    background: #10141c; padding: 8px;
+                 }
+                 .quark-terminal-surface, .quark-terminal-surface text {
+                    background: #10141c; color: #d9e1eb;
+                 }
+                 .quark-bottom-tabs {
+                    border-bottom: 1px solid alpha(@theme_fg_color, 0.18);
+                 }"
             );
             gtk4::style_context_add_provider_for_display(
                 &display,
@@ -3488,7 +3523,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let properties_pane = properties_pane.clone();
         #[cfg(target_os = "linux")]
         let bottom_tabs = bottom_tabs.clone();
-        #[cfg(target_os = "linux")]
         #[cfg(target_os = "linux")]
         let bottom_buttons = [
             (native_docking::DockId::Output, output_tab.clone()),
