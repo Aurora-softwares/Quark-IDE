@@ -11,6 +11,7 @@ use std::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Task {
     Build,
+    Check,
     Rebuild,
     Clean,
     RunWithoutDebugging,
@@ -21,6 +22,7 @@ impl Task {
     pub fn label(self) -> &'static str {
         match self {
             Self::Build => "Build Solution",
+            Self::Check => "Check Solution",
             Self::Rebuild => "Rebuild Solution",
             Self::Clean => "Clean Solution",
             Self::RunWithoutDebugging => "Start Without Debugging",
@@ -199,23 +201,23 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                     })
                 })
         }
-        Task::Build | Task::Rebuild | Task::RunWithoutDebugging => {
+        Task::Build | Task::Check | Task::Rebuild | Task::RunWithoutDebugging => {
             if task == Task::Rebuild {
                 if let Err(error) = clean_generated(&plan) {
                     return ResultLog::error(format!("Rebuild could not clean outputs: {error}"));
                 }
             }
-            let args = if task == Task::RunWithoutDebugging {
-                vec!["run".into(), project.to_string_lossy().into_owned()]
-            } else {
-                plan.args.clone()
+            let args = match task {
+                Task::RunWithoutDebugging => vec!["run".into(), project.to_string_lossy().into_owned()],
+                Task::Check => vec!["check".into(), project.to_string_lossy().into_owned()],
+                _ => plan.args.clone(),
             };
             let output_parent = if plan.output_is_directory {
                 &plan.output
             } else {
                 plan.output.parent().unwrap_or_else(|| Path::new("."))
             };
-            if task != Task::RunWithoutDebugging {
+            if !matches!(task, Task::RunWithoutDebugging | Task::Check) {
                 if let Err(error) = fs::create_dir_all(output_parent) {
                     return ResultLog::error(format!("Cannot create build directory: {error}"));
                 }
@@ -228,10 +230,10 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                 Ok(process) => {
                     let message = format!(
                         "Hydrogen {} {}\n{}\n{}\nProcess exit code: {}",
-                        if task == Task::RunWithoutDebugging {
-                            "run"
-                        } else {
-                            "build"
+                        match task {
+                            Task::RunWithoutDebugging => "run",
+                            Task::Check => "check",
+                            _ => "build",
                         },
                         project.display(),
                         String::from_utf8_lossy(&process.stdout),
