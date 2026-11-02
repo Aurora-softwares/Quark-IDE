@@ -2243,6 +2243,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             (native_docking::DockId::FindResults, find_section.native_widget()),
         ]
     };
+    #[cfg(target_os = "linux")]
     let refresh_docks: Rc<dyn Fn()> = Rc::new({
         let model = dock_model.clone();
         let active = active_dock.clone();
@@ -2383,10 +2384,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
         }
     });
-    // Only narrow rail/header widths remain when a section is auto-hidden.
-    left_split.set_min_sizes(native_shell::SIDE_RAIL_WIDTH, 200.0);
-    main_workspace.set_min_sizes(300.0, native_shell::SIDE_RAIL_WIDTH);
-    document_workspace.set_min_sizes(160.0, 35.0);
+    // GTK auto-hide must not change AppKit or WinUI splitter geometry.
+    #[cfg(not(target_os = "linux"))]
+    let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
+    #[cfg(target_os = "linux")]
+    {
+        left_split.set_min_sizes(native_shell::SIDE_RAIL_WIDTH, 200.0);
+        main_workspace.set_min_sizes(300.0, native_shell::SIDE_RAIL_WIDTH);
+        document_workspace.set_min_sizes(160.0, 35.0);
+    }
     #[cfg(target_os = "linux")]
     {
         *dock_refresh_hook.borrow_mut() = Some(refresh_docks.clone());
