@@ -2218,6 +2218,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // pane visibility. Auto-hidden regions retain narrow native tab rails;
     // restoring one reads its last saved user size rather than overwriting it.
     #[cfg(target_os = "linux")]
+    let floating_windows: Rc<RefCell<std::collections::HashMap<
+        native_docking::DockId, gtk4::Window,
+    >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
+    #[cfg(target_os = "linux")]
     let dock_widgets = {
         use naui::Widget as _;
         [
@@ -2240,6 +2244,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_dock.clone();
         #[cfg(target_os = "linux")]
         let dock_widgets = dock_widgets.clone();
+        #[cfg(target_os = "linux")]
+        let floating_windows = floating_windows.clone();
         let sizes = pane_sizes.clone();
         let left_content = left_content.clone();
         #[cfg(target_os = "linux")]
@@ -2276,14 +2282,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 && layout.section(selected_left).is_some_and(|s| s.zone == native_docking::DockZone::Left);
             let right_solution = layout.section(native_docking::DockId::Solution)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
-                && layout.visible(native_docking::DockId::Solution, active.get());
+                && layout.visible(native_docking::DockId::Solution, active.get())
+                && !floating_windows.borrow().contains_key(&native_docking::DockId::Solution);
             let right_properties = layout.section(native_docking::DockId::Properties)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
-                && layout.visible(native_docking::DockId::Properties, active.get());
+                && layout.visible(native_docking::DockId::Properties, active.get())
+                && !floating_windows.borrow().contains_key(&native_docking::DockId::Properties);
             let has_right_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Right
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
-                    && layout.visible(*id, active.get()));
+                    && layout.visible(*id, active.get())
+                    && !floating_windows.borrow().contains_key(id));
             let has_left_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Left
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
@@ -2299,7 +2308,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 native_docking::DockId::Debug,
                 native_docking::DockId::TestResults,
                 native_docking::DockId::FindResults,
-            ].iter().any(|id| layout.visible(*id, active.get()));
+            ].iter().any(|id| layout.section(*id).is_some_and(|s|
+                s.zone == native_docking::DockZone::Bottom)
+                && layout.visible(*id, active.get()));
             let remembered = sizes.get();
             #[cfg(target_os = "linux")]
             {
@@ -2320,7 +2331,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     && layout.visible(*id, active.get()));
                 bottom_pages.native_widget().set_visible(bottom_original_visible);
                 for (id, widget) in &dock_widgets {
-                    widget.set_visible(layout.visible(*id, active.get()));
+                    widget.set_visible(layout.visible(*id, active.get())
+                        || floating_windows.borrow().contains_key(id));
                 }
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
@@ -2479,10 +2491,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Every registered tool can float without duplicating its native widget.
     // Closing it redocks to the last saved zone; Reset Layout closes detached
     // windows before restoring the default host arrangement.
-    #[cfg(target_os = "linux")]
-    let floating_windows: Rc<RefCell<std::collections::HashMap<
-        native_docking::DockId, gtk4::Window,
-    >>> = Rc::new(RefCell::new(std::collections::HashMap::new()));
+
     #[cfg(target_os = "linux")]
     {
         use naui::Widget as _;
@@ -2532,6 +2541,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 if let Some(window) = native_dock_runtime::float_panel(id, &widget, redock) {
                     open.borrow_mut().insert(id, window);
+                    refresh();
                     status.set_text(&format!("{} detached to a native window.", id.title()));
                 } else {
                     status.set_text("Cannot detach this tool from its current host.");
@@ -2951,7 +2961,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let symbols_section = symbols_section.clone();
         let server_view = server_view.clone();
         let data_view = data_view.clone();
-        let symbols_view = symbols_view.clone();
         let code_search_view = code_search_view.clone();
         let tab_mode = tab_mode.clone();
         move |index| {
