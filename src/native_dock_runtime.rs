@@ -149,6 +149,9 @@ pub fn open_auto_hide(
     if !detach(panel) { return None; }
     popover.set_child(Some(panel));
     popover.popup();
+    // The side rail uses a native drawing area rather than a MenuButton.
+    // Explicitly present the anchored popover after changing its contents.
+    popover.present();
     Some(popover)
 }
 
