@@ -542,10 +542,19 @@ fn set_console_text(label: &naui::Label, text: &str, palette: native_console::Pa
             return;
         }
     }
-    // AppKit/WinUI can display readable PTY text even before they gain
-    // native attributed-string colour rendering.
     let _ = palette;
     label.set_text(&native_console::remove_escape_sequences(text));
+}
+
+enum BuildEvent {
+    Chunk(Vec<u8>),
+    Finished(native_commands::ResultLog),
+}
+
+// The latest launched task owns the Output pane; earlier tasks may finish
+// in the background, but must not overwrite a newer build's progress.
+thread_local! {
+    static ACTIVE_BUILD_JOB: Cell<u64> = const { Cell::new(0) };
 }
 
 #[allow(clippy::too_many_arguments)] // UI control handles are intentionally passed together.
@@ -561,6 +570,11 @@ fn run_task(
     refresh_errors: Rc<dyn Fn()>,
     ui: Ui,
 ) {
+    let job_id = ACTIVE_BUILD_JOB.with(|active| {
+        let next = active.get().wrapping_add(1);
+        active.set(next);
+        next
+    });
     let project = state.borrow().workspace.selected.clone();
     let compiler = match native_compiler::resolve() {
         Ok(compiler) => compiler,
@@ -580,31 +594,71 @@ fn run_task(
         &format!("Running {}…", task.label()),
         native_console::Palette::Output,
     );
-    let sender = ui
-        .tasks()
-        .channel(move |result: native_commands::ResultLog| {
-            let parsed = problems::parse(&result.text, &project_dir);
-            let errors = parsed
-                .iter()
-                .filter(|item| item.severity == problems::Severity::Error)
-                .count();
-            let warnings = parsed.len() - errors;
-            error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
-            *current_errors.borrow_mut() = parsed;
-            refresh_errors();
-            set_console_text(&output, &result.text, native_console::Palette::Output);
-            if task == native_commands::Task::Test {
-                set_console_text(&test_output, &result.text, native_console::Palette::Tests);
+    // A real terminal parser, rather than appending raw lines, is essential:
+    // carriage returns, erase-in-line and spinner frames replace their own
+    // cell positions. It also buffers partial UTF-8 and ANSI sequences.
+    let parser = Rc::new(RefCell::new(vt100::Parser::new(
+        std::num::NonZeroU16::new(140).unwrap(),
+        std::num::NonZeroU16::new(180).unwrap(),
+        2000,
+    )));
+    let had_chunks = Rc::new(Cell::new(false));
+    let sender = ui.tasks().channel(move |event: BuildEvent| {
+        if !ACTIVE_BUILD_JOB.with(|active| active.get() == job_id) {
+            return;
+        }
+        match event {
+            BuildEvent::Chunk(bytes) => {
+                if bytes.is_empty() {
+                    return;
+                }
+                had_chunks.set(true);
+                let rendered = {
+                    let mut parser = parser.borrow_mut();
+                    parser.process(&bytes);
+                    parser.screen().contents_formatted_basic()
+                };
+                // Redraw the *same* viewport on every chunk. Do not append a
+                // newline when Hydrogen emits \r or cursor-control sequences.
+                set_console_text(&output, &rendered, native_console::Palette::Output);
             }
-            status.set_text(if result.success {
-                "Operation completed successfully"
-            } else {
-                "Operation failed — review Output and Error List"
-            });
-        });
+            BuildEvent::Finished(result) => {
+                let parsed = problems::parse(&result.text, &project_dir);
+                let errors = parsed
+                    .iter()
+                    .filter(|item| item.severity == problems::Severity::Error)
+                    .count();
+                let warnings = parsed.len() - errors;
+                error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
+                *current_errors.borrow_mut() = parsed;
+                refresh_errors();
+                if had_chunks.get() {
+                    let rendered = parser.borrow().screen().contents_formatted_basic();
+                    let outcome = if result.success { "completed successfully" } else { "failed" };
+                    set_console_text(
+                        &output,
+                        &format!("{rendered}\n\n{} {outcome}.", task.label()),
+                        native_console::Palette::Output,
+                    );
+                } else {
+                    set_console_text(&output, &result.text, native_console::Palette::Output);
+                }
+                if task == native_commands::Task::Test {
+                    set_console_text(&test_output, &result.text, native_console::Palette::Tests);
+                }
+                status.set_text(if result.success {
+                    "Operation completed successfully"
+                } else {
+                    "Operation failed — review Output and Error List"
+                });
+            }
+        }
+    });
     std::thread::spawn(move || {
-        let result = native_commands::run(task, &compiler, project.as_deref());
-        let _ = sender.send(result);
+        let result = native_commands::run_streaming(task, &compiler, project.as_deref(), |bytes| {
+            let _ = sender.send(BuildEvent::Chunk(bytes.to_vec()));
+        });
+        let _ = sender.send(BuildEvent::Finished(result));
     });
 }
 
