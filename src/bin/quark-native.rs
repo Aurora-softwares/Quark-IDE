@@ -1218,22 +1218,37 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 return;
             };
             let path = selected_xml_path.borrow().clone();
-            let Ok((kind, fields)) = native_ui_properties::properties(&xml, &path) else {
+            let Ok((kind, fields)) = native_ui_properties::available_properties(&xml, &path) else {
                 return;
             };
-            if let Ok(title) = ui.label(&format!("{kind} properties")) {
+            if let Ok(title) = ui.label(&format!("{kind} · Properties")) {
                 native_property_content.append(&title);
             }
-            for (name, current) in fields {
+            let mut last_group = "";
+            for field in fields {
+                if field.group != last_group {
+                    last_group = field.group;
+                    if let Ok(group_heading) = ui.label(last_group) {
+                        native_property_content.append(&group_heading);
+                    }
+                }
+                let name = field.name;
                 let Ok(row) = ui.stack(Orientation::Vertical) else {
                     continue;
                 };
                 row.set_spacing(2.0);
-                if let Ok(caption) = ui.label(&name) {
-                    row.append(&caption);
+                let caption = if field.explicitly_set {
+                    name.clone()
+                } else if field.default.is_empty() {
+                    format!("{name} · unset")
+                } else {
+                    format!("{name} · default: {}", field.default)
+                };
+                if let Ok(label) = ui.label(&caption) {
+                    row.append(&label);
                 }
-                if let Ok(value_field) = ui.text_input(&current) {
-                    let draft = Rc::new(RefCell::new(current));
+                if let Ok(value_field) = ui.text_input(&field.value) {
+                    let draft = Rc::new(RefCell::new(field.value));
                     value_field.on_change({
                         let draft = draft.clone();
                         move |next| *draft.borrow_mut() = next.to_owned()
