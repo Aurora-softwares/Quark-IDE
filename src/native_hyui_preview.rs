@@ -34,9 +34,8 @@ pub fn command(
         .arg(&layout)
         .current_dir(layout.parent().unwrap_or_else(|| Path::new(".")));
     if kind == PreviewKind::Application {
-        let project = project.ok_or(
-            "Open a Hydrogen .hyproj project to run UI events with the backend",
-        )?;
+        let project =
+            project.ok_or("Open a Hydrogen .hyproj project to run UI events with the backend")?;
         if project.extension().and_then(|value| value.to_str()) != Some("hyproj") {
             return Err("UI backend preview requires a Hydrogen .hyproj manifest".into());
         }
@@ -62,7 +61,10 @@ mod tests {
         let document = directory.path().join("Studio.hyui");
         std::fs::write(&document, "<Window version=\"1\"/>").unwrap();
         let process = command("hyui", &document, None, "", PreviewKind::Window).unwrap();
-        let args = process.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let args = process
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
         assert_eq!(args.len(), 2);
         assert_eq!(args[0], "--document");
         assert_eq!(args[1], document.display().to_string());
@@ -76,10 +78,17 @@ mod tests {
         std::fs::write(&document, "<Window version=\"1\"/>").unwrap();
         std::fs::write(&manifest, "format = 2").unwrap();
         let process = command(
-            "hyui", &document, Some(&manifest), "hydrogen-stage1",
+            "hyui",
+            &document,
+            Some(&manifest),
+            "hydrogen-stage1",
             PreviewKind::Application,
-        ).unwrap();
-        let args = process.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        )
+        .unwrap();
+        let args = process
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
         assert_eq!(args[2], "--source");
         assert_eq!(args[4..], ["--compiler", "hydrogen-stage1"]);
         assert_eq!(process.get_current_dir(), Some(directory.path()));
