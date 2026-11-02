@@ -172,6 +172,7 @@ pub fn save(path: &Path, preferences: &Preferences) -> Result<(), String> {
     crate::storage::atomic_write(path, &data).map_err(|error| error.to_string())
 }
 
+#[cfg(test)]
 pub fn update(path: &Path, change: impl FnOnce(&mut Preferences)) -> Result<Preferences, String> {
     let mut preferences = try_load(path)?;
     change(&mut preferences);
