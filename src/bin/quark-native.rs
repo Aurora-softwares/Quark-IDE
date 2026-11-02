@@ -522,6 +522,7 @@ fn run_task(
     error_list: naui::List,
     error_summary: naui::Label,
     current_errors: Rc<RefCell<Vec<problems::Problem>>>,
+    refresh_errors: Rc<dyn Fn()>,
     ui: Ui,
 ) {
     let project = state.borrow().workspace.selected.clone();
@@ -549,25 +550,8 @@ fn run_task(
                 .count();
             let warnings = parsed.len() - errors;
             error_summary.set_text(&format!("{errors} errors, {warnings} warnings"));
-            error_list.set_items(
-                &parsed
-                    .iter()
-                    .map(|item| {
-                        ListItem::new(format!(
-                            "{}: {}:{} — {}",
-                            if item.severity == problems::Severity::Error {
-                                "Error"
-                            } else {
-                                "Warning"
-                            },
-                            item.path.display(),
-                            item.line,
-                            item.message
-                        ))
-                    })
-                    .collect::<Vec<_>>(),
-            );
             *current_errors.borrow_mut() = parsed;
+            refresh_errors();
             set_console_text(&output, &result.text, native_console::Palette::Output);
             status.set_text(if result.success {
                 "Operation completed successfully"
@@ -1869,12 +1853,87 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     output_scroll.set_sizing(Sizing::fill());
     output_scroll.set_child(&output);
     let errors_view = ui.stack(Orientation::Vertical)?;
+    let error_toolbar = ui.stack(Orientation::Horizontal)?;
+    error_toolbar.set_spacing(5.0);
+    let error_query = ui.search_input()?;
+    error_query.set_placeholder("Search errors…");
+    let errors_only_button = ui.button("Errors only: Off")?;
+    let error_fold_button = ui.button("Fold ▾")?;
+    error_toolbar.append(&error_query);
+    error_toolbar.append(&errors_only_button);
+    error_toolbar.append(&error_fold_button);
+    errors_view.append(&error_toolbar);
     let error_summary = ui.label("0 errors, 0 warnings")?;
     let error_list = ui.list()?;
     error_list.set_sizing(Sizing::fill());
     let current_errors = Rc::new(RefCell::new(Vec::<problems::Problem>::new()));
+    let visible_errors = Rc::new(RefCell::new(Vec::<problems::Problem>::new()));
+    let error_filter = Rc::new(RefCell::new(String::new()));
+    let errors_only = Rc::new(Cell::new(false));
+    let errors_folded = Rc::new(Cell::new(false));
     errors_view.append(&error_summary);
     errors_view.append(&error_list);
+    let refresh_errors: Rc<dyn Fn()> = Rc::new({
+        let errors = current_errors.clone();
+        let visible = visible_errors.clone();
+        let list = error_list.clone();
+        let query = error_filter.clone();
+        let only_errors = errors_only.clone();
+        let folded = errors_folded.clone();
+        let summary = error_summary.clone();
+        move || {
+            let needle = query.borrow().to_lowercase();
+            let filtered = errors.borrow().iter().filter(|problem| {
+                (!only_errors.get() || problem.severity == problems::Severity::Error)
+                    && (needle.is_empty()
+                        || problem.message.to_lowercase().contains(&needle)
+                        || problem.path.to_string_lossy().to_lowercase().contains(&needle))
+            }).cloned().collect::<Vec<_>>();
+            let count = filtered.len();
+            *visible.borrow_mut() = filtered.clone();
+            summary.set_text(&format!("{count} matching issue(s)"));
+            if folded.get() { list.set_items(&[]); }
+            else {
+                list.set_items(&filtered.iter().map(|problem| ListItem::new(format!(
+                    "{}: {}:{} — {}",
+                    if problem.severity == problems::Severity::Error { "Error" } else { "Warning" },
+                    problem.path.display(), problem.line, problem.message,
+                ))).collect::<Vec<_>>());
+            }
+        }
+    });
+    error_query.on_change({
+        let query = error_filter.clone();
+        let refresh = refresh_errors.clone();
+        move |text| { *query.borrow_mut() = text.to_owned(); refresh(); }
+    });
+    errors_only_button.on_click({
+        let value = errors_only.clone();
+        let button = errors_only_button.clone();
+        let refresh = refresh_errors.clone();
+        move || {
+            value.set(!value.get());
+            button.set_text(if value.get() { "Errors only: On" } else { "Errors only: Off" });
+            refresh();
+        }
+    });
+    error_fold_button.on_click({
+        let folded = errors_folded.clone();
+        let button = error_fold_button.clone();
+        let refresh = refresh_errors.clone();
+        let list = error_list.clone();
+        move || {
+            folded.set(!folded.get());
+            button.set_text(if folded.get() { "Expand ▸" } else { "Fold ▾" });
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                list.native_widget().set_visible(!folded.get());
+            }
+            refresh();
+        }
+    });
     let debug_view = ui.label("No debugger attached")?;
     let tests_view = ui.label("No test run selected")?;
     let find_view = ui.label("No search results")?;
@@ -4544,6 +4603,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let error_list = error_list.clone();
         let error_summary = error_summary.clone();
         let current_errors = current_errors.clone();
+        let refresh_errors = refresh_errors.clone();
         let ui = ui.clone();
         let show_bottom = show_bottom.clone();
         move |task| {
@@ -4556,6 +4616,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 error_list.clone(),
                 error_summary.clone(),
                 current_errors.clone(),
+                refresh_errors.clone(),
                 ui.clone(),
             );
         }
@@ -4656,7 +4717,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
 
     error_list.on_select({
-        let errors = current_errors.clone();
+        let errors = visible_errors.clone();
         let open_source = open_source.clone();
         let status = status.clone();
         move |indices| {
