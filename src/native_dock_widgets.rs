@@ -71,6 +71,42 @@ fn render_dock_icon(p: &mut Painter, id: DockId) {
     }
 }
 
+/// One factory for a complete dock section: outer native widget, header,
+/// grab affordance, and content container. Callers supply only the contents.
+/// All sections therefore share the same border, spacing and title chrome.
+pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHeader)> {
+    let panel = ui.stack(Orientation::Vertical)?;
+    panel.set_spacing(5.0);
+    panel.set_sizing(Sizing::fill());
+    let header = section_header(ui, id)?;
+    panel.append(&header.row);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        panel.native_widget().add_css_class("quark-dock-panel");
+        header.row.native_widget().add_css_class("quark-dock-header");
+        thread_local! {
+            static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        }
+        INSTALLED.with(|installed| {
+            if !installed.replace(true) {
+                if let Some(display) = gtk4::gdk::Display::default() {
+                    let css = gtk4::CssProvider::new();
+                    css.load_from_data(
+                        ".quark-dock-panel { border: 1px solid alpha(@theme_fg_color, 0.10); } \\
+                         .quark-dock-header { border-bottom: 1px solid alpha(@theme_fg_color, 0.10); }"
+                    );
+                    gtk4::style_context_add_provider_for_display(
+                        &display, &css, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                    );
+                }
+            }
+        });
+    }
+    Ok((panel, header))
+}
+
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     let row = ui.stack(Orientation::Horizontal)?;
     row.set_spacing(5.0);
