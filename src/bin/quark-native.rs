@@ -2368,14 +2368,55 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let pane_sizes = pane_sizes.clone();
         let pane_path = pane_path.clone();
         let refresh_tracks = refresh_tracks.clone();
+        let refresh_docks = refresh_docks.clone();
+        let dock_model = dock_model.clone();
+        let dock_path = dock_path.clone();
+        let active_dock = active_dock.clone();
+        #[cfg(target_os = "linux")]
+        let inspector = inspector.clone();
+        #[cfg(target_os = "linux")]
+        let solution_pane = solution_pane.clone();
+        #[cfg(target_os = "linux")]
+        let properties_pane = properties_pane.clone();
+        #[cfg(target_os = "linux")]
+        let bottom_tabs = bottom_tabs.clone();
+        #[cfg(target_os = "linux")]
+        let bottom_anchor = output_controls.collapse.clone();
+        #[cfg(target_os = "linux")]
+        let bottom_buttons = [
+            (native_docking::DockId::Output, output_tab.clone()),
+            (native_docking::DockId::ErrorList, errors_tab.clone()),
+            (native_docking::DockId::Debug, debug_tab.clone()),
+            (native_docking::DockId::TestResults, test_tab.clone()),
+            (native_docking::DockId::FindResults, find_tab.clone()),
+        ];
         let status = status.clone();
         move || {
             let defaults = native_layout::PaneSizes::default();
+            let new_layout = native_docking::DockLayout::default();
+            #[cfg(target_os = "linux")]
+            {
+                apply_right_dock_order(
+                    &inspector, &solution_pane, &properties_pane, false,
+                );
+                apply_bottom_dock_order(
+                    &bottom_tabs, &bottom_anchor, &bottom_buttons, &new_layout,
+                );
+            }
+            *dock_model.borrow_mut() = new_layout;
+            active_dock.set(None);
             pane_sizes.set(defaults);
             refresh_tracks(defaults);
-            match defaults.save(&pane_path) {
-                Ok(()) => status.set_text("Window layout reset to defaults."),
-                Err(error) => status.set_text(&format!("Could not save window layout: {error}")),
+            refresh_docks();
+            let sizes_result = defaults.save(&pane_path);
+            let dock_result = dock_model.borrow().save(&dock_path);
+            match (sizes_result, dock_result) {
+                (Ok(()), Ok(())) =>
+                    status.set_text("Panel positions, order and sizes reset to defaults."),
+                (a, b) => status.set_text(&format!(
+                    "Window reset could not be saved: {} {}",
+                    a.err().unwrap_or_default(), b.err().unwrap_or_default(),
+                )),
             }
         }
     });
