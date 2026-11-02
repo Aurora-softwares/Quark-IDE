@@ -1,7 +1,7 @@
 //! Native interactive shell process using the host operating system's PTY.
 //! Unlike a one-shot command executor this preserves a live shell, terminal
 //! state, stdin, and all process output between commands.
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize, PtySystem};
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use std::{
     io::{Read, Write},
     path::Path,
@@ -33,8 +33,9 @@ pub fn default_shell() -> String {
     #[cfg(not(windows))]
     {
         std::env::var("SHELL")
+            .ok()
             .filter(|shell| !shell.trim().is_empty())
-            .unwrap_or_else(|_| "/bin/sh".into())
+            .unwrap_or_else(|| "/bin/sh".into())
     }
 }
 
