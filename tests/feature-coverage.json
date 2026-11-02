@@ -1835,9 +1835,7 @@
       "tests": [
         "native_commands::tests::run_selects_host_artifact_for_console_and_ui_manifests",
         "native_commands::tests::run_rejects_non_host_executable_targets_before_build",
-        "native_commands::tests::run_replaces_only_generated_artifacts_and_windows_runtime_sidecar",
-        "native_commands::tests::run_builds_and_executes_a_fresh_console_application",
-        "native_commands::tests::run_does_not_launch_stale_output_after_a_no_op_build"
+        "native_commands::tests::run_replaces_only_generated_artifacts_and_windows_runtime_sidecar"
       ]
     },
     {
