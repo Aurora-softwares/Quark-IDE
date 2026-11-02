@@ -3,9 +3,12 @@
 
 use crate::hydrogen::{self, BuildPlan, BuildScope};
 use std::{
-    fs, io,
+    fs,
+    io::{self, Read},
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    sync::mpsc,
+    thread,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -240,7 +243,123 @@ fn invoke_hydrogen(
         .map_err(|error| launch_diagnostics(program, cwd, args, &error))
 }
 
+/// Stream the compiler's actual stdout/stderr while it is executing.
+/// Separate reader threads avoid deadlocks if either pipe fills. Chunks keep
+/// CR, ANSI and partial UTF-8 intact for the VT100 screen in the UI.
+fn invoke_hydrogen_streaming(
+    program: &str,
+    cwd: &Path,
+    args: &[String],
+    emit: &mut dyn FnMut(&[u8]),
+) -> Result<std::process::Output, String> {
+    if !cwd.is_dir() {
+        return Err(format!(
+            "Hydrogen build working directory does not exist: {}",
+            cwd.display()
+        ));
+    }
+    let executable = Path::new(program);
+    if executable.is_absolute() && !executable.is_file() {
+        return Err(format!(
+            "Configured Hydrogen executable is missing: {}\nChoose it again in Tools → Options → Hydrogen.",
+            executable.display()
+        ));
+    }
+    let mut child = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .env("CLICOLOR_FORCE", "1")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| launch_diagnostics(program, cwd, args, &error))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Hydrogen output pipe is unavailable".to_owned())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Hydrogen error pipe is unavailable".to_owned())?;
+    let (sender, receiver) = mpsc::channel::<(bool, Vec<u8>)>();
+    let read_stream = |mut source: Box<dyn Read + Send>, error_stream: bool, sender: mpsc::Sender<(bool, Vec<u8>)>| {
+        thread::spawn(move || {
+            let mut buf = [0_u8; 8192];
+            loop {
+                match source.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if sender.send((error_stream, buf[..n].to_vec())).is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => break,
+                }
+            }
+        })
+    };
+    let stdout_thread = read_stream(Box::new(stdout), false, sender.clone());
+    let stderr_thread = read_stream(Box::new(stderr), true, sender.clone());
+    drop(sender);
+    let mut captured_stdout = Vec::new();
+    let mut captured_stderr = Vec::new();
+    for (is_error, chunk) in receiver {
+        emit(&chunk);
+        if is_error {
+            captured_stderr.extend_from_slice(&chunk);
+        } else {
+            captured_stdout.extend_from_slice(&chunk);
+        }
+    }
+    let status = child
+        .wait()
+        .map_err(|error| format!("Cannot wait for Hydrogen compiler: {error}"))?;
+    let _ = stdout_thread.join();
+    let _ = stderr_thread.join();
+    Ok(std::process::Output {
+        status,
+        stdout: captured_stdout,
+        stderr: captured_stderr,
+    })
+}
+
+/// Existing one-shot callers retain their exact result contract; native UI
+/// callers can subscribe to raw output chunks without waiting for exit.
+fn invoke_hydrogen_maybe_streaming(
+    program: &str,
+    cwd: &Path,
+    args: &[String],
+    emit: &mut Option<&mut dyn FnMut(&[u8])>,
+) -> Result<std::process::Output, String> {
+    if let Some(emit) = emit.as_deref_mut() {
+        invoke_hydrogen_streaming(program, cwd, args, emit)
+    } else {
+        invoke_hydrogen(program, cwd, args)
+    }
+}
+
+pub fn run_streaming(
+    task: Task,
+    compiler: &str,
+    project: Option<&Path>,
+    mut emit: impl FnMut(&[u8]),
+) -> ResultLog {
+    run_with_output(task, compiler, project, Some(&mut emit))
+}
+
 pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
+    run_with_output(task, compiler, project, None)
+}
+
+fn run_with_output(
+    task: Task,
+    compiler: &str,
+    project: Option<&Path>,
+    mut emit: Option<&mut dyn FnMut(&[u8])>,
+) -> ResultLog {
     let Some(project) = project else {
         return ResultLog::error("Open a Hydrogen project before building or running.");
     };
@@ -261,7 +380,12 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
             fs::create_dir_all(output_parent)
                 .map_err(|e| format!("Cannot create build directory: {e}"))
                 .and_then(|()| {
-                    let built = invoke_hydrogen(&plan.program, &plan.cwd, &plan.args)?;
+                    let built = invoke_hydrogen_maybe_streaming(
+                        &plan.program,
+                        &plan.cwd,
+                        &plan.args,
+                        &mut emit,
+                    )?;
                     if !built.status.success() {
                         return Err(format!(
                             "Build failed; nothing was published.\n{}\n{}",
@@ -301,7 +425,8 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                     return ResultLog::error(format!("Cannot create build directory: {error}"));
                 }
             }
-            let output = invoke_hydrogen(&plan.program, &plan.cwd, &args);
+            let output =
+                invoke_hydrogen_maybe_streaming(&plan.program, &plan.cwd, &args, &mut emit);
             match output {
                 Ok(process) => {
                     let message = format!(
@@ -343,6 +468,54 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
 mod tests {
     use super::*;
     use std::io::Read;
+
+    #[cfg(unix)]
+    #[test]
+    fn streaming_hydrogen_preserves_carriage_returns_and_chunk_order() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let compiler = dir.path().join("fake-hy");
+        std::fs::write(
+            &compiler,
+            "#!/bin/sh\nprintf 'compiling\\r'\nsleep 0.05\nprintf 'done\\033[2K\\n'\nprintf 'warning: sample\\n' >&2\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&compiler, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut chunks = Vec::new();
+        let result = invoke_hydrogen_streaming(
+            &compiler.to_string_lossy(),
+            dir.path(),
+            &["build".to_owned()],
+            &mut |bytes| chunks.push(bytes.to_vec()),
+        )
+        .unwrap();
+        assert!(result.status.success());
+        assert!(!chunks.is_empty());
+        let merged = chunks.concat();
+        assert!(merged.windows(b"compiling\r".len()).any(|part| part == b"compiling\r"));
+        assert!(merged.windows(b"done\x1b[2K".len()).any(|part| part == b"done\x1b[2K"));
+        assert!(String::from_utf8_lossy(&result.stderr).contains("warning: sample"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn streaming_hydrogen_reports_real_nonzero_exit_status() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let compiler = dir.path().join("failing-hy");
+        std::fs::write(&compiler, "#!/bin/sh\nprintf 'broken\\r' >&2\nexit 7\n").unwrap();
+        std::fs::set_permissions(&compiler, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut displayed = Vec::new();
+        let result = invoke_hydrogen_streaming(
+            &compiler.to_string_lossy(),
+            dir.path(),
+            &[],
+            &mut |bytes| displayed.extend_from_slice(bytes),
+        )
+        .unwrap();
+        assert_eq!(result.status.code(), Some(7));
+        assert_eq!(displayed, b"broken\r");
+    }
 
     #[test]
     fn compiler_launch_error_identifies_saved_executable_and_project_directory() {
