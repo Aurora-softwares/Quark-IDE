@@ -147,6 +147,7 @@ pub fn project(
 
 /// File system mutations are kept separate from GTK callbacks so the exact
 /// root restriction and overwrite rules can be unit-tested on every OS.
+#[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FileAction {
     NewFile(String),
@@ -155,6 +156,7 @@ pub enum FileAction {
     Delete,
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty()
         || name == "."
@@ -169,6 +171,7 @@ fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
 pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<PathBuf, String> {
     let root = root
         .canonicalize()
@@ -242,6 +245,7 @@ pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<P
 
 /// Explorer actions invoked through the native context menu. File mutations
 /// always go through file_action() with a checked workspace root.
+#[cfg(target_os = "linux")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
     Open,
@@ -295,7 +299,8 @@ pub fn install_context_menu(
     tree.add_controller(gesture);
 }
 
-/// A short, non-blocking native name prompt for create/rename operations.
+/// Non-blocking native modal prompt. GtkDialog is deprecated in GTK 4.10;
+/// a regular transient GtkWindow keeps the implementation supported.
 #[cfg(target_os = "linux")]
 pub fn ask_name(
     anchor: &gtk4::Widget,
@@ -304,58 +309,87 @@ pub fn ask_name(
     apply: impl Fn(String) + 'static,
 ) {
     use gtk4::prelude::*;
-    let dialog = gtk4::Dialog::new();
+    let dialog = gtk4::Window::new();
     dialog.set_title(Some(title));
     dialog.set_modal(true);
+    dialog.set_default_size(360, 130);
     if let Some(window) = anchor
         .root()
         .and_then(|root| root.downcast::<gtk4::Window>().ok())
     {
         dialog.set_transient_for(Some(&window));
     }
+    let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    contents.set_margin_top(12);
+    contents.set_margin_bottom(12);
+    contents.set_margin_start(12);
+    contents.set_margin_end(12);
     let entry = gtk4::Entry::new();
     entry.set_text(suggested);
-    entry.set_activates_default(true);
-    dialog.content_area().append(&entry);
-    dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
-    let confirm = dialog.add_button("Apply", gtk4::ResponseType::Accept);
-    confirm.set_can_default(true);
-    dialog.set_default_widget(Some(&confirm));
-    dialog.connect_response(move |dialog, response| {
-        if response == gtk4::ResponseType::Accept {
-            apply(entry.text().to_string());
-        }
-        dialog.close();
+    contents.append(&entry);
+    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let cancel = gtk4::Button::with_label("Cancel");
+    let confirm = gtk4::Button::with_label("Apply");
+    let apply = std::rc::Rc::new(apply);
+    let dialog_on_enter = dialog.clone();
+    let apply_on_enter = apply.clone();
+    entry.connect_activate(move |entry| {
+        apply_on_enter(entry.text().to_string());
+        dialog_on_enter.close();
     });
+    let dialog_on_apply = dialog.clone();
+    confirm.connect_clicked(move |_| {
+        apply(entry.text().to_string());
+        dialog_on_apply.close();
+    });
+    let dialog_on_cancel = dialog.clone();
+    cancel.connect_clicked(move |_| dialog_on_cancel.close());
+    actions.append(&cancel);
+    actions.append(&confirm);
+    contents.append(&actions);
+    dialog.set_child(Some(&contents));
     dialog.present();
 }
 
 #[cfg(target_os = "linux")]
 pub fn confirm_delete(anchor: &gtk4::Widget, file: &Path, apply: impl Fn() + 'static) {
     use gtk4::prelude::*;
-    let dialog = gtk4::Dialog::new();
+    let dialog = gtk4::Window::new();
     dialog.set_title(Some("Confirm deletion"));
     dialog.set_modal(true);
+    dialog.set_default_size(420, 140);
     if let Some(window) = anchor
         .root()
         .and_then(|root| root.downcast::<gtk4::Window>().ok())
     {
         dialog.set_transient_for(Some(&window));
     }
+    let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
+    contents.set_margin_top(12);
+    contents.set_margin_bottom(12);
+    contents.set_margin_start(12);
+    contents.set_margin_end(12);
     let warning = gtk4::Label::new(Some(&format!(
         "Permanently delete {}? This cannot be undone.",
         file.display()
     )));
     warning.set_wrap(true);
-    dialog.content_area().append(&warning);
-    dialog.add_button("Cancel", gtk4::ResponseType::Cancel);
-    dialog.add_button("Delete", gtk4::ResponseType::Accept);
-    dialog.connect_response(move |dialog, response| {
-        if response == gtk4::ResponseType::Accept {
-            apply();
-        }
-        dialog.close();
+    contents.append(&warning);
+    let actions = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let cancel = gtk4::Button::with_label("Cancel");
+    let confirm = gtk4::Button::with_label("Delete");
+    confirm.add_css_class("destructive-action");
+    let dialog_on_delete = dialog.clone();
+    confirm.connect_clicked(move |_| {
+        apply();
+        dialog_on_delete.close();
     });
+    let dialog_on_cancel = dialog.clone();
+    cancel.connect_clicked(move |_| dialog_on_cancel.close());
+    actions.append(&cancel);
+    actions.append(&confirm);
+    contents.append(&actions);
+    dialog.set_child(Some(&contents));
     dialog.present();
 }
 
