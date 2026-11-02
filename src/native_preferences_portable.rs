@@ -6,36 +6,30 @@ use naui::{Orientation, Theme, Ui};
 use serde_json::{json, Value};
 use std::{
     cell::RefCell,
-    fs,
     path::{Path, PathBuf},
     rc::Rc,
 };
 
 fn read(path: &Path) -> Value {
-    fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-        .filter(Value::is_object)
-        .unwrap_or_else(|| json!({}))
+    serde_json::to_value(crate::native_settings::load(path)).unwrap_or_else(|_| json!({}))
 }
 
 fn write(path: &Path, value: &Value) -> Result<(), String> {
-    if let Some(folder) = path.parent() {
-        fs::create_dir_all(folder).map_err(|err| err.to_string())?;
-    }
-    let bytes = serde_json::to_vec_pretty(value).map_err(|err| err.to_string())?;
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, bytes).map_err(|err| err.to_string())?;
-    fs::rename(&temporary, path).map_err(|err| err.to_string())
+    let preferences: crate::native_settings::Preferences =
+        serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+    crate::native_settings::save(path, &preferences)
 }
 
 fn update(path: &Path, section: &str, field: &str, value: Value) -> Result<(), String> {
-    let mut prefs = read(path);
-    if !prefs.get(section).is_some_and(Value::is_object) {
-        prefs[section] = json!({});
-    }
-    prefs[section][field] = value;
-    write(path, &prefs)
+    crate::native_settings::update(path, |preferences| {
+        let mut document = serde_json::to_value(&*preferences)
+            .expect("validated settings must serialize");
+        document[section][field] = value;
+        if let Ok(changed) = serde_json::from_value(document) {
+            *preferences = changed;
+        }
+    })
+    .map(|_| ())
 }
 
 /// Apply a saved theme before the editor window opens. The native backend
@@ -57,7 +51,7 @@ pub fn apply_saved_theme(ui: &Ui, path: &Path) {
 /// Create an OS-native settings window; keep it independent of the active
 /// project so manually chosen compiler paths persist across all projects.
 pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
-    let window = ui.window("Quark Settings", 680.0, 465.0)?;
+    let window = ui.window("Quark Settings", 700.0, 690.0)?;
     let root = ui.stack(Orientation::Vertical)?;
     root.set_spacing(12.0);
     root.append(&ui.label("Quark IDE · Settings")?);
@@ -83,6 +77,50 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
         themes.append(&button);
     }
     root.append(&themes);
+    root.append(&ui.label("Build & Run")?);
+    let build_preferences = crate::native_settings::load(&preferences_file).build;
+    for (label, field, enabled) in [
+        ("Save modified files before building", "save_before_build", build_preferences.save_before_build),
+        ("Show output after building", "show_output", build_preferences.show_output),
+    ] {
+        let button = ui.button(if enabled { &format!("✓ {label}") } else { label })?;
+        let file = preferences_file.clone();
+        let button_clone = button.clone();
+        let current = Rc::new(RefCell::new(enabled));
+        button.on_click(move || {
+            let next = !*current.borrow();
+            match update(&file, "build", field, json!(next)) {
+                Ok(()) => {
+                    *current.borrow_mut() = next;
+                    button_clone.set_text(if next { &format!("✓ {label}") } else { label });
+                }
+                Err(error) => eprintln!("Quark: cannot save build preference: {error}"),
+            }
+        });
+        root.append(&button);
+    }
+    root.append(&ui.label("Editor")?);
+    let editor_preferences = crate::native_settings::load(&preferences_file).editor;
+    for (label, field, enabled) in [
+        ("Show line numbers", "show_line_numbers", editor_preferences.show_line_numbers),
+        ("Word wrap", "word_wrap", editor_preferences.word_wrap),
+    ] {
+        let button = ui.button(if enabled { &format!("✓ {label}") } else { label })?;
+        let file = preferences_file.clone();
+        let button_clone = button.clone();
+        let current = Rc::new(RefCell::new(enabled));
+        button.on_click(move || {
+            let next = !*current.borrow();
+            match update(&file, "editor", field, json!(next)) {
+                Ok(()) => {
+                    *current.borrow_mut() = next;
+                    button_clone.set_text(if next { &format!("✓ {label}") } else { label });
+                }
+                Err(error) => eprintln!("Quark: cannot save editor preference: {error}"),
+            }
+        });
+        root.append(&button);
+    }
     root.append(&ui.label("Hydrogen Compiler")?);
     root.append(&ui.label(
         "Enter the absolute path of the Hydrogen executable. Leave blank for automatic discovery.",
