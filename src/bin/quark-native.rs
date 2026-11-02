@@ -2472,6 +2472,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = right_active.clone();
         let inspector = inspector.clone();
         let model = dock_model.clone();
+        #[cfg(target_os = "linux")]
+        let show_auto_hide = show_auto_hide.clone();
+        #[cfg(target_os = "linux")]
+        let anchor = {
+            use naui::Widget as _;
+            tab.native_widget()
+        };
         let active_dock = active_dock.clone();
         let refresh_docks = refresh_docks.clone();
         tab.on_pointer(move |event| {
@@ -2483,6 +2490,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     native_docking::DockId::Properties
                 }));
                 refresh_docks();
+                #[cfg(target_os = "linux")]
+                show_auto_hide(
+                    if index == 0 { native_docking::DockId::Solution }
+                    else { native_docking::DockId::Properties },
+                    anchor.clone(),
+                );
                 for tab in &tabs {
                     tab.redraw();
                 }
@@ -3019,7 +3032,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         (&find_tab, 4),
     ] {
         let show_bottom = show_bottom.clone();
-        tab.on_click(move || show_bottom(page));
+        #[cfg(target_os = "linux")]
+        let show_auto_hide = show_auto_hide.clone();
+        #[cfg(target_os = "linux")]
+        let anchor = {
+            use naui::Widget as _;
+            tab.native_widget()
+        };
+        tab.on_click(move || {
+            show_bottom(page);
+            #[cfg(target_os = "linux")]
+            {
+                let id = match page {
+                    1 => native_docking::DockId::ErrorList,
+                    2 => native_docking::DockId::Debug,
+                    3 => native_docking::DockId::TestResults,
+                    4 => native_docking::DockId::FindResults,
+                    _ => native_docking::DockId::Output,
+                };
+                show_auto_hide(id, anchor.clone());
+            }
+        });
     }
 
     let left_panel: Rc<dyn Fn(usize)> = Rc::new({
@@ -3077,6 +3110,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_side_tab.clone();
         let tabs = side_tabs.clone();
         let tab_mode = tab_mode.clone();
+        #[cfg(target_os = "linux")]
+        let show_auto_hide = show_auto_hide.clone();
+        #[cfg(target_os = "linux")]
+        let anchor = {
+            use naui::Widget as _;
+            tab.native_widget()
+        };
         let active_dock = active_dock.clone();
         let refresh_docks = refresh_docks.clone();
         tab.on_pointer(move |event| {
@@ -3101,6 +3141,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 active_dock.set(Some(id));
                 refresh_docks();
+                #[cfg(target_os = "linux")]
+                show_auto_hide(id, anchor.clone());
             }
         });
     }
