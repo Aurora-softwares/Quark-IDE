@@ -314,6 +314,39 @@ mod tests {
     use super::*;
     use std::io::Read;
 
+    #[test]
+    fn compiler_launch_error_identifies_saved_executable_and_project_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("does-not-exist").join("hydrogen-stage1");
+        let args = vec!["build".into(), "src/australis.hyproj".into()];
+        let result = invoke_hydrogen(
+            &missing.to_string_lossy(),
+            temp.path(),
+            &args,
+        ).unwrap_err();
+        assert!(result.contains("Configured Hydrogen executable is missing"));
+        assert!(result.contains(&missing.to_string_lossy().to_string()));
+
+        let cwd_missing = temp.path().join("no-project-directory");
+        let result = invoke_hydrogen("hy", &cwd_missing, &args).unwrap_err();
+        assert!(result.contains("working directory does not exist"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_existing_executable_can_report_missing_loader() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let executable = temp.path().join("hydrogen-script");
+        std::fs::write(&executable, "#!/path/to/nonexistent/quark-interpreter\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let result = invoke_hydrogen(
+            &executable.to_string_lossy(), temp.path(), &["--version".into()],
+        ).unwrap_err();
+        assert!(result.contains("interpreter or dynamic loader"));
+        assert!(result.contains(&executable.to_string_lossy().to_string()));
+    }
+
     fn sample_plan(dir: &Path) -> BuildPlan {
         BuildPlan {
             program: "hy".into(),
