@@ -5482,7 +5482,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
 fn build(ui: &Ui) -> naui::Result<()> {
     #[cfg(target_os = "linux")]
-    native_preferences::apply_theme(&native_preferences::load(
+    native_preferences::apply_theme(&native_settings::load(
         &workspace_file().with_file_name("native-preferences.json"),
     ));
     let state = Rc::new(RefCell::new(Ide::load()));
