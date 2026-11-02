@@ -144,7 +144,7 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         use gtk4::prelude::*;
         use naui::Widget as _;
         pin.native_widget().set_tooltip_text(Some(
-            "Pin this panel. Unpinned auto-hide is not yet implemented.",
+            "Pin this tool window to keep it visible; unpinned windows collapse to their tab rails.",
         ));
         collapse
             .native_widget()
