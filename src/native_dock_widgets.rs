@@ -171,6 +171,23 @@ pub fn set_section_collapsed(panel: &naui::Stack, collapsed: bool) {
     }
 }
 
+/// Rails switch between Code and Design labels; resolve their dock ID
+/// when a drag starts, not when the window is initially constructed.
+#[cfg(target_os = "linux")]
+pub fn enable_dynamic_drag(
+    widget: &gtk4::Widget,
+    resolve: impl Fn() -> DockId + 'static,
+) {
+    use gtk4::prelude::*;
+    let source = gtk4::DragSource::new();
+    source.set_actions(gtk4::gdk::DragAction::MOVE);
+    source.connect_prepare(move |_, _, _| {
+        let token = drag_token(resolve());
+        Some(gtk4::gdk::ContentProvider::for_value(&token.to_value()))
+    });
+    widget.add_controller(source);
+}
+
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     let row = ui.stack(Orientation::Horizontal)?;
     row.set_spacing(5.0);
