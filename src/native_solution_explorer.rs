@@ -59,7 +59,7 @@ fn subtree(
     for (name, nested) in folders {
         let mut path = ancestors.to_vec();
         path.push(children.len());
-        children.push(TreeItem::new(format!("📁 {name}")).children(
+        children.push(TreeItem::new(format!("📁 {name}")).expanded(true).children(
             subtree(nested, &path, descending, index),
         ));
     }
