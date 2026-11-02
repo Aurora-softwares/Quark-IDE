@@ -6,13 +6,15 @@ fn save(path: &std::path::Path, preferences: &Preferences) -> Result<(), String>
     crate::native_settings::save(path, preferences)
 }
 pub fn apply_theme(preferences: &Preferences) {
-    if let Some(settings) = gtk4::Settings::default() {
-        // System uses the platform's GTK theme; do not force dark/light.
-        settings.set_gtk_application_prefer_dark_theme(matches!(
-            preferences.appearance.theme,
-            ThemeChoice::Dark
-        ));
-    }
+    // libadwaita explicitly rejects GtkSettings:gtk-application-prefer-dark-theme.
+    // Use its app-wide style manager for the three persisted appearance modes.
+    // PreferLight follows the system's dark preference on supported desktops.
+    let scheme = match preferences.appearance.theme {
+        ThemeChoice::System => libadwaita::ColorScheme::PreferLight,
+        ThemeChoice::Light => libadwaita::ColorScheme::ForceLight,
+        ThemeChoice::Dark => libadwaita::ColorScheme::ForceDark,
+    };
+    libadwaita::StyleManager::default().set_color_scheme(scheme);
 }
 fn section() -> gtk4::Box {
     let box_ = gtk4::Box::new(gtk4::Orientation::Vertical, 14);
