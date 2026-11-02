@@ -127,20 +127,20 @@ pub fn show(path: PathBuf) {
     let label = gtk4::Label::new(Some("Colour scheme"));
     label.set_xalign(0.0);
     appearance.append(&label);
-    let themes = gtk4::ComboBoxText::new();
-    for item in ["Follow system", "Light", "Dark"] { themes.append_text(item); }
+    // GTK 4.10+ replaces the deprecated ComboBoxText with DropDown.
+    let themes = gtk4::DropDown::from_strings(&["Follow system", "Light", "Dark"]);
     let selected = match preferences.appearance.theme {
         ThemeChoice::System => 0, ThemeChoice::Light => 1, ThemeChoice::Dark => 2,
     };
-    themes.set_active(Some(selected));
+    themes.set_selected(selected);
     appearance.append(&themes);
     {
         let state = state.clone();
         let path = path.clone();
-        themes.connect_changed(move |combo| {
+        themes.connect_selected_notify(move |combo| {
             let mut prefs = state.borrow_mut();
-            prefs.appearance.theme = match combo.active() {
-                Some(1) => ThemeChoice::Light, Some(2) => ThemeChoice::Dark, _ => ThemeChoice::System,
+            prefs.appearance.theme = match combo.selected() {
+                1 => ThemeChoice::Light, 2 => ThemeChoice::Dark, _ => ThemeChoice::System,
             };
             apply_theme(&prefs);
             if let Err(error) = save(&path, &prefs) {
@@ -188,7 +188,7 @@ pub fn show(path: PathBuf) {
             let mut prefs = state.borrow_mut();
             prefs.appearance.theme = ThemeChoice::System;
             apply_theme(&prefs);
-            themes.set_active(Some(0));
+            themes.set_selected(0);
             if let Err(error) = save(&path, &prefs) {
                 eprintln!("Quark: could not save preferences: {error}");
             }
