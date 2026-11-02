@@ -157,6 +157,34 @@ pub fn available_properties(
     Ok((kind.to_owned(), fields))
 }
 
+/// An editor-only element navigator. Includes hidden and non-visual
+/// elements so every supported property remains reachable without drawing
+/// artificial selection buttons over the live application preview.
+pub fn element_paths(source: &str) -> Result<Vec<(Vec<usize>, String)>, String> {
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    let root = doc.root_element();
+    if root.tag_name().name() != "Window" {
+        return Err("Expected a Hydrogen <Window> document".into());
+    }
+    fn visit(node: Node<'_, '_>, path: Vec<usize>, depth: usize, result: &mut Vec<(Vec<usize>, String)>) {
+        let label = node.attribute("id")
+            .or_else(|| node.attribute("title"))
+            .or_else(|| node.attribute("text"))
+            .unwrap_or("");
+        let padding = "  ".repeat(depth.min(12));
+        let suffix = if label.is_empty() { String::new() } else { format!(" · {label}") };
+        result.push((path.clone(), format!("{padding}{}{suffix}", node.tag_name().name())));
+        for (index, child) in node.children().filter(|n| n.is_element()).enumerate() {
+            let mut child_path = path.clone();
+            child_path.push(index);
+            visit(child, child_path, depth + 1, result);
+        }
+    }
+    let mut paths = Vec::new();
+    visit(root, Vec::new(), 0, &mut paths);
+    Ok(paths)
+}
+
 fn valid_name(name: &str) -> bool {
     let mut chars = name.chars();
     chars
@@ -314,6 +342,15 @@ mod tests {
         assert!(area.iter().any(|f| f.name == "height" && f.value == "100" && !f.explicitly_set));
         assert!(!xml.contains("theme="));
     }
+    #[test]
+    fn hierarchy_includes_hidden_controls_and_all_tabs() {
+        let xml = r#"<Window><Tabs><Tab title="First"><Button id="a"/></Tab><Tab title="Second"><Label id="hidden" visible="false"/></Tab></Tabs></Window>"#;
+        let entries = element_paths(xml).unwrap();
+        assert_eq!(entries.len(), 6);
+        assert!(entries.iter().any(|(path, label)| path == &[0, 1, 0] && label.contains("hidden")));
+        assert!(entries.iter().any(|(_, label)| label.contains("Second")));
+    }
+
     #[test]
     fn explicit_attribute_and_unknown_new_runtime_field_are_retained() {
         let (_, fields) = available_properties("<Window title='App' futureSetting='on'/>", &[]).unwrap();
