@@ -1354,10 +1354,110 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     left_split.set_min_sizes(155.0, 200.0);
     style_left_split(&left_split);
 
+    // Symmetric tool rail at the far right. Clicking a tab focuses that
+    // panel by allocating it more vertical room; the opposite pane stays
+    // available and can always be dragged back using the native splitter.
+    let right_active = Rc::new(Cell::new(0_usize));
+    let right_rail = ui.stack(Orientation::Vertical)?;
+    right_rail.set_spacing(4.0);
+    right_rail.set_sizing(
+        Sizing::new().width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH)),
+    );
+    let mut right_tabs = Vec::new();
+    for (index, label, height) in [
+        (0_usize, "SOLUTION", 124.0_f64),
+        (1_usize, "PROPERTIES", 145.0_f64),
+    ] {
+        let tab = ui.canvas()?;
+        tab.set_sizing(
+            Sizing::new()
+                .width(Length::Fixed(native_shell::SIDE_RAIL_WIDTH))
+                .height(Length::Fixed(height)),
+        );
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let drawing_area = tab
+                .native_widget()
+                .downcast::<gtk4::DrawingArea>()
+                .expect("naui GTK Canvas must use GtkDrawingArea");
+            let active = right_active.clone();
+            drawing_area.set_draw_func(move |_, cairo, _width, allocated_height| {
+                if active.get() == index {
+                    cairo.set_source_rgb(0.53, 0.49, 0.64);
+                    cairo.rectangle(
+                        1.0, 6.0, 3.0, f64::from(allocated_height) - 12.0,
+                    );
+                    let _ = cairo.fill();
+                }
+                cairo.set_source_rgb(0.78, 0.78, 0.81);
+                cairo.select_font_face(
+                    "Sans",
+                    gtk4::cairo::FontSlant::Normal,
+                    gtk4::cairo::FontWeight::Normal,
+                );
+                cairo.set_font_size(12.0);
+                cairo.translate(24.0, f64::from(allocated_height) - 15.0);
+                cairo.rotate(-std::f64::consts::FRAC_PI_2);
+                cairo.move_to(0.0, 0.0);
+                let _ = cairo.show_text(label);
+            });
+        }
+        #[cfg(not(target_os = "linux"))]
+        tab.on_draw({
+            let active = right_active.clone();
+            move |p| {
+                if active.get() == index {
+                    p.fill_rect(
+                        Rect::new(1.0, 6.0, 3.0, p.height() - 12.0),
+                        Color::rgb(0x8a, 0x81, 0xa4),
+                    );
+                }
+                for (i, letter) in label.chars().enumerate() {
+                    p.text(
+                        &letter.to_string(),
+                        Point::new(20.0, 10.0 + i as f64 * 12.0),
+                        11.0,
+                        Color::rgb(0xc5, 0xc5, 0xc9),
+                    );
+                }
+            }
+        });
+        right_rail.append(&tab);
+        right_tabs.push(tab);
+    }
+    for (index, tab) in right_tabs.iter().enumerate() {
+        let tabs = right_tabs.clone();
+        let active = right_active.clone();
+        let inspector = inspector.clone();
+        tab.on_pointer(move |event| {
+            if event.phase == PointerPhase::Down {
+                active.set(index);
+                for tab in &tabs {
+                    tab.redraw();
+                }
+                let height = split_extent(&inspector, 795.0);
+                inspector.set_position(
+                    if index == 0 {
+                        (height - 200.0).max(110.0)
+                    } else {
+                        180.0
+                    },
+                );
+            }
+        });
+    }
+    let right_region = ui.stack(Orientation::Horizontal)?;
+    right_region.set_sizing(Sizing::fill());
+    right_region.set_spacing(0.0);
+    right_region.append(&inspector);
+    right_region.append(&right_rail);
+
     let main_workspace = ui.split_view(Orientation::Horizontal)?;
     main_workspace.set_sizing(Sizing::fill());
     main_workspace.set_start(&left_split);
-    main_workspace.set_end(&inspector);
+    main_workspace.set_end(&right_region);
     main_workspace.set_position(1480.0 - preferred.inspector - 35.0);
     main_workspace.set_min_sizes(300.0, 220.0);
     retain_trailing_size(&main_workspace);
