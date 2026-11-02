@@ -690,9 +690,49 @@ pub fn render(
             naui::Rect::new(0.0, 33.0, paint.width(), 1.0),
             naui::Color::rgb(0x70, 0x72, 0x7a),
         );
+        // The embedded title bar is nonfunctional preview chrome: only
+        // Hydrogen's external OS Window action creates real window chrome.
+        // Use familiar host-platform controls so the designer reads like
+        // a window rather than a generic form on a canvas.
+        #[cfg(target_os = "macos")]
+        for (x, color) in [
+            (16.0, naui::Color::rgb(0xff, 0x60, 0x57)),
+            (36.0, naui::Color::rgb(0xff, 0xbd, 0x2e)),
+            (56.0, naui::Color::rgb(0x28, 0xc8, 0x40)),
+        ] {
+            paint.fill_circle(naui::Point::new(x, 17.0), 5.3, color);
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let edge = paint.width();
+            let light = naui::Color::rgb(0xc6, 0xc8, 0xd0);
+            paint.line(
+                naui::Point::new(edge - 77.0, 17.0),
+                naui::Point::new(edge - 65.0, 17.0),
+                light,
+                1.4,
+            );
+            paint.stroke_rect(
+                naui::Rect::new(edge - 48.0, 12.0, 11.0, 10.0),
+                light,
+                1.2,
+            );
+            paint.line(
+                naui::Point::new(edge - 22.0, 12.0),
+                naui::Point::new(edge - 12.0, 22.0),
+                light,
+                1.5,
+            );
+            paint.line(
+                naui::Point::new(edge - 12.0, 12.0),
+                naui::Point::new(edge - 22.0, 22.0),
+                light,
+                1.5,
+            );
+        }
         paint.text(
             &title,
-            naui::Point::new(12.0, 9.0),
+            naui::Point::new(if cfg!(target_os = "macos") { 76.0 } else { 12.0 }, 9.0),
             12.0,
             naui::Color::rgb(0xf0, 0xf0, 0xf2),
         );
