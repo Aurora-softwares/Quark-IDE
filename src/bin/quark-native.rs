@@ -13,14 +13,14 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
-#[path = "../native_hyui_preview.rs"]
-mod native_hyui_preview;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
 #[path = "../native_dock_widgets.rs"]
 mod native_dock_widgets;
 #[allow(dead_code)] // Runtime docking model is introduced progressively to every pane.
 #[path = "../native_docking.rs"]
 mod native_docking;
+#[path = "../native_hyui_preview.rs"]
+mod native_hyui_preview;
 #[path = "../native_launcher.rs"]
 mod native_launcher;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
@@ -1203,20 +1203,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     return;
                 }
             }
-            let runtime = std::env::var("QUARK_HYUI_RUNTIME")
-                .unwrap_or_else(|_| "hyui".to_owned());
-            let compiler = std::env::var("QUARK_HYDROGEN_COMPILER")
-                .unwrap_or_else(|_| "hy".to_owned());
-            let process = native_hyui_preview::command(
-                &runtime,
-                &path,
-                project.as_deref(),
-                &compiler,
-                kind,
-            );
+            let runtime = std::env::var("QUARK_HYUI_RUNTIME").unwrap_or_else(|_| "hyui".to_owned());
+            let compiler =
+                std::env::var("QUARK_HYDROGEN_COMPILER").unwrap_or_else(|_| "hy".to_owned());
+            let process =
+                native_hyui_preview::command(&runtime, &path, project.as_deref(), &compiler, kind);
             match process.and_then(|mut command| command.spawn().map(|_| ()).map_err(|e| {
                 format!(
-                    "Could not start Hydrogen's native runtime: {e}.                      Install hyui or set QUARK_HYUI_RUNTIME."
+                    "Could not start Hydrogen's native runtime: {e}. Set QUARK_HYUI_RUNTIME to the hyui executable."
                 )
             })) {
                 Ok(()) => status.set_text(match kind {
