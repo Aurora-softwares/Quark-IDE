@@ -125,6 +125,39 @@ pub fn clean_generated(plan: &BuildPlan) -> Result<(), String> {
     fs::remove_dir_all(generated).map_err(|e| e.to_string())
 }
 
+/// Format a saved Hydrogen source file with the configured compiler.
+/// The caller must ensure the editor has no unsaved changes before invoking.
+pub fn format_document(compiler: &str, source: &Path) -> ResultLog {
+    if source.extension().and_then(|extension| extension.to_str()) != Some("hy") {
+        return ResultLog::error("Format Document currently supports .hy files.");
+    }
+    if !source.is_file() {
+        return ResultLog::error(format!("Source file does not exist: {}", source.display()));
+    }
+    let output = Command::new(compiler)
+        .arg("fmt")
+        .arg(source)
+        .current_dir(source.parent().unwrap_or_else(|| Path::new(".")))
+        .output();
+    match output {
+        Ok(process) if process.status.success() => ResultLog::ok(
+            format!("Hydrogen formatting succeeded: {}\n{}{}",
+                source.display(),
+                String::from_utf8_lossy(&process.stdout),
+                String::from_utf8_lossy(&process.stderr)),
+        ),
+        Ok(process) => ResultLog::error(
+            format!("Hydrogen formatting failed ({}):\n{}{}",
+                process.status,
+                String::from_utf8_lossy(&process.stdout),
+                String::from_utf8_lossy(&process.stderr)),
+        ),
+        Err(error) => ResultLog::error(format!(
+            "Cannot run Hydrogen formatter '{}': {error}", compiler
+        )),
+    }
+}
+
 pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
     let Some(project) = project else {
         return ResultLog::error("Open a Hydrogen project before building or running.");
