@@ -56,6 +56,8 @@ mod native_start_window;
 mod native_syntax;
 #[path = "../native_terminal.rs"]
 mod native_terminal;
+#[path = "../native_settings.rs"]
+mod native_settings;
 #[path = "../native_ui_properties.rs"]
 mod native_ui_properties;
 #[path = "../problems.rs"]
@@ -266,6 +268,32 @@ impl Ide {
                 .save(),
             Page::Empty => Err("No document is open".into()),
         }
+    }
+
+    /// Save all dirty documents before building. The individual document
+    /// save methods refuse external edits, so a failed save aborts the build.
+    fn save_all_dirty(&mut self) -> Result<(), String> {
+        if let Some(document) = &mut self.document {
+            if document.dirty() {
+                document.save()?;
+            }
+        }
+        for document in &mut self.other_documents {
+            if document.dirty() {
+                document.save()?;
+            }
+        }
+        if let Some(document) = &mut self.layout {
+            if document.dirty() {
+                document.save()?;
+            }
+        }
+        for document in &mut self.other_layouts {
+            if document.dirty() {
+                document.save()?;
+            }
+        }
+        Ok(())
     }
 
     fn has_unsaved(&self) -> bool {
@@ -1218,7 +1246,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let editor = ui.text_area("")?;
     editor.set_sizing(Sizing::fill());
     #[cfg(target_os = "linux")]
-    native_syntax::install(&editor, false);
+    {
+        native_syntax::install(&editor, false);
+        native_syntax::apply_editor_preferences(
+            &editor,
+            &native_settings::load(
+                &workspace_file().with_file_name("native-preferences.json"),
+            )
+            .editor,
+        );
+    }
     code.attach(&editor, GridCell::new(0, 0));
 
     // The first tab row selects documents; the second selects the editor
@@ -5072,11 +5109,30 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let ui = ui.clone();
         let show_bottom = show_bottom.clone();
         move |task| {
-            show_bottom(if task == native_commands::Task::Test {
-                3
-            } else {
-                0
-            });
+            let settings_file = workspace_file().with_file_name("native-preferences.json");
+            let preferences = match native_settings::try_load(&settings_file) {
+                Ok(preferences) => preferences,
+                Err(error) => {
+                    status.set_text(&format!("Cannot load build preferences: {error}"));
+                    return;
+                }
+            };
+            if state.borrow().has_unsaved() {
+                if preferences.build.save_before_build {
+                    if let Err(error) = state.borrow_mut().save_all_dirty() {
+                        status.set_text(&format!("Build cancelled: cannot save changes: {error}"));
+                        return;
+                    }
+                } else {
+                    status.set_text(
+                        "Build cancelled: save modified documents first, or enable Save Before Build.",
+                    );
+                    return;
+                }
+            }
+            if preferences.build.show_output {
+                show_bottom(if task == native_commands::Task::Test { 3 } else { 0 });
+            }
             run_task(
                 task,
                 state.clone(),
@@ -5602,6 +5658,38 @@ mod tests {
         assert!(ide.workspace.selected.is_none());
         assert!(ide.workspace.folders.is_empty());
         assert!(ide.workspace.projects.is_empty());
+    }
+
+    #[test]
+    fn saving_all_modified_tabs_before_build_preserves_other_documents() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("First.hy");
+        let b = dir.path().join("Second.hy");
+        fs::write(&a, "first").unwrap();
+        fs::write(&b, "second").unwrap();
+        let mut ide = Ide::from_workspace(Workspace::default());
+        ide.open_source(&a).unwrap();
+        ide.document.as_mut().unwrap().text = "first edited".into();
+        ide.open_source(&b).unwrap();
+        ide.document.as_mut().unwrap().text = "second edited".into();
+        ide.save_all_dirty().unwrap();
+        assert!(!ide.has_unsaved());
+        assert_eq!(fs::read_to_string(&a).unwrap(), "first edited");
+        assert_eq!(fs::read_to_string(&b).unwrap(), "second edited");
+    }
+
+    #[test]
+    fn saving_all_dirty_aborts_on_conflict_without_overwriting_external_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("App.hy");
+        fs::write(&source, "first").unwrap();
+        let mut ide = Ide::from_workspace(Workspace::default());
+        ide.open_source(&source).unwrap();
+        ide.document.as_mut().unwrap().text = "edited".into();
+        fs::write(&source, "externally updated").unwrap();
+        assert!(ide.save_all_dirty().is_err());
+        assert!(ide.has_unsaved());
+        assert_eq!(fs::read_to_string(&source).unwrap(), "externally updated");
     }
 
     #[test]
