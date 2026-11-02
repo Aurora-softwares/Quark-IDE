@@ -2087,8 +2087,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let terminal_sender = ui.tasks().channel({
         let parser = terminal_parser.clone();
         let display = terminal_output.clone();
-        move |bytes: Vec<u8>| {
-            parser.borrow_mut().process(&bytes);
+        move |event: native_terminal::Input| {
+            match event {
+                native_terminal::Input::Bytes(bytes) => parser.borrow_mut().process(&bytes),
+                native_terminal::Input::Resize { rows, cols } =>
+                    parser.borrow_mut().set_size(rows, cols),
+            }
             let rendered = parser.borrow().screen().contents_formatted_basic();
             set_console_text(&display, &rendered, native_console::Palette::Output);
         }
@@ -2100,7 +2104,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let session = match native_terminal::Session::spawn(&terminal_dir) {
             Ok(session) => session,
             Err(error) => {
-                let _ = terminal_sender.send(format!("Terminal startup failed: {error}").into_bytes());
+                let _ = terminal_sender.send(native_terminal::Input::Bytes(
+                    format!("Terminal startup failed: {error}").into_bytes()
+                ));
                 return;
             }
         };
@@ -2111,12 +2117,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
                 Ok(native_terminal::Input::Resize { rows, cols }) => {
                     let _ = session.resize(rows, cols);
+                    let _ = terminal_sender.send(native_terminal::Input::Resize { rows, cols });
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
             let data = session.poll();
-            if !data.is_empty() && terminal_sender.send(data).is_err() { break; }
+            if !data.is_empty() && terminal_sender.send(native_terminal::Input::Bytes(data)).is_err() { break; }
             std::thread::sleep(std::time::Duration::from_millis(28));
         }
     });
