@@ -706,6 +706,31 @@ fn apply_right_dock_order(
     true
 }
 
+/// Reorder only the bottom tab buttons, leaving the shared panel header,
+/// pin/collapse controls and live tool content untouched.
+#[cfg(target_os = "linux")]
+fn apply_bottom_dock_order(
+    tab_strip: &naui::Stack,
+    anchor: &naui::Button,
+    tabs: &[(native_docking::DockId, naui::Button)],
+    layout: &native_docking::DockLayout,
+) -> bool {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    let Ok(container) = tab_strip.native_widget().downcast::<gtk4::Box>() else {
+        return false;
+    };
+    let mut predecessor = anchor.native_widget();
+    for section in layout.sections_in(native_docking::DockZone::Bottom) {
+        if let Some((_, button)) = tabs.iter().find(|(id, _)| *id == section.id) {
+            let widget = button.native_widget();
+            container.reorder_child_after(&widget, Some(&predecessor));
+            predecessor = widget;
+        }
+    }
+    true
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     // Reuse the launcher window. Creating an AppKit window from a button
     // callback and immediately closing the old one can lose activation.
@@ -2357,6 +2382,52 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        let tabs = vec![
+            (native_docking::DockId::Output, output_tab.clone()),
+            (native_docking::DockId::ErrorList, errors_tab.clone()),
+            (native_docking::DockId::Debug, debug_tab.clone()),
+            (native_docking::DockId::TestResults, test_tab.clone()),
+            (native_docking::DockId::FindResults, find_tab.clone()),
+        ];
+        apply_bottom_dock_order(
+            &bottom_tabs, &output_controls.collapse, &tabs, &dock_model.borrow(),
+        );
+        for (target, button) in &tabs {
+            let destination = *target;
+            let tabs = tabs.clone();
+            let model = dock_model.clone();
+            let path = dock_path.clone();
+            let strip = bottom_tabs.clone();
+            let anchor = output_controls.collapse.clone();
+            let status = status.clone();
+            native_dock_widgets::enable_widget_drag(
+                &button.native_widget(), destination, move |source| {
+                    if source == destination ||
+                        !tabs.iter().any(|(id, _)| *id == source) {
+                        return false;
+                    }
+                    let mut layout = model.borrow_mut();
+                    if !layout.reorder_before(source, destination) {
+                        return false;
+                    }
+                    if !apply_bottom_dock_order(&strip, &anchor, &tabs, &layout) {
+                        status.set_text("Cannot reorder these native tool tabs.");
+                        return false;
+                    }
+                    if let Err(error) = layout.save(&path) {
+                        status.set_text(&format!("Cannot save dock order: {error}"));
+                    } else {
+                        status.set_text("Bottom tool tabs reordered.");
+                    }
+                    true
+                }
+            );
+        }
+    }
+
     for (tab, page) in [
         (&output_tab, 0),
         (&errors_tab, 1),
