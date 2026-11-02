@@ -607,16 +607,35 @@ mod tests {
     }
 
     #[test]
+    fn old_saved_docks_gain_pinned_side_defaults_and_a_single_bottom_strip() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("old-layout.json");
+        let mut layout = DockLayout::default();
+        layout.layout_version = 0;
+        layout.pin(DockId::Toolbox, false);
+        layout.pin(DockId::Symbols, false);
+        layout.pin(DockId::Output, false);
+        layout.collapse(DockId::Output, true);
+        layout.save(&path).unwrap();
+        let restored = DockLayout::open(&path).unwrap();
+        assert_eq!(restored.layout_version, 2);
+        assert!(restored.section(DockId::Toolbox).unwrap().pinned);
+        assert!(restored.section(DockId::Symbols).unwrap().pinned);
+        assert!(restored.section(DockId::Output).unwrap().pinned);
+        assert!(!restored.section(DockId::Output).unwrap().collapsed);
+    }
+
+    #[test]
     fn pin_and_collapse_survive_roundtrip() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("dock-layout.json");
         let mut layout = DockLayout::default();
-        layout.pin(DockId::Output, true);
-        layout.collapse(DockId::Output, true);
-        layout.move_to(DockId::Output, DockZone::Left);
+        layout.pin(DockId::Search, true);
+        layout.collapse(DockId::Search, true);
+        layout.move_to(DockId::Search, DockZone::Bottom);
         layout.save(&path).unwrap();
         let restored = DockLayout::open(&path).unwrap();
         assert_eq!(layout, restored);
-        assert!(restored.section(DockId::Output).unwrap().collapsed);
+        assert!(restored.section(DockId::Search).unwrap().collapsed);
     }
 }
