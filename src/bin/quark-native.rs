@@ -488,38 +488,6 @@ fn project_symbols(ide: &Ide) -> Vec<ListItem> {
     output
 }
 
-fn filtered_file_items(ide: &Ide, search: &str) -> (Vec<TreeItem>, Vec<PathBuf>) {
-    let (original, files) = file_items(ide);
-    let pattern = search.trim().to_lowercase();
-    if pattern.is_empty() {
-        return (original, files);
-    }
-    let matching: Vec<_> = files
-        .into_iter()
-        .filter(|path| path.to_string_lossy().to_lowercase().contains(&pattern))
-        .collect();
-    let children: Vec<TreeItem> = matching
-        .iter()
-        .map(|path| {
-            TreeItem::new(
-                path.file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string(),
-            )
-        })
-        .collect();
-    let label = ide
-        .project
-        .as_ref()
-        .map(|p| format!("Solution '{}'", p.name))
-        .unwrap_or_else(|| "Folder".to_owned());
-    (
-        vec![TreeItem::new(label).expanded(true).children(children)],
-        matching,
-    )
-}
-
 #[allow(clippy::too_many_arguments)] // UI control handles are intentionally passed together.
 fn run_task(
     task: native_commands::Task,
