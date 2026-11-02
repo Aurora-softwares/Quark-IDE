@@ -89,11 +89,12 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
             build_preferences.show_output,
         ),
     ] {
-        let button = ui.button(if enabled {
-            &format!("✓ {label}")
+        let caption = if enabled {
+            format!("✓ {label}")
         } else {
-            label
-        })?;
+            label.to_owned()
+        };
+        let button = ui.button(&caption)?;
         let file = preferences_file.clone();
         let button_clone = button.clone();
         let current = Rc::new(RefCell::new(enabled));
@@ -102,7 +103,12 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
             match update(&file, "build", field, json!(next)) {
                 Ok(()) => {
                     *current.borrow_mut() = next;
-                    button_clone.set_text(if next { &format!("✓ {label}") } else { label });
+                    let caption = if next {
+                        format!("✓ {label}")
+                    } else {
+                        label.to_owned()
+                    };
+                    button_clone.set_text(&caption);
                 }
                 Err(error) => eprintln!("Quark: cannot save build preference: {error}"),
             }
@@ -119,11 +125,12 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
         ),
         ("Word wrap", "word_wrap", editor_preferences.word_wrap),
     ] {
-        let button = ui.button(if enabled {
-            &format!("✓ {label}")
+        let caption = if enabled {
+            format!("✓ {label}")
         } else {
-            label
-        })?;
+            label.to_owned()
+        };
+        let button = ui.button(&caption)?;
         let file = preferences_file.clone();
         let button_clone = button.clone();
         let current = Rc::new(RefCell::new(enabled));
@@ -132,7 +139,12 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
             match update(&file, "editor", field, json!(next)) {
                 Ok(()) => {
                     *current.borrow_mut() = next;
-                    button_clone.set_text(if next { &format!("✓ {label}") } else { label });
+                    let caption = if next {
+                        format!("✓ {label}")
+                    } else {
+                        label.to_owned()
+                    };
+                    button_clone.set_text(&caption);
                 }
                 Err(error) => eprintln!("Quark: cannot save editor preference: {error}"),
             }
