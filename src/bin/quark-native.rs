@@ -58,6 +58,8 @@ mod native_start_window;
 mod native_syntax;
 #[path = "../native_terminal.rs"]
 mod native_terminal;
+#[path = "../native_terminal_screen.rs"]
+mod native_terminal_screen;
 #[path = "../native_ui_properties.rs"]
 mod native_ui_properties;
 #[path = "../problems.rs"]
@@ -2128,11 +2130,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // directly into the PTY for interactive full-screen programs.
     let terminal_section = ui.stack(Orientation::Vertical)?;
     terminal_section.set_sizing(Sizing::fill());
-    let terminal_output = ui.label("Starting interactive terminal…")?;
+    let terminal_output = ui.canvas()?;
+    let (terminal_width, terminal_height) = native_terminal_screen::viewport_size(26, 100);
+    terminal_output.set_sizing(
+        Sizing::new()
+            .width(Length::Fixed(terminal_width))
+            .height(Length::Fixed(terminal_height)),
+    );
     let terminal_scroll = ui.scroll()?;
     terminal_scroll.set_sizing(Sizing::fill());
     terminal_scroll.set_child(&terminal_output);
     terminal_section.append(&terminal_scroll);
+    let terminal_history = ui.stack(Orientation::Horizontal)?;
+    terminal_history.set_spacing(5.0);
+    let terminal_history_back = ui.button("↑ History")?;
+    let terminal_history_live = ui.button("↓ Live")?;
+    terminal_history.append(&terminal_history_back);
+    terminal_history.append(&terminal_history_live);
+    terminal_section.append(&terminal_history);
     let terminal_input_row = ui.stack(Orientation::Horizontal)?;
     let terminal_input = ui.text_input("")?;
     terminal_input.set_placeholder("Live shell input — typing goes straight to the PTY");
@@ -2321,19 +2336,48 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         std::num::NonZeroU16::new(100).unwrap(),
         2000,
     )));
+    terminal_output.on_draw({
+        let parser = terminal_parser.clone();
+        move |painter| native_terminal_screen::paint(parser.borrow().screen(), painter)
+    });
+    terminal_history_back.on_click({
+        let parser = terminal_parser.clone();
+        let display = terminal_output.clone();
+        move || {
+            let mut parser = parser.borrow_mut();
+            let position = parser.screen().scrollback();
+            parser.screen_mut().set_scrollback(position.saturating_add(15));
+            display.redraw();
+        }
+    });
+    terminal_history_live.on_click({
+        let parser = terminal_parser.clone();
+        let display = terminal_output.clone();
+        move || {
+            parser.borrow_mut().screen_mut().set_scrollback(0);
+            display.redraw();
+        }
+    });
     let terminal_sender = ui.tasks().channel({
         let parser = terminal_parser.clone();
         let display = terminal_output.clone();
         move |event: native_terminal::Input| {
             match event {
                 native_terminal::Input::Bytes(bytes) => parser.borrow_mut().process(&bytes),
-                native_terminal::Input::Resize { rows, cols } => parser.borrow_mut().set_size(
-                    std::num::NonZeroU16::new(rows.max(1)).unwrap(),
-                    std::num::NonZeroU16::new(cols.max(1)).unwrap(),
-                ),
+                native_terminal::Input::Resize { rows, cols } => {
+                    parser.borrow_mut().set_size(
+                        std::num::NonZeroU16::new(rows.max(2)).unwrap(),
+                        std::num::NonZeroU16::new(cols.max(10)).unwrap(),
+                    );
+                    let (width, height) = native_terminal_screen::viewport_size(rows, cols);
+                    display.set_sizing(
+                        Sizing::new()
+                            .width(Length::Fixed(width))
+                            .height(Length::Fixed(height)),
+                    );
+                }
             }
-            let rendered = parser.borrow().screen().contents_formatted_basic();
-            set_console_text(&display, &rendered, native_console::Palette::Output);
+            display.redraw();
         }
     });
     let terminal_dir = state
