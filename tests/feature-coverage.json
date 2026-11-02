@@ -2026,6 +2026,15 @@
       "platforms": [
         "linux"
       ]
+    },
+    {
+      "id": "native-designer-runtime-fill-defaults",
+      "category": "Native Interface Designer",
+      "feature": "Native designer fills Hydrogen labels, text fields, sliders and progress controls horizontally by default while preserving button and explicit fill=false sizing",
+      "tests": [
+        "native_portable_preview::tests::hydrogen_default_control_expansion_matches_runtime_except_buttons",
+        "native_portable_preview::tests::runtime_expansion_respects_opt_out_and_explicit_overrides"
+      ]
     }
   ]
 }
