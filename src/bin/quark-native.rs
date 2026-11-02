@@ -1896,6 +1896,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
         bottom_pages.native_widget().set_vexpand(true);
         output_scroll.native_widget().set_vexpand(true);
+        if let Ok(scroller) = output_scroll.native_widget().downcast::<gtk4::ScrolledWindow>() {
+            scroller.set_policy(gtk4::PolicyType::Automatic, gtk4::PolicyType::Automatic);
+            // Keyboard and wheel navigation advance by roughly one console
+            // line, rather than jumping across the entire output pane.
+            scroller.vadjustment().set_step_increment(18.0);
+        }
         let console = output.native_widget();
         if let Ok(label) = console.downcast::<gtk4::Label>() {
             label.set_xalign(0.0);
