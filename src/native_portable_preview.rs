@@ -132,7 +132,7 @@ fn render_node(
             )?;
             row.append(&panel);
         }
-        "ColumnPanel" | "Tab" | "ScrollView" | "Window" => {
+        "ColumnPanel" | "Tab" | "Window" => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
             children.set_spacing(
                 node.attribute("gap")
@@ -150,6 +150,40 @@ fn render_node(
                 available_width,
             )?;
             row.append(&children);
+        }
+        "ScrollView" => {
+            // A real native scrolling container, not a vertically stacked
+            // imitation. The scroll position is strictly design-time state.
+            let scroll = ui.scroll().map_err(|e| e.to_string())?;
+            let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+            children.set_spacing(
+                node.attribute("gap")
+                    .and_then(|value| value.parse::<f64>().ok())
+                    .unwrap_or(12.0)
+                    .clamp(0.0, 48.0),
+            );
+            render_children(
+                ui,
+                &children,
+                node,
+                &path,
+                on_select,
+                design_tabs,
+                available_width,
+            )?;
+            scroll.set_child(&children);
+            let height = node
+                .attribute("height")
+                .and_then(|value| value.parse::<f64>().ok())
+                .filter(|value| value.is_finite())
+                .unwrap_or(200.0)
+                .clamp(40.0, 1600.0);
+            scroll.set_sizing(
+                Sizing::new()
+                    .width(Length::Fill)
+                    .height(Length::Fixed(height)),
+            );
+            row.append(&scroll);
         }
         "RowPanel" | "MenuBar" | "Menu" => {
             let direction = if kind == "RowPanel"
