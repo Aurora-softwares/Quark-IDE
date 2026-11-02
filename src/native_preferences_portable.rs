@@ -14,6 +14,7 @@ fn read(path: &Path) -> Value {
     serde_json::to_value(crate::native_settings::load(path)).unwrap_or_else(|_| json!({}))
 }
 
+#[cfg(test)]
 fn write(path: &Path, value: &Value) -> Result<(), String> {
     let preferences: crate::native_settings::Preferences =
         serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
