@@ -205,6 +205,23 @@ fn apply_highlight(buffer: &gtk4::TextBuffer, xml: bool) {
     }
 }
 
+/// Apply persisted editor preferences to the actual GTK text view.
+pub fn apply_editor_preferences(
+    area: &naui::TextArea,
+    preferences: &crate::native_settings::Editor,
+) {
+    if let Some(view) = text_view(&area.native_widget()) {
+        view.set_wrap_mode(if preferences.word_wrap {
+            gtk4::WrapMode::WordChar
+        } else {
+            gtk4::WrapMode::None
+        });
+        view.set_property("accepts-tab", true);
+        // A tab stop remains an explicit formatting preference for future
+        // source indentation; it does not rewrite existing document contents.
+    }
+}
+
 pub fn install(area: &naui::TextArea, xml: bool) {
     if let Some(view) = text_view(&area.native_widget()) {
         view.set_monospace(true);
