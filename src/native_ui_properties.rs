@@ -266,6 +266,42 @@ pub fn design_tab_pages(source: &str, path: &[usize]) -> Result<Vec<String>, Str
         .collect())
 }
 
+/// Suggested native Properties editors for finite-value fields.
+/// Store the original XML value separately from its human-readable label.
+pub fn property_choices(kind: &str, name: &str, fields: &[PropertyField]) -> Vec<(String, String)> {
+    if matches!(
+        name,
+        "visible" | "enabled" | "fill" | "checked" | "primary" | "indeterminate"
+            | "running" | "open"
+    ) {
+        return ["false", "true"]
+            .iter()
+            .map(|value| (value.to_string(), value.to_string()))
+            .collect();
+    }
+    if kind == "Window" && name == "theme" {
+        return ["system", "light", "dark"]
+            .iter()
+            .map(|value| (value.to_string(), value.to_string()))
+            .collect();
+    }
+    if name == "value" && matches!(kind, "Select" | "RadioGroup" | "ListBox") {
+        if let Some(items) = fields
+            .iter()
+            .find(|field| field.name == "items")
+            .map(|field| field.value.as_str())
+            .filter(|value| !value.is_empty())
+        {
+            return items
+                .split('|')
+                .enumerate()
+                .map(|(index, label)| (format!("{index} · {label}"), index.to_string()))
+                .collect();
+        }
+    }
+    Vec::new()
+}
+
 /// An editor-only element navigator. Includes hidden and non-visual
 /// elements so every supported property remains reachable without drawing
 /// artificial selection buttons over the live application preview.
@@ -644,6 +680,34 @@ mod tests {
         assert!(set_attribute(xml, &[0], "value", "1").unwrap().contains("<Tabs value=\"1\""));
         assert!(set_attribute(xml, &[1], "value", "2").unwrap().contains("value=\"2\""));
         assert!(set_attribute(xml, &[], "theme", "dark").is_ok());
+    }
+
+    #[test]
+    fn property_choice_editor_uses_platform_theme_and_boolean_values() {
+        let xml = r#"<Window theme="system"><CheckBox checked="true"/></Window>"#;
+        let (_, window) = available_properties(xml, &[]).unwrap();
+        assert_eq!(
+            property_choices("Window", "theme", &window),
+            [("system".into(), "system".into()), ("light".into(), "light".into()), ("dark".into(), "dark".into())]
+        );
+        let (_, checkbox) = available_properties(xml, &[0]).unwrap();
+        assert_eq!(
+            property_choices("CheckBox", "checked", &checkbox),
+            [("false".into(), "false".into()), ("true".into(), "true".into())]
+        );
+    }
+
+    #[test]
+    fn property_choice_editor_preserves_source_indices_not_option_labels() {
+        let xml = r#"<Window><Select items="Apple|Banana|Cherry" value="1"/><Input text="hello"/></Window>"#;
+        let (_, fields) = available_properties(xml, &[0]).unwrap();
+        assert_eq!(
+            property_choices("Select", "value", &fields),
+            [("0 · Apple".into(), "0".into()), ("1 · Banana".into(), "1".into()), ("2 · Cherry".into(), "2".into())]
+        );
+        assert!(property_choices("Select", "items", &fields).is_empty());
+        let (_, input) = available_properties(xml, &[1]).unwrap();
+        assert!(property_choices("Input", "text", &input).is_empty());
     }
 
     #[test]
