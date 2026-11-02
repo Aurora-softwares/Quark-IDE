@@ -560,7 +560,19 @@ pub fn render(
         .and_then(|v| v.parse::<f64>().ok())
         .unwrap_or(720.0)
         .clamp(320.0, 1400.0);
-    window.set_sizing(Sizing::new().width(Length::Fixed(width)));
+    let height = root
+        .attribute("height")
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(480.0)
+        .clamp(240.0, 1800.0);
+    // Retain the intended window's document dimensions even if the current
+    // tab has only a few controls. The preview scrolls inside Quark instead
+    // of stretching across and losing its frame.
+    window.set_sizing(
+        Sizing::new()
+            .width(Length::Fixed(width))
+            .min_height((height - 34.0).max(120.0)),
+    );
     // A visible window frame, kept inside the design viewport. The body
     // itself is composed of platform-native widgets.
     let titlebar = ui.canvas().map_err(|e| e.to_string())?;
@@ -612,6 +624,19 @@ pub fn render(
         .max(160.0),
     )?;
     outer.append(&window);
+    let frame_edge = ui.canvas().map_err(|e| e.to_string())?;
+    frame_edge.set_sizing(
+        Sizing::new()
+            .width(Length::Fixed(width))
+            .height(Length::Fixed(2.0)),
+    );
+    frame_edge.on_draw(|paint| {
+        paint.fill_rect(
+            naui::Rect::new(0.0, 0.0, paint.width(), 2.0),
+            naui::Color::rgb(0x70, 0x72, 0x7a),
+        );
+    });
+    outer.append(&frame_edge);
     Ok(outer)
 }
 
