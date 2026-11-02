@@ -161,6 +161,24 @@ pub enum MenuAction {
 #[cfg(target_os = "linux")]
 pub type MenuCallback = std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(MenuAction)>>>>;
 
+/// Keep the native popover under a ListBoxRow; naui's Tree::rebuild removes
+/// every direct ListBox child as a row and cannot remove a Popover.
+#[cfg(target_os = "linux")]
+fn anchor_context_menu(popover: &gtk4::Popover, row: &gtk4::ListBoxRow, x: i32, y: i32) {
+    use gtk4::prelude::*;
+    popover.popdown();
+    if popover.parent().is_some() {
+        popover.unparent();
+    }
+    popover.set_parent(row);
+    popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(
+        x,
+        (y - row.allocation().y()).max(0),
+        1,
+        1,
+    )));
+}
+
 #[cfg(target_os = "linux")]
 pub fn install_context_menu(
     tree: &gtk4::Widget,
@@ -215,20 +233,7 @@ pub fn install_context_menu(
             list.select_row(Some(&clicked_row));
             context_selection.set(false);
         }
-        // Attach the menu beneath the clicked row rather than the listbox.
-        // The listbox then contains only valid rows when the tree rebuilds.
-        popover.popdown();
-        if popover.parent().is_some() {
-            popover.unparent();
-        }
-        popover.set_parent(&clicked_row);
-        let row_y = clicked_row.allocation().y();
-        popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(
-            x as i32,
-            (y as i32 - row_y).max(0),
-            1,
-            1,
-        )));
+        anchor_context_menu(&popover, &clicked_row, x as i32, y as i32);
         popover.popup();
     });
     tree.add_controller(gesture);
@@ -364,6 +369,30 @@ mod tests {
         std::fs::write(&outside, "test").unwrap();
         assert!(file_action(dir.path(), &outside, FileAction::Delete).is_err());
         assert_eq!(std::fs::read_to_string(outside).unwrap(), "test");
+    }
+
+    /// GTK should never see the popover as a ListBox row. Otherwise naui
+    /// Tree::rebuild can repeatedly emit "Tried to remove non-child".
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires a native GTK display; invoked explicitly under Xvfb"]
+    fn context_menu_does_not_poison_listbox_row_rebuild() {
+        use gtk4::prelude::*;
+        gtk4::init().expect("GTK test requires a display");
+        let list = gtk4::ListBox::new();
+        let first = gtk4::ListBoxRow::new();
+        let second = gtk4::ListBoxRow::new();
+        list.append(&first);
+        list.append(&second);
+        let popover = gtk4::Popover::new();
+        anchor_context_menu(&popover, &first, 4, 8);
+        assert_eq!(popover.parent(), Some(first.clone().upcast()));
+        assert!(list.first_child().unwrap().is::<gtk4::ListBoxRow>());
+        list.remove(&first);
+        anchor_context_menu(&popover, &second, 4, 8);
+        assert_eq!(popover.parent(), Some(second.clone().upcast()));
+        list.remove(&second);
+        assert!(list.row_at_index(0).is_none());
     }
 
     #[test]
