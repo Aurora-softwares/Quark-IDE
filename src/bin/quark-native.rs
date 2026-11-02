@@ -2534,9 +2534,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // previous preferred dimensions.
     for (id, header) in [
         (native_docking::DockId::Toolbox, &toolbox_controls),
+        (native_docking::DockId::Symbols, &symbols_controls),
+        (native_docking::DockId::Search, &search_controls),
+        (native_docking::DockId::Server, &server_controls),
+        (native_docking::DockId::Data, &data_controls),
         (native_docking::DockId::Solution, &solution_controls),
         (native_docking::DockId::Properties, &properties_controls),
         (native_docking::DockId::Output, &output_controls),
+        (native_docking::DockId::ErrorList, &error_controls),
+        (native_docking::DockId::Debug, &debug_controls),
+        (native_docking::DockId::TestResults, &test_controls),
+        (native_docking::DockId::FindResults, &find_controls),
     ] {
         let (pinned, collapsed) = dock_model
             .borrow()
@@ -2571,6 +2579,39 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         });
     }
+    // All additional native sections share the same non-destructive
+    // collapse behaviour. The legacy four composite panels keep their
+    // existing specialised callbacks.
+    #[cfg(target_os = "linux")]
+    for (id, header, section) in [
+        (native_docking::DockId::Symbols, &symbols_controls, &symbols_section),
+        (native_docking::DockId::Search, &search_controls, &code_search_view),
+        (native_docking::DockId::Server, &server_controls, &server_view),
+        (native_docking::DockId::Data, &data_controls, &data_view),
+        (native_docking::DockId::Output, &output_page_controls, &output_section),
+        (native_docking::DockId::ErrorList, &error_controls, &error_section),
+        (native_docking::DockId::Debug, &debug_controls, &debug_section),
+        (native_docking::DockId::TestResults, &test_controls, &test_section),
+        (native_docking::DockId::FindResults, &find_controls, &find_section),
+    ] {
+        let stored = dock_model.borrow().section(id).is_some_and(|s| s.collapsed);
+        native_dock_widgets::set_section_collapsed(section, stored);
+        header.collapse.set_text(if stored { "▸" } else { "▾" });
+        let model = dock_model.clone();
+        let path = dock_path.clone();
+        let section = section.clone();
+        let button = header.collapse.clone();
+        header.collapse.on_click(move || {
+            let next = !model.borrow().section(id).is_some_and(|s| s.collapsed);
+            model.borrow_mut().collapse(id, next);
+            native_dock_widgets::set_section_collapsed(&section, next);
+            button.set_text(if next { "▸" } else { "▾" });
+            if let Err(error) = model.borrow().save(&path) {
+                eprintln!("Quark: could not save collapsed state: {error}");
+            }
+        });
+    }
+
     toolbox_controls.collapse.on_click({
         let model = dock_model.clone();
         let path = dock_path.clone();
