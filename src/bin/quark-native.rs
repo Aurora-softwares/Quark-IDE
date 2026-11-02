@@ -1922,12 +1922,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // present for model compatibility, but never occupies a second row.
     let bottom_tabs = ui.stack(Orientation::Horizontal)?;
     bottom_tabs.set_spacing(6.0);
-    let output_tab = ui.button("Output")?;
-    let errors_tab = ui.button("Error List")?;
-    let debug_tab = ui.button("Debug")?;
-    let test_tab = ui.button("Test Results")?;
-    let find_tab = ui.button("Find Results")?;
-    let terminal_tab = ui.button("Terminal")?;
+    let output_tab = ui.button("▸ Output")?;
+    let errors_tab = ui.button("⚠ Errors")?;
+    let debug_tab = ui.button("⌁ Debug")?;
+    let test_tab = ui.button("✓ Tests")?;
+    let find_tab = ui.button("⌕ Find")?;
+    let terminal_tab = ui.button("›_ Terminal")?;
     bottom_tabs.append(&output_tab);
     bottom_tabs.append(&errors_tab);
     bottom_tabs.append(&debug_tab);
@@ -2130,10 +2130,23 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         ] {
             header.row.native_widget().set_visible(false);
         }
-        bottom_tabs
-            .native_widget()
-            .add_css_class("quark-bottom-tabs");
+        bottom_tabs.native_widget().add_css_class("quark-bottom-tabs");
         bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
+        bottom_tabs.native_widget().set_vexpand(false);
+        bottom_tabs.native_widget().set_halign(gtk4::Align::Start);
+        for (tab, description) in [
+            (&output_tab, "Build and compiler output"),
+            (&errors_tab, "Errors and warnings"),
+            (&debug_tab, "Debugger output"),
+            (&test_tab, "Hydrogen test results"),
+            (&find_tab, "Find results"),
+            (&terminal_tab, "Interactive terminal"),
+        ] {
+            let native = tab.native_widget();
+            native.add_css_class("quark-bottom-tab");
+            native.set_tooltip_text(Some(description));
+        }
+        output_tab.native_widget().add_css_class("quark-bottom-tab-active");
         bottom_pages.native_widget().set_vexpand(true);
         output_scroll.native_widget().set_vexpand(true);
         for scroller in [
@@ -2191,7 +2204,35 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     background: #10141c; color: #d9e1eb;
                  }
                  .quark-bottom-tabs {
-                    border-bottom: 1px solid alpha(@theme_fg_color, 0.18);
+                    border-bottom: 1px solid alpha(@theme_fg_color, 0.23);
+                    background: alpha(@theme_fg_color, 0.035);
+                    padding: 0 3px;
+                 }
+                 button.quark-bottom-tab {
+                    color: @theme_fg_color;
+                    background: transparent;
+                    border: none;
+                    border-top: 3px solid transparent;
+                    border-radius: 0;
+                    box-shadow: none;
+                    min-height: 22px;
+                    min-width: 56px;
+                    padding: 2px 9px 3px;
+                    margin: 0 1px;
+                    font-size: 11px;
+                    font-weight: normal;
+                 }
+                 button.quark-bottom-tab:hover {
+                    background: alpha(@theme_fg_color, 0.09);
+                 }
+                 button.quark-bottom-tab-active {
+                    color: @theme_fg_color;
+                    background: alpha(@theme_fg_color, 0.14);
+                    border-top: 3px solid #8d69d8;
+                    font-weight: bold;
+                 }
+                 button.quark-bottom-tab-active:hover {
+                    background: alpha(@theme_fg_color, 0.18);
                  }",
             );
             gtk4::style_context_add_provider_for_display(
@@ -3777,6 +3818,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    // Keep bottom tool tabs visually selected, as with the native side
+    // rail's purple active indicator. The Terminal is an independent tab.
+    #[cfg(target_os = "linux")]
+    let bottom_tab_widgets = {
+        use naui::Widget as _;
+        [
+            output_tab.native_widget(),
+            errors_tab.native_widget(),
+            debug_tab.native_widget(),
+            test_tab.native_widget(),
+            find_tab.native_widget(),
+            terminal_tab.native_widget(),
+        ]
+    };
     // Native docking/tab selection is independent of the active document.
     let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
         let active_dock = active_dock.clone();
@@ -3789,6 +3844,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let find_view = find_section.clone();
         let terminal_view = terminal_section.clone();
         let dock_model = dock_model.clone();
+        #[cfg(target_os = "linux")]
+        let bottom_tab_widgets = bottom_tab_widgets.clone();
         move |page| {
             active_dock.set(Some(match page {
                 1 => native_docking::DockId::ErrorList,
@@ -3812,6 +3869,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     .is_some_and(|section| section.zone != native_docking::DockZone::Bottom)
             {
                 return; // This tool already lives in another dock host.
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                for (index, widget) in bottom_tab_widgets.iter().enumerate() {
+                    if index == page {
+                        widget.add_css_class("quark-bottom-tab-active");
+                    } else {
+                        widget.remove_css_class("quark-bottom-tab-active");
+                    }
+                }
             }
             bottom_pages.clear();
             match page {
