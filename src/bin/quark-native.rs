@@ -1278,11 +1278,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
                 let name = field.name;
+                let human_tab_index = kind == "Tabs" && name == "value";
+                let display_value = if human_tab_index {
+                    field.value.parse::<usize>().ok()
+                        .map(|value| (value + 1).to_string())
+                        .unwrap_or_else(|| field.value.clone())
+                } else {
+                    field.value.clone()
+                };
                 let Ok(row) = ui.stack(Orientation::Vertical) else {
                     continue;
                 };
                 row.set_spacing(2.0);
-                let caption = if field.explicitly_set {
+                let caption = if human_tab_index {
+                    "Startup page (1 = first; design selection is independent)".to_owned()
+                } else if field.explicitly_set {
                     name.clone()
                 } else if field.default.is_empty() {
                     format!("{name} · unset")
@@ -1292,8 +1302,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 if let Ok(label) = ui.label(&caption) {
                     row.append(&label);
                 }
-                if let Ok(value_field) = ui.text_input(&field.value) {
-                    let draft = Rc::new(RefCell::new(field.value));
+                if let Ok(value_field) = ui.text_input(&display_value) {
+                    let draft = Rc::new(RefCell::new(display_value));
                     value_field.on_change({
                         let draft = draft.clone();
                         move |next| *draft.borrow_mut() = next.to_owned()
@@ -1301,7 +1311,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     row.append(&value_field);
                     if let Ok(apply_button) = ui.button(&format!("Apply {name}")) {
                         let update = apply_xml_property.clone();
-                        apply_button.on_click(move || update(name.clone(), draft.borrow().clone()));
+                        apply_button.on_click(move || {
+                            let chosen = draft.borrow().clone();
+                            if human_tab_index {
+                                if let Ok(page) = chosen.trim().parse::<usize>() {
+                                    if page > 0 {
+                                        update(name.clone(), (page - 1).to_string());
+                                    }
+                                }
+                            } else {
+                                update(name.clone(), chosen);
+                            }
+                        });
                         row.append(&apply_button);
                     }
                 }
