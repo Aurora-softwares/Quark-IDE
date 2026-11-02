@@ -12,7 +12,8 @@ use std::{
 };
 
 fn read(path: &Path) -> Value {
-    fs::read(path).ok()
+    fs::read(path)
+        .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .filter(Value::is_object)
         .unwrap_or_else(|| json!({}))
@@ -80,7 +81,9 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
     }
     root.append(&themes);
     root.append(&ui.label("Hydrogen Compiler")?);
-    root.append(&ui.label("Enter the absolute path of the Hydrogen executable. Leave blank for automatic discovery.")?);
+    root.append(&ui.label(
+        "Enter the absolute path of the Hydrogen executable. Leave blank for automatic discovery.",
+    )?);
     let selection = ui.text_input("")?;
     let saved = read(&preferences_file)
         .get("hydrogen")
@@ -112,7 +115,11 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
                     return;
                 }
             }
-            let value = if input.is_empty() { Value::Null } else { json!(input) };
+            let value = if input.is_empty() {
+                Value::Null
+            } else {
+                json!(input)
+            };
             match update(&file, "hydrogen", "executable", value) {
                 Ok(()) => status.set_text("Compiler path saved. Builds use it immediately."),
                 Err(error) => status.set_text(&format!("Cannot save compiler: {error}")),
@@ -135,7 +142,10 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
             };
             let compiler = match compiler {
                 Ok(v) => v,
-                Err(error) => { status.set_text(&error); return; }
+                Err(error) => {
+                    status.set_text(&error);
+                    return;
+                }
             };
             status.set_text("Checking Hydrogen executable…");
             let sender = ui.tasks().channel({
@@ -144,13 +154,17 @@ pub fn show(ui: &Ui, preferences_file: PathBuf) -> naui::Result<()> {
             });
             std::thread::spawn(move || {
                 let message = match std::process::Command::new(&compiler)
-                    .arg("--version").output()
+                    .arg("--version")
+                    .output()
                 {
                     Ok(output) => {
-                        let text = String::from_utf8_lossy(
-                            if !output.stdout.is_empty() { &output.stdout }
-                            else { &output.stderr }
-                        ).trim().to_owned();
+                        let text = String::from_utf8_lossy(if !output.stdout.is_empty() {
+                            &output.stdout
+                        } else {
+                            &output.stderr
+                        })
+                        .trim()
+                        .to_owned();
                         if output.status.success() {
                             format!("Hydrogen compiler is working: {text}")
                         } else {
@@ -179,8 +193,18 @@ mod tests {
     fn updating_compiler_preserves_other_preferences() {
         let root = tempfile::tempdir().unwrap();
         let file = root.path().join("native-preferences.json");
-        write(&file, &json!({"appearance":{"theme":"dark"},"editor":{"tab_width":4}})).unwrap();
-        update(&file, "hydrogen", "executable", json!("/tmp/hydrogen-stage1")).unwrap();
+        write(
+            &file,
+            &json!({"appearance":{"theme":"dark"},"editor":{"tab_width":4}}),
+        )
+        .unwrap();
+        update(
+            &file,
+            "hydrogen",
+            "executable",
+            json!("/tmp/hydrogen-stage1"),
+        )
+        .unwrap();
         let loaded = read(&file);
         assert_eq!(loaded["appearance"]["theme"], "dark");
         assert_eq!(loaded["editor"]["tab_width"], 4);
