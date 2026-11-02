@@ -3,7 +3,11 @@
 //! The preview never dispatches application handlers.
 use naui::{GridCell, Length, Orientation, Padding, Sizing, Track, Ui};
 use roxmltree::Node;
-use std::rc::Rc;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+/// Design-only active page per tab container. The source's Tabs.value stays
+/// unchanged: a designer may explore page 2 without changing startup page 1.
+pub type DesignTabs = Rc<RefCell<HashMap<Vec<usize>, usize>>>;
 
 pub type SelectElement = Rc<dyn Fn(Vec<usize>)>;
 
@@ -23,6 +27,7 @@ fn render_children(
     node: Node<'_, '_>,
     path: &[usize],
     on_select: &SelectElement,
+    design_tabs: &DesignTabs,
 ) -> Result<(), String> {
     for (index, child) in node
         .children()
@@ -31,7 +36,7 @@ fn render_children(
     {
         let mut next = path.to_vec();
         next.push(index);
-        render_node(ui, parent, child, next, on_select)?;
+        render_node(ui, parent, child, next, on_select, design_tabs)?;
     }
     Ok(())
 }
@@ -43,65 +48,17 @@ fn render_node(
     path: Vec<usize>,
     on_select: &SelectElement,
 ) -> Result<(), String> {
+    // Only draw what Hydrogen will draw. Selection chrome belongs to the
+    // Properties hierarchy, never inside the application being previewed.
     if node.attribute("visible") == Some("false") {
-        let hidden = ui
-            .button(&format!("Edit hidden {}", node_title(node)))
-            .map_err(|e| e.to_string())?;
-        let select = on_select.clone();
-        hidden.on_click(move || select(path.clone()));
-        parent.append(&hidden);
         return Ok(());
     }
     let kind = node.tag_name().name();
-    if matches!(kind, "Timer" | "Dialog") {
-        // Non-visual nodes still appear as editable entries.
-        let choose = ui
-            .button(&format!("Edit {}", node_title(node)))
-            .map_err(|e| e.to_string())?;
-        let selected = on_select.clone();
-        choose.on_click(move || selected(path.clone()));
-        parent.append(&choose);
+    if matches!(kind, "Timer" | "Dialog" | "State" | "Clipboard" | "ContextMenu") {
         return Ok(());
     }
-    let is_container = matches!(
-        kind,
-        "ColumnPanel"
-            | "RowPanel"
-            | "GridPanel"
-            | "Panel"
-            | "Tab"
-            | "Tabs"
-            | "ScrollView"
-            | "Window"
-            | "MenuBar"
-            | "Menu"
-    );
-    let row = ui
-        .stack(if is_container {
-            Orientation::Vertical
-        } else {
-            Orientation::Horizontal
-        })
-        .map_err(|e| e.to_string())?;
-    row.set_spacing(if is_container { 5.0 } else { 7.0 });
-    // Compact, unobtrusive selector rather than a second full-sized button
-    // repeating the text of every native control.
-    let select_row = ui
-        .stack(Orientation::Horizontal)
-        .map_err(|e| e.to_string())?;
-    select_row.set_spacing(4.0);
-    let choose = ui.button("◇").map_err(|e| e.to_string())?;
-    choose.set_sizing(Sizing::new().width(Length::Fixed(28.0)));
-    let selected = on_select.clone();
-    let selected_path = path.clone();
-    choose.on_click(move || selected(selected_path.clone()));
-    if is_container {
-        select_row.append(&choose);
-        select_row.append(&ui.label(&node_title(node)).map_err(|e| e.to_string())?);
-        row.append(&select_row);
-    } else {
-        row.append(&choose);
-    }
+    let row = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+    row.set_spacing(0.0);
 
     match kind {
         "ColumnPanel" | "Panel" | "Tab" | "ScrollView" | "Window" => {
@@ -112,7 +69,7 @@ fn render_node(
                     .unwrap_or(6.0)
                     .clamp(0.0, 48.0),
             );
-            render_children(ui, &children, node, &path, on_select)?;
+            render_children(ui, &children, node, &path, on_select, design_tabs)?;
             row.append(&children);
         }
         "RowPanel" | "MenuBar" | "Menu" => {
@@ -120,7 +77,7 @@ fn render_node(
                 .stack(Orientation::Horizontal)
                 .map_err(|e| e.to_string())?;
             children.set_spacing(8.0);
-            render_children(ui, &children, node, &path, on_select)?;
+            render_children(ui, &children, node, &path, on_select, design_tabs)?;
             row.append(&children);
         }
         "GridPanel" => {
@@ -138,52 +95,44 @@ fn render_node(
                 let cell = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
                 let mut child_path = path.clone();
                 child_path.push(index);
-                render_node(ui, &cell, child, child_path, on_select)?;
+                render_node(ui, &cell, child, child_path, on_select, design_tabs)?;
                 grid.attach(&cell, GridCell::new(index % columns, index / columns));
             }
             row.append(&grid);
         }
         "Tabs" => {
-            let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            let selected = node
-                .attribute("value")
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(0);
-            // Render the selected tab, but list the remaining tab headers so
-            // their attributes can also be edited through Properties.
-            for (i, tab) in node
-                .children()
-                .filter(|n| n.is_element() && n.tag_name().name() == "Tab")
-                .enumerate()
-            {
-                let title = ui
-                    .button(tab.attribute("title").unwrap_or("Page"))
-                    .map_err(|e| e.to_string())?;
-                let mut tab_path = path.clone();
-                let position = node
-                    .children()
-                    .filter(|n| n.is_element())
-                    .position(|n| n == tab)
-                    .unwrap_or(i);
-                tab_path.push(position);
-                let select = on_select.clone();
-                title.on_click(move || select(tab_path.clone()));
-                children.append(&title);
-                if i == selected {
-                    render_children(
-                        ui,
-                        &children,
-                        tab,
-                        &{
-                            let mut p = path.clone();
-                            p.push(position);
-                            p
-                        },
-                        on_select,
-                    )?;
+            // Use the actual native tab widget (GtkNotebook on Linux,
+            // NSSegmentedControl-hosted pages on macOS, WinUI tabs on Windows).
+            // No fake text buttons or duplicate labels.
+            let tabs = ui.tabs().map_err(|e| e.to_string())?;
+            let mut count = 0;
+            for (position, tab) in node.children().filter(|n| n.is_element()).enumerate() {
+                if tab.tag_name().name() != "Tab" {
+                    continue;
                 }
+                let page = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+                let mut tab_path = path.clone();
+                tab_path.push(position);
+                render_children(ui, &page, tab, &tab_path, on_select, design_tabs)?;
+                tabs.add_tab(tab.attribute("title").unwrap_or("Page"), &page);
+                count += 1;
             }
-            row.append(&children);
+            if count > 0 {
+                // Hydrogen stores zero-based indices. Unset value=0 is page 1.
+                let runtime_default = node.attribute("value")
+                    .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+                let selection = design_tabs.borrow().get(&path).copied()
+                    .unwrap_or(runtime_default).min(count - 1);
+                tabs.set_selected(selection);
+                let design_tabs = design_tabs.clone();
+                let select = on_select.clone();
+                tabs.on_select(move |index| {
+                    design_tabs.borrow_mut().insert(path.clone(), index);
+                    // Selecting another page for design never writes XML.
+                    select(Vec::new());
+                });
+            }
+            row.append(&tabs);
         }
         "Label" => row.append(
             &ui.label(node.attribute("text").unwrap_or("Label"))
@@ -242,7 +191,7 @@ fn render_node(
         }
         _ => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            render_children(ui, &children, node, &path, on_select)?;
+            render_children(ui, &children, node, &path, on_select, design_tabs)?;
             row.append(&children);
         }
     }
@@ -250,7 +199,12 @@ fn render_node(
     Ok(())
 }
 
-pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stack, String> {
+pub fn render(
+    ui: &Ui,
+    xml: &str,
+    on_select: SelectElement,
+    design_tabs: DesignTabs,
+) -> Result<naui::Stack, String> {
     let doc = roxmltree::Document::parse(xml).map_err(|e| e.to_string())?;
     let root = doc.root_element();
     if root.tag_name().name() != "Window" {
@@ -303,7 +257,7 @@ pub fn render(ui: &Ui, xml: &str, on_select: SelectElement) -> Result<naui::Stac
         }
     });
     outer.append(&titlebar);
-    render_children(ui, &window, root, &[], &on_select)?;
+    render_children(ui, &window, root, &[], &on_select, &design_tabs)?;
     outer.append(&window);
     Ok(outer)
 }
