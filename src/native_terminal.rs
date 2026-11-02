@@ -13,6 +13,18 @@ use std::{
 };
 
 /// Messages sent from platform-native input widgets to the live PTY.
+/// Translate edits in a native TextInput to live PTY keystrokes. This keeps
+/// non-GTK shell input interactive, including backspaces, without executing
+/// a fresh command for each change. Both strings must be valid UTF-8.
+pub fn typed_input_delta(previous: &str, next: &str) -> Vec<u8> {
+    let prefix = previous.chars().zip(next.chars()).take_while(|(a, b)| a == b).count();
+    let removed = previous.chars().count() - prefix;
+    let inserted = next.chars().skip(prefix).collect::<String>();
+    let mut input = vec![0x7f; removed];
+    input.extend_from_slice(inserted.as_bytes());
+    input
+}
+
 pub enum Input {
     Bytes(Vec<u8>),
     #[allow(dead_code)] // Created by GTK viewport callbacks; other native backends use fixed-size PTYs.
@@ -149,6 +161,15 @@ mod tests {
                 cols: 132
             }
         ));
+    }
+
+    #[test]
+    fn native_terminal_keystroke_deltas_preserve_unicode_and_backspaces() {
+        assert_eq!(typed_input_delta("", "echo"), b"echo");
+        assert_eq!(typed_input_delta("echo", "ech"), [0x7f]);
+        assert_eq!(typed_input_delta("a", "a☃"), "☃".as_bytes());
+        assert_eq!(typed_input_delta("abc", "ad"), [0x7f, 0x7f, b'd']);
+        assert!(typed_input_delta("abc", "abc").is_empty());
     }
 
     #[test]
