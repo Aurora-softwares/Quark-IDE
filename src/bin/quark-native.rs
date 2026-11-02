@@ -2147,7 +2147,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     document_tabs.append(&tab);
                 }
             }
-            if tabs.len() > VISIBLE_TABS {
+            if native_shell::document_overflow(tabs.len(), VISIBLE_TABS) {
                 if let Ok(previous) = ui.button("‹") {
                     previous.set_enabled(offset > 0);
                     let shift = tab_offset.clone();
@@ -2177,7 +2177,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     document_overflow.append(&next);
                 }
             }
-            if tabs.len() > VISIBLE_TABS {
+            if native_shell::document_overflow(tabs.len(), VISIBLE_TABS) {
                 if let Ok(all) = ui.combo_box() {
                     let mut labels = vec!["⌄".to_owned()];
                     labels.extend(tabs.iter().map(|(_, path)| {
@@ -2205,7 +2205,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if !tabs.is_empty() {
                 document_bar.set_column_track(
                     1,
-                    Track::Fixed(if tabs.len() > VISIBLE_TABS {
+                    Track::Fixed(if native_shell::document_overflow(tabs.len(), VISIBLE_TABS) {
                         122.0
                     } else {
                         0.0
