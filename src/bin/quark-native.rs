@@ -775,6 +775,9 @@ fn apply_bottom_dock_order(
     true
 }
 
+#[cfg(target_os = "linux")]
+type DockRefreshHook = Rc<RefCell<Option<Rc<dyn Fn()>>>>;
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     // Reuse the launcher window. Creating an AppKit window from a button
     // callback and immediately closing the old one can lose activation.
@@ -1916,7 +1919,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     inspector.set_min_sizes(110.0, 150.0);
     retain_trailing_size(&inspector);
 
-    let (bottom, output_controls) =
+    let (bottom, _output_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Output)?;
     // Bottom tools share one tab strip. The generic dock header remains
     // present for model compatibility, but never occupies a second row.
@@ -2039,6 +2042,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let folded = errors_folded.clone();
         let button = error_fold_button.clone();
         let refresh = refresh_errors.clone();
+        #[cfg(target_os = "linux")]
         let list = error_list.clone();
         move || {
             folded.set(!folded.get());
@@ -2725,7 +2729,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // zone uses the native sidecar host. Unsupported compound bottom tabs are
     // rejected rather than silently persisting a move that cannot be shown.
     #[cfg(target_os = "linux")]
-    let dock_refresh_hook: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
         use gtk4::glib::object::Cast;
@@ -2789,7 +2793,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         let slot_start = id == DockId::Solution;
                         native_dock_runtime::attach_paned(widget, &inspector_home, slot_start)
                     }
-                    _ => false,
                 }
             } else {
                 match zone {
@@ -3476,9 +3479,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
         // The composite toolbar is not itself a tool; Output has its own
         // independently movable and floatable section below the toolbar.
-        output_controls.float.set_enabled(false);
-        output_controls.pin.set_enabled(false);
-        output_controls.collapse.set_enabled(false);
+        _output_controls.float.set_enabled(false);
+        _output_controls.pin.set_enabled(false);
+        _output_controls.collapse.set_enabled(false);
     }
 
     // Shared dock headers now own pin and collapse state. Persist settings
