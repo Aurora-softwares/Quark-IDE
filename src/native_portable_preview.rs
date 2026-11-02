@@ -68,7 +68,7 @@ fn render_children(
             on_select,
             design_tabs,
             available_width,
-                    document,
+            document,
         )?;
     }
     Ok(())
@@ -82,6 +82,7 @@ fn render_node(
     on_select: &SelectElement,
     design_tabs: &DesignTabs,
     available_width: f64,
+    document: &Path,
 ) -> Result<(), String> {
     // Only draw what Hydrogen will draw. Selection chrome belongs to the
     // Properties hierarchy, never inside the application being previewed.
@@ -714,7 +715,7 @@ pub fn render(
                     .and_then(|v| v.parse::<f64>().ok())
                     .unwrap_or(24.0))
         .max(160.0),
-            document,
+        document,
     )?;
     outer.append(&window);
     let frame_edge = ui.canvas().map_err(|e| e.to_string())?;
