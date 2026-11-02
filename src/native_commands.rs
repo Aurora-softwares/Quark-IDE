@@ -303,9 +303,13 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
             }
         }
     };
+    let context = format!(
+        "Hydrogen compiler: {}\nProject: {}\nWorking directory: {}\n",
+        plan.program, project.display(), plan.cwd.display(),
+    );
     match result {
-        Ok(message) => ResultLog::ok(message),
-        Err(message) => ResultLog::error(message),
+        Ok(message) => ResultLog::ok(format!("{context}{message}")),
+        Err(message) => ResultLog::error(format!("{context}{message}")),
     }
 }
 
