@@ -156,6 +156,21 @@ pub fn enable_widget_drag(
     widget.add_controller(target);
 }
 
+/// Collapse a native section's body without removing or rebuilding it.
+/// The first child is always the shared header created by section_panel().
+#[cfg(target_os = "linux")]
+pub fn set_section_collapsed(panel: &naui::Stack, collapsed: bool) {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    if let Ok(box_) = panel.native_widget().downcast::<gtk4::Box>() {
+        let mut next = box_.first_child().and_then(|header| header.next_sibling());
+        while let Some(child) = next {
+            next = child.next_sibling();
+            child.set_visible(!collapsed);
+        }
+    }
+}
+
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     let row = ui.stack(Orientation::Horizontal)?;
     row.set_spacing(5.0);
