@@ -22,14 +22,26 @@ enum Syntax {
 }
 
 impl Syntax {
-    fn color(self) -> &'static str {
-        match self {
-            Self::Keyword | Self::Modifier | Self::Tag => "#b49cfa",
-            Self::Type | Self::Attribute => "#76c7e9",
-            Self::Literal | Self::Number => "#e5b77e",
-            Self::String => "#a6d58c",
-            Self::Comment => "#888e99",
-            Self::Operator => "#c9cbd1",
+    fn color(self, dark: bool) -> &'static str {
+        if dark {
+            match self {
+                Self::Keyword | Self::Modifier | Self::Tag => "#b49cfa",
+                Self::Type | Self::Attribute => "#76c7e9",
+                Self::Literal | Self::Number => "#e5b77e",
+                Self::String => "#a6d58c",
+                Self::Comment => "#9da4b2",
+                Self::Operator => "#c9cbd1",
+            }
+        } else {
+            // Light backgrounds need saturated, darker syntax colours.
+            match self {
+                Self::Keyword | Self::Modifier | Self::Tag => "#6334ac",
+                Self::Type | Self::Attribute => "#086b94",
+                Self::Literal | Self::Number => "#97500f",
+                Self::String => "#24712c",
+                Self::Comment => "#667085",
+                Self::Operator => "#394150",
+            }
         }
     }
     fn name(self) -> &'static str {
@@ -166,6 +178,9 @@ fn apply_highlight(buffer: &gtk4::TextBuffer, xml: bool) {
     if text.len() > 512 * 1024 {
         return;
     }
+    let dark = gtk4::Settings::default()
+        .map(|s| s.is_gtk_application_prefer_dark_theme())
+        .unwrap_or(false);
     let table = buffer.tag_table();
     buffer.remove_all_tags(&buffer.start_iter(), &buffer.end_iter());
     let spans = if xml {
@@ -178,10 +193,10 @@ fn apply_highlight(buffer: &gtk4::TextBuffer, xml: bool) {
             tag
         } else {
             let tag = gtk4::TextTag::new(Some(kind.name()));
-            tag.set_property("foreground", kind.color());
             table.add(&tag);
             tag
         };
+        tag.set_property("foreground", kind.color(dark));
         buffer.apply_tag(
             &tag,
             &buffer.iter_at_offset(begin as i32),
@@ -197,6 +212,11 @@ pub fn install(area: &naui::TextArea, xml: bool) {
         let buffer = view.buffer();
         buffer.connect_changed(move |buffer| apply_highlight(buffer, xml));
         apply_highlight(&buffer, xml);
+        if let Some(settings) = gtk4::Settings::default() {
+            settings.connect_notify_local(Some("gtk-application-prefer-dark-theme"), move |_, _| {
+                apply_highlight(&buffer, xml);
+            });
+        }
     }
 }
 
