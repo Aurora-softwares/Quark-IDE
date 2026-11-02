@@ -1326,9 +1326,15 @@ mod tests {
     fn hydrogen_default_control_expansion_matches_runtime_except_buttons() {
         let xml = r#"<Window><Panel><Label/><Input/><Slider/><ProgressBar/><Button/><Spinner/><Button fill="true"/><Label fill="false"/></Panel></Window>"#;
         let parsed = roxmltree::Document::parse(xml).unwrap();
-        let elements = parsed.descendants().filter(|node| node.is_element()).collect::<Vec<_>>();
+        let elements = parsed
+            .descendants()
+            .filter(|node| node.is_element())
+            .collect::<Vec<_>>();
         for index in 0..6 {
-            assert!(runtime_fills(elements[index]), "element {index} should fill");
+            assert!(
+                runtime_fills(elements[index]),
+                "element {index} should fill"
+            );
         }
         assert!(!runtime_fills(elements[6]));
         assert!(!runtime_fills(elements[7]));
@@ -1340,7 +1346,11 @@ mod tests {
     fn runtime_expansion_respects_opt_out_and_explicit_overrides() {
         let xml = r#"<Window><FilePicker/><ToolButton/><Spinner fill="true"/><Input fill="false"/></Window>"#;
         let parsed = roxmltree::Document::parse(xml).unwrap();
-        let elements = parsed.root_element().children().filter(|node| node.is_element()).collect::<Vec<_>>();
+        let elements = parsed
+            .root_element()
+            .children()
+            .filter(|node| node.is_element())
+            .collect::<Vec<_>>();
         assert!(!runtime_fills(elements[0]));
         assert!(!runtime_fills(elements[1]));
         assert!(runtime_fills(elements[2]));
