@@ -114,7 +114,14 @@ pub fn install_zone_target(
         else {
             return false;
         };
-        drop(id, zone)
+        // Reparenting the source inside connect_drop() destroys its active
+        // drag controller before GDK releases the pointer. Accept the drop
+        // first; commit the move on the next GTK main-loop turn.
+        let apply = drop.clone();
+        gtk4::glib::idle_add_local_once(move || {
+            apply(id, zone);
+        });
+        true
     });
     host.add_controller(target);
 }
