@@ -144,10 +144,8 @@ fn row_child_widths(node: Node<'_, '_>, available_width: f64, gap: f64) -> Vec<f
         .zip(widths.iter())
         .filter(|(child, width)| child.attribute("visible") != Some("false") && width.is_none())
         .count();
-    let remaining = (available_width
-        - gap * visible_count.saturating_sub(1) as f64
-        - fixed_total)
-        .max(0.0);
+    let remaining =
+        (available_width - gap * visible_count.saturating_sub(1) as f64 - fixed_total).max(0.0);
     let flexible_width = if flexible_count == 0 {
         0.0
     } else {
@@ -1283,7 +1281,8 @@ mod tests {
                     && node
                         .children()
                         .filter(|child| child.is_element() && child.has_tag_name("Panel"))
-                        .count() == 2
+                        .count()
+                        == 2
                     && node.attribute("gap") == Some("20")
             })
             .unwrap();
