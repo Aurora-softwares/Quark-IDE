@@ -1955,6 +1955,26 @@
         "terminal::tests::ansi_screen_tracks_colours_cursor_and_alternate_screen",
         "terminal::tests::control_keys_and_paste_reach_the_os"
       ]
+    },
+    {
+      "id": "native-designer-design-page-navigation",
+      "category": "Native Interface Designer",
+      "feature": "Properties page navigator uses Tab titles without modifying Hydrogen application startup value",
+      "tests": [
+        "native_ui_properties::tests::design_page_choices_follow_nested_tab_titles_without_modifying_startup_page",
+        "native_ui_properties::tests::design_page_selector_rejects_non_tab_and_stale_paths",
+        "native_portable_preview::tests::navigating_design_tabs_does_not_change_compiled_startup_page"
+      ]
+    },
+    {
+      "id": "native-designer-properties-only-state",
+      "category": "Native Interface Designer",
+      "feature": "Native preview values are configured through the lossless Properties XML editor, independent of design-time tab navigation",
+      "tests": [
+        "native_ui_properties::tests::exposes_unset_runtime_and_design_attributes_without_changing_xml",
+        "native_ui_properties::tests::updates_nested_control_without_rewriting_siblings_or_events",
+        "native_portable_preview::tests::real_hydrogen_studio_default_tab_is_one_but_design_navigation_is_independent"
+      ]
     }
   ]
 }
