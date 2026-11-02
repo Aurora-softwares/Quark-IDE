@@ -19,11 +19,10 @@ pub fn design_tab_index(
     design_override: Option<usize>,
     number_of_pages: usize,
 ) -> Option<usize> {
-    number_of_pages.checked_sub(1).map(|last| {
-        design_override.unwrap_or(source_default).min(last)
-    })
+    number_of_pages
+        .checked_sub(1)
+        .map(|last| design_override.unwrap_or(source_default).min(last))
 }
-
 
 fn render_children(
     ui: &Ui,
