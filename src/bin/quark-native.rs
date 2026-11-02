@@ -2086,6 +2086,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let dock_refresh_hook: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
+        use gtk4::prelude::Cast;
         use naui::Widget as _;
         let toolbox = toolbox.native_widget();
         let symbols = symbols_section.native_widget();
@@ -2245,6 +2246,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     };
     #[cfg(target_os = "linux")]
     let refresh_docks: Rc<dyn Fn()> = Rc::new({
+        use gtk4::prelude::WidgetExt;
         let model = dock_model.clone();
         let active = active_dock.clone();
         #[cfg(target_os = "linux")]
@@ -2398,7 +2400,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     refresh_docks();
     #[cfg(target_os = "linux")]
     let show_auto_hide: Rc<dyn Fn(native_docking::DockId, gtk4::Widget)> = {
-        use gtk4::prelude::*;
         let model = dock_model.clone();
         let widgets = dock_widgets.clone();
         let popovers = auto_hide_popovers.clone();
