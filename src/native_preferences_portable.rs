@@ -41,7 +41,8 @@ fn update(path: &Path, section: &str, field: &str, value: Value) -> Result<(), S
 /// Apply a saved theme before the editor window opens. The native backend
 /// retains platform ownership of colours, focus, fonts and window chrome.
 pub fn apply_saved_theme(ui: &Ui, path: &Path) {
-    let theme = read(path)
+    let saved = read(path);
+    let theme = saved
         .get("appearance")
         .and_then(|v| v.get("theme"))
         .and_then(Value::as_str)
