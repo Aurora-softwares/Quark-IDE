@@ -45,6 +45,7 @@ fn image_source(document: &Path, source: &str) -> String {
 
 /// Only active controls claim the native design-time click sequence. A
 /// container must allow the event to reach its nested child for selection.
+#[cfg(any(target_os = "linux", test))]
 fn design_press_claims_activation(kind: &str) -> bool {
     matches!(
         kind,
@@ -141,10 +142,9 @@ fn render_node(
         use naui::Widget as _;
         row.native_widget().set_tooltip_text(Some(tip));
     }
-    // Capture the press before it reaches an interactive child, but do not
-    // claim the GTK event sequence. Clicking labels, panels, sliders, fields
-    // and whitespace selects the XML node without changing runtime values.
-    // The innermost captured node wins as GTK traverses the ancestor chain.
+    // In GTK, container captures allow deeper selection. Actionable controls
+    // claim the design-time press before their default behaviour runs.
+    // Edits to application state belong exclusively in Properties.
     #[cfg(target_os = "linux")]
     {
         use gtk4::prelude::*;
