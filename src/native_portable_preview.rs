@@ -27,7 +27,15 @@ fn render_children(
     {
         let mut next = path.to_vec();
         next.push(index);
-        render_node(ui, parent, child, next, on_select, design_tabs, available_width)?;
+        render_node(
+            ui,
+            parent,
+            child,
+            next,
+            on_select,
+            design_tabs,
+            available_width,
+        )?;
     }
     Ok(())
 }
@@ -59,11 +67,18 @@ fn render_node(
     match kind {
         "Panel" => {
             let panel = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            let padding = node.attribute("padding").and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(20.0).clamp(0.0, 80.0);
+            let padding = node
+                .attribute("padding")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(20.0)
+                .clamp(0.0, 80.0);
             panel.set_padding(Padding::all(padding));
-            panel.set_spacing(node.attribute("gap").and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(12.0).clamp(0.0, 48.0));
+            panel.set_spacing(
+                node.attribute("gap")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(12.0)
+                    .clamp(0.0, 48.0),
+            );
             if let Some(title) = node.attribute("title").filter(|s| !s.is_empty()) {
                 let label = ui.label(title).map_err(|e| e.to_string())?;
                 label.set_style(naui::TextStyle::Heading);
@@ -76,7 +91,12 @@ fn render_node(
                 panel.native_widget().add_css_class("card");
             }
             render_children(
-                ui, &panel, node, &path, on_select, design_tabs,
+                ui,
+                &panel,
+                node,
+                &path,
+                on_select,
+                design_tabs,
                 (available_width - 2.0 * padding).max(80.0),
             )?;
             row.append(&panel);
@@ -89,21 +109,35 @@ fn render_node(
                     .unwrap_or(12.0)
                     .clamp(0.0, 48.0),
             );
-            render_children(ui, &children, node, &path, on_select, design_tabs, available_width)?;
+            render_children(
+                ui,
+                &children,
+                node,
+                &path,
+                on_select,
+                design_tabs,
+                available_width,
+            )?;
             row.append(&children);
         }
         "RowPanel" | "MenuBar" | "Menu" => {
             let direction = if kind == "RowPanel"
-                && available_width < node.attribute("breakpoint")
-                    .and_then(|v| v.parse::<f64>().ok()).unwrap_or(700.0)
+                && available_width
+                    < node
+                        .attribute("breakpoint")
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(700.0)
             {
                 Orientation::Vertical
             } else {
                 Orientation::Horizontal
             };
             let children = ui.stack(direction).map_err(|e| e.to_string())?;
-            let gap = node.attribute("gap").and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(12.0).clamp(0.0, 48.0);
+            let gap = node
+                .attribute("gap")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(12.0)
+                .clamp(0.0, 48.0);
             children.set_spacing(gap);
             let count = node.children().filter(|n| n.is_element()).count().max(1);
             let child_width = if direction == Orientation::Horizontal {
@@ -111,7 +145,15 @@ fn render_node(
             } else {
                 available_width
             };
-            render_children(ui, &children, node, &path, on_select, design_tabs, child_width)?;
+            render_children(
+                ui,
+                &children,
+                node,
+                &path,
+                on_select,
+                design_tabs,
+                child_width,
+            )?;
             row.append(&children);
         }
         "GridPanel" => {
@@ -134,7 +176,8 @@ fn render_node(
             // Hydrogen's layout is responsive. Use the target window's width
             // rather than always forcing the maximum columns.
             let columns = maximum_columns.min(
-                ((available_width + gap) / (minimum_width + gap)).floor()
+                ((available_width + gap) / (minimum_width + gap))
+                    .floor()
                     .max(1.0) as usize,
             );
             grid.set_spacing(gap, gap);
@@ -146,7 +189,12 @@ fn render_node(
                 let mut child_path = path.clone();
                 child_path.push(index);
                 render_node(
-                    ui, &cell, child, child_path, on_select, design_tabs,
+                    ui,
+                    &cell,
+                    child,
+                    child_path,
+                    on_select,
+                    design_tabs,
                     (available_width - gap * (columns as f64 - 1.0)) / columns as f64,
                 )?;
                 grid.attach(&cell, GridCell::new(index % columns, index / columns));
@@ -166,7 +214,15 @@ fn render_node(
                 let page = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
                 let mut tab_path = path.clone();
                 tab_path.push(position);
-                render_children(ui, &page, tab, &tab_path, on_select, design_tabs, available_width)?;
+                render_children(
+                    ui,
+                    &page,
+                    tab,
+                    &tab_path,
+                    on_select,
+                    design_tabs,
+                    available_width,
+                )?;
                 tabs.add_tab(tab.attribute("title").unwrap_or("Page"), &page);
                 count += 1;
             }
@@ -195,7 +251,8 @@ fn render_node(
             row.append(&tabs);
         }
         "Label" => {
-            let label = ui.label(node.attribute("text").unwrap_or(""))
+            let label = ui
+                .label(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             match node.attribute("role").unwrap_or("") {
                 "title" => label.set_style(naui::TextStyle::LargeTitle),
@@ -390,11 +447,18 @@ fn render_node(
             let list = ui.list().map_err(|e| e.to_string())?;
             let items = node.attribute("items").unwrap_or("");
             list.set_items(&naui::ListItem::list(items.split('|')));
-            list.set_selected(node.attribute("value")
-                .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0));
-            list.set_sizing(Sizing::new().height(Length::Fixed(
-                node.attribute("height").and_then(|v| v.parse::<f64>().ok()).unwrap_or(160.0),
-            )));
+            list.set_selected(
+                node.attribute("value")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(0),
+            );
+            list.set_sizing(
+                Sizing::new().height(Length::Fixed(
+                    node.attribute("height")
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(160.0),
+                )),
+            );
             let select = on_select.clone();
             list.on_select(move |_| select(path.clone()));
             row.append(&list);
@@ -405,14 +469,24 @@ fn render_node(
                 node.attribute("columns").unwrap_or("").split('|'),
             ));
             let rows = node.attribute("rows").unwrap_or("");
-            table.set_rows(&rows.lines().map(|line| {
-                naui::TableRow::new(line.split('|'))
-            }).collect::<Vec<_>>());
-            table.set_sizing(Sizing::new().height(Length::Fixed(
-                node.attribute("height").and_then(|v| v.parse::<f64>().ok()).unwrap_or(160.0),
-            )));
-            table.set_selected(node.attribute("value")
-                .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0));
+            table.set_rows(
+                &rows
+                    .lines()
+                    .map(|line| naui::TableRow::new(line.split('|')))
+                    .collect::<Vec<_>>(),
+            );
+            table.set_sizing(
+                Sizing::new().height(Length::Fixed(
+                    node.attribute("height")
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(160.0),
+                )),
+            );
+            table.set_selected(
+                node.attribute("value")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(0),
+            );
             let select = on_select.clone();
             table.on_select(move |_| select(path.clone()));
             row.append(&table);
@@ -420,7 +494,8 @@ fn render_node(
         "FilePicker" => {
             // Hydrogen's picker is a native button until its dialog opens.
             // A design-time click selects the control; no real OS picker runs.
-            let button = ui.button(node.attribute("text").unwrap_or("Choose file…"))
+            let button = ui
+                .button(node.attribute("text").unwrap_or("Choose file…"))
                 .map_err(|e| e.to_string())?;
             let select = on_select.clone();
             button.on_click(move || select(path.clone()));
@@ -433,7 +508,15 @@ fn render_node(
         _ => {
             // Unknown future runtime controls are not faked with labels.
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            render_children(ui, &children, node, &path, on_select, design_tabs, available_width)?;
+            render_children(
+                ui,
+                &children,
+                node,
+                &path,
+                on_select,
+                design_tabs,
+                available_width,
+            )?;
             row.append(&children);
         }
     }
@@ -500,9 +583,19 @@ pub fn render(
     });
     outer.append(&titlebar);
     render_children(
-        ui, &window, root, &[], &on_select, &design_tabs,
-        (width - 2.0 * root.attribute("padding")
-            .and_then(|v| v.parse::<f64>().ok()).unwrap_or(24.0)).max(160.0),
+        ui,
+        &window,
+        root,
+        &[],
+        &on_select,
+        &design_tabs,
+        (width
+            - 2.0
+                * root
+                    .attribute("padding")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(24.0))
+        .max(160.0),
     )?;
     outer.append(&window);
     Ok(outer)
