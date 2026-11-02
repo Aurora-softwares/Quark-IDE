@@ -1660,11 +1660,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     #[cfg(target_os = "linux")]
     let explorer_menu_hook: native_solution_explorer::MenuCallback = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
+    let explorer_context_selection = Rc::new(Cell::new(false));
+    #[cfg(target_os = "linux")]
     {
         use naui::Widget as _;
         native_solution_explorer::install_context_menu(
             &tree.native_widget(),
             explorer_menu_hook.clone(),
+            explorer_context_selection.clone(),
         );
     }
     let solution_query = Rc::new(RefCell::new(String::new()));
@@ -5013,10 +5016,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
         let status = status.clone();
+        #[cfg(target_os = "linux")]
+        let context_selection = explorer_context_selection.clone();
         move |position| {
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(&position.to_vec()).cloned() {
                 *selected_explorer_path.borrow_mut() = Some(path.clone());
+                #[cfg(target_os = "linux")]
+                if context_selection.get() {
+                    return;
+                }
                 if path.is_dir() {
                     status.set_text(&format!("Folder selected: {}", path.display()));
                 } else if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
