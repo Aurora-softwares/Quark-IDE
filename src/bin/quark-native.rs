@@ -1647,6 +1647,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     sync_explorer_controls();
     let (initial_tree, initial_paths) = solution_items(&state.borrow(), "", false, false);
     let displayed_paths = Rc::new(RefCell::new(initial_paths));
+    let selected_explorer_path: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "linux")]
+    let explorer_menu_hook: Rc<
+        RefCell<Option<Rc<dyn Fn(native_solution_explorer::MenuAction)>>>,
+    > = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        native_solution_explorer::install_context_menu(
+            &tree.native_widget(),
+            explorer_menu_hook.clone(),
+        );
+    }
     let solution_query = Rc::new(RefCell::new(String::new()));
     tree.set_items(&initial_tree);
     #[cfg(target_os = "linux")]
@@ -4896,12 +4909,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     tree.on_select({
         let displayed_paths = displayed_paths.clone();
+        let selected_explorer_path = selected_explorer_path.clone();
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
+        let status = status.clone();
         move |position| {
             let files = displayed_paths.borrow();
             if let Some(path) = files.get(&position.to_vec()).cloned() {
-                if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
+                *selected_explorer_path.borrow_mut() = Some(path.clone());
+                if path.is_dir() {
+                    status.set_text(&format!("Folder selected: {}", path.display()));
+                } else if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                     open_layout(path);
                 } else {
                     open_source(path);
@@ -4909,6 +4927,133 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        let tree_widget = tree.native_widget();
+        let selected = selected_explorer_path.clone();
+        let state = state.clone();
+        let refresh = refresh_project.clone();
+        let status = status.clone();
+        let open_source = open_source.clone();
+        let open_layout = open_layout.clone();
+        *explorer_menu_hook.borrow_mut() = Some(Rc::new(move |command| {
+            use native_solution_explorer::{FileAction, MenuAction};
+            let root = {
+                let ide = state.borrow();
+                ide.project
+                    .as_ref()
+                    .and_then(|project| project.path.parent().map(Path::to_path_buf))
+                    .or_else(|| ide.workspace.folders.last().cloned())
+                    .unwrap_or_else(|| PathBuf::from("."))
+            };
+            let target = selected.borrow().clone().unwrap_or_else(|| root.clone());
+            if !target.exists() {
+                status.set_text("Selected explorer entry no longer exists. Refresh the project.");
+                return;
+            }
+            if command == MenuAction::Open {
+                if target.is_dir() {
+                    status.set_text(&format!("Selected folder: {}", target.display()));
+                } else if target.extension().and_then(|s| s.to_str()) == Some("hyui") {
+                    open_layout(target);
+                } else {
+                    open_source(target);
+                }
+                return;
+            }
+            if command == MenuAction::Reveal {
+                let directory = if target.is_dir() {
+                    target
+                } else {
+                    target.parent().unwrap_or(root.as_path()).to_path_buf()
+                };
+                match std::process::Command::new("xdg-open").arg(directory).spawn() {
+                    Ok(_) => status.set_text("Opened the selected folder in the file manager."),
+                    Err(error) => status.set_text(&format!("Cannot open file manager: {error}")),
+                }
+                return;
+            }
+            let operate: Rc<dyn Fn(FileAction)> = Rc::new({
+                let selected = selected.clone();
+                let state = state.clone();
+                let refresh = refresh.clone();
+                let status = status.clone();
+                let target = target.clone();
+                let root = root.clone();
+                move |action| {
+                    if matches!(&action, FileAction::Rename(_) | FileAction::Delete) {
+                        let ide = state.borrow();
+                        let in_use = ide.workspace.selected.as_ref() == Some(&target)
+                            || ide
+                                .open_tabs()
+                                .iter()
+                                .any(|(_, path)| path == &target || path.starts_with(&target));
+                        if in_use {
+                            status.set_text(
+                                "Close this document/project before renaming or deleting it.",
+                            );
+                            return;
+                        }
+                        if ide.has_unsaved() {
+                            status.set_text(
+                                "Save all modified documents before changing explorer files.",
+                            );
+                            return;
+                        }
+                    }
+                    match native_solution_explorer::file_action(&root, &target, action) {
+                        Ok(changed) => {
+                            *selected.borrow_mut() = Some(changed.clone());
+                            refresh();
+                            status.set_text(&format!("Explorer updated: {}", changed.display()));
+                        }
+                        Err(error) => status.set_text(&format!("Explorer: {error}")),
+                    }
+                }
+            });
+            match command {
+                MenuAction::NewFile | MenuAction::NewFolder | MenuAction::Rename => {
+                    let title = match command {
+                        MenuAction::NewFile => "Create file",
+                        MenuAction::NewFolder => "Create folder",
+                        _ => "Rename entry",
+                    };
+                    let suggested = match command {
+                        MenuAction::NewFile => "NewFile.hy".to_owned(),
+                        MenuAction::NewFolder => "NewFolder".to_owned(),
+                        _ => target
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                    };
+                    let operate = operate.clone();
+                    native_solution_explorer::ask_name(
+                        &tree_widget,
+                        title,
+                        &suggested,
+                        move |name| {
+                            let action = match command {
+                                MenuAction::NewFile => FileAction::NewFile(name),
+                                MenuAction::NewFolder => FileAction::NewFolder(name),
+                                _ => FileAction::Rename(name),
+                            };
+                            operate(action);
+                        },
+                    );
+                }
+                MenuAction::Delete => {
+                    let operate = operate.clone();
+                    native_solution_explorer::confirm_delete(&tree_widget, &target, move || {
+                        operate(FileAction::Delete);
+                    });
+                }
+                _ => {}
+            }
+        }));
+    }
 
     canvas.on_draw({
         let state = state.clone();
