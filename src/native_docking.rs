@@ -269,6 +269,77 @@ impl DockLayout {
     }
 }
 
+/// The drag-preview layout is independent of any particular OS widget
+/// coordinate system. Native frontends draw these three highlighted targets
+/// above their content area while a heading is being dragged.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DockRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl DockRect {
+    pub fn contains(self, x: f64, y: f64) -> bool {
+        x.is_finite()
+            && y.is_finite()
+            && x >= self.x
+            && y >= self.y
+            && x < self.x + self.width
+            && y < self.y + self.height
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DockTargets {
+    pub left: DockRect,
+    pub right: DockRect,
+    pub bottom: DockRect,
+}
+
+impl DockTargets {
+    pub fn for_viewport(width: f64, height: f64) -> Option<Self> {
+        if !width.is_finite() || !height.is_finite() || width < 360.0 || height < 240.0 {
+            return None;
+        }
+        let target_width = (width * 0.22).clamp(80.0, 240.0);
+        let target_height = (height * 0.20).clamp(55.0, 140.0);
+        Some(Self {
+            left: DockRect {
+                x: 12.0,
+                y: (height - target_height) / 2.0,
+                width: target_width,
+                height: target_height,
+            },
+            right: DockRect {
+                x: width - target_width - 12.0,
+                y: (height - target_height) / 2.0,
+                width: target_width,
+                height: target_height,
+            },
+            bottom: DockRect {
+                x: (width - target_width) / 2.0,
+                y: height - target_height - 12.0,
+                width: target_width,
+                height: target_height,
+            },
+        })
+    }
+
+    pub fn hit_test(self, x: f64, y: f64) -> Option<DockZone> {
+        if self.left.contains(x, y) {
+            Some(DockZone::Left)
+        } else if self.right.contains(x, y) {
+            Some(DockZone::Right)
+        } else if self.bottom.contains(x, y) {
+            Some(DockZone::Bottom)
+        } else {
+            None
+        }
+    }
+}
+
 /// Ephemeral interaction state. Unpinned sections overlay the editor and
 /// dismiss when focus moves elsewhere; never persist the open popup.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -358,6 +429,26 @@ mod tests {
             DockZone::Right
         );
         assert_eq!(gesture.dragging, None);
+    }
+
+    #[test]
+    fn drop_targets_are_distinct_and_the_editor_centre_is_not_a_dock() {
+        let targets = DockTargets::for_viewport(1480.0, 820.0).unwrap();
+        assert_eq!(
+            targets.hit_test(targets.left.x + 3.0, targets.left.y + 3.0),
+            Some(DockZone::Left)
+        );
+        assert_eq!(
+            targets.hit_test(targets.right.x + 3.0, targets.right.y + 3.0),
+            Some(DockZone::Right)
+        );
+        assert_eq!(
+            targets.hit_test(targets.bottom.x + 3.0, targets.bottom.y + 3.0),
+            Some(DockZone::Bottom)
+        );
+        assert_eq!(targets.hit_test(740.0, 380.0), None);
+        assert_eq!(targets.hit_test(f64::NAN, 0.0), None);
+        assert!(DockTargets::for_viewport(100.0, 100.0).is_none());
     }
 
     #[test]
