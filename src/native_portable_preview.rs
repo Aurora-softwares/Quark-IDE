@@ -164,6 +164,28 @@ fn render_node(
             }
         });
         row.native_widget().add_controller(capture);
+        if claims_activation {
+            let key_controller = gtk4::EventControllerKey::new();
+            key_controller.set_propagation_phase(gtk4::PropagationPhase::Capture);
+            key_controller.connect_key_pressed(|_, key, _, modifiers| {
+                // Keep IDE navigation/shortcuts functional, but never let
+                // printable keys, Space or arrows edit the preview's state.
+                let is_navigation = key == gtk4::gdk::Key::Tab
+                    || key == gtk4::gdk::Key::ISO_Left_Tab
+                    || key == gtk4::gdk::Key::Escape;
+                let is_ide_shortcut = modifiers.intersects(
+                    gtk4::gdk::ModifierType::CONTROL_MASK
+                        | gtk4::gdk::ModifierType::META_MASK
+                        | gtk4::gdk::ModifierType::SUPER_MASK,
+                );
+                if is_navigation || is_ide_shortcut {
+                    gtk4::glib::Propagation::Proceed
+                } else {
+                    gtk4::glib::Propagation::Stop
+                }
+            });
+            row.native_widget().add_controller(key_controller);
+        }
     }
     let enabled = node.attribute("enabled") != Some("false");
 
