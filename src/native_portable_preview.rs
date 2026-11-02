@@ -3,6 +3,7 @@
 //! The preview never dispatches application handlers.
 use naui::{GridCell, Length, Orientation, Padding, Sizing, Track, Ui};
 use roxmltree::Node;
+use std::path::Path;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// Design-only active page per tab container. The source's Tabs.value stays
@@ -24,6 +25,24 @@ pub fn design_tab_index(
         .map(|last| design_override.unwrap_or(source_default).min(last))
 }
 
+/// Resolve an image exactly as the Hydrogen runtime does: relative to
+/// its .hyui document, not to Quark's current working directory.
+fn image_source(document: &Path, source: &str) -> String {
+    if source.is_empty()
+        || source.contains("://")
+        || source.starts_with("data:")
+    {
+        return source.to_owned();
+    }
+    let source_path = Path::new(source);
+    let path = if source_path.is_absolute() {
+        source_path.to_path_buf()
+    } else {
+        document.parent().unwrap_or_else(|| Path::new(".")).join(source_path)
+    };
+    path.to_string_lossy().into_owned()
+}
+
 fn render_children(
     ui: &Ui,
     parent: &naui::Stack,
@@ -32,6 +51,7 @@ fn render_children(
     on_select: &SelectElement,
     design_tabs: &DesignTabs,
     available_width: f64,
+    document: &Path,
 ) -> Result<(), String> {
     for (index, child) in node
         .children()
@@ -48,6 +68,7 @@ fn render_children(
             on_select,
             design_tabs,
             available_width,
+                    document,
         )?;
     }
     Ok(())
@@ -129,6 +150,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 (available_width - 2.0 * padding).max(80.0),
+                            document,
             )?;
             row.append(&panel);
         }
@@ -148,6 +170,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 available_width,
+                            document,
             )?;
             row.append(&children);
         }
@@ -170,6 +193,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 available_width,
+                            document,
             )?;
             scroll.set_child(&children);
             let height = node
@@ -218,6 +242,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 child_width,
+                            document,
             )?;
             row.append(&children);
         }
@@ -261,6 +286,7 @@ fn render_node(
                     on_select,
                     design_tabs,
                     (available_width - gap * (columns as f64 - 1.0)) / columns as f64,
+                                    document,
                 )?;
                 grid.attach(&cell, GridCell::new(index % columns, index / columns));
             }
@@ -287,6 +313,7 @@ fn render_node(
                     on_select,
                     design_tabs,
                     available_width,
+                                    document,
                 )?;
                 tabs.add_tab(tab.attribute("title").unwrap_or("Page"), &page);
                 count += 1;
@@ -493,9 +520,8 @@ fn render_node(
             row.append(&progress);
         }
         "Image" => {
-            let image = ui
-                .image(node.attribute("source").unwrap_or(""))
-                .map_err(|e| e.to_string())?;
+            let source = image_source(document, node.attribute("source").unwrap_or(""));
+            let image = ui.image(&source).map_err(|e| e.to_string())?;
             row.append(&image);
         }
         "Separator" => {
@@ -594,6 +620,7 @@ fn render_node(
                 on_select,
                 design_tabs,
                 available_width,
+                            document,
             )?;
             row.append(&children);
         }
@@ -605,6 +632,7 @@ fn render_node(
 pub fn render(
     ui: &Ui,
     xml: &str,
+    document: &Path,
     on_select: SelectElement,
     design_tabs: DesignTabs,
 ) -> Result<naui::Stack, String> {
@@ -686,6 +714,7 @@ pub fn render(
                     .and_then(|v| v.parse::<f64>().ok())
                     .unwrap_or(24.0))
         .max(160.0),
+            document,
     )?;
     outer.append(&window);
     let frame_edge = ui.canvas().map_err(|e| e.to_string())?;
@@ -707,6 +736,17 @@ pub fn render(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relative_ui_image_assets_resolve_from_document_directory() {
+        let document = Path::new("/projects/Studio/Studio.hyui");
+        assert_eq!(
+            image_source(document, "assets/logo.png"),
+            "/projects/Studio/assets/logo.png"
+        );
+        assert_eq!(image_source(document, "data:image/png;base64,a"), "data:image/png;base64,a");
+        assert_eq!(image_source(document, "https://example.com/logo.png"), "https://example.com/logo.png");
+    }
 
     #[test]
     fn real_hydrogen_studio_default_tab_is_one_but_design_navigation_is_independent() {
