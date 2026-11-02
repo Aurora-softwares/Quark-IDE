@@ -13,6 +13,8 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
+#[path = "../native_hyui_preview.rs"]
+mod native_hyui_preview;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
 #[path = "../native_dock_widgets.rs"]
 mod native_dock_widgets;
@@ -1095,8 +1097,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let design_heading = ui.label("DESIGN")?;
     design_heading.set_color(naui::TextColor::Accent);
     design_header.append(&design_heading);
-    let open_true_preview = ui.button("↗ Live OS preview")?;
+    let open_true_preview = ui.button("↗ OS Window")?;
+    let open_backend_preview = ui.button("▶ Run UI with Hydrogen")?;
     design_header.append(&open_true_preview);
+    design_header.append(&open_backend_preview);
     design_surface.attach(&design_header, GridCell::new(0, 0));
     #[cfg(target_os = "linux")]
     {
@@ -1173,41 +1177,67 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // exact OS chrome, control spacing and responsive layout. It runs in
     // its own genuine OS window instead of masquerading as an embedded
     // preview. No shell interpolation, no automatic project file writes.
-    open_true_preview.on_click({
+    let launch_hydrogen_preview: Rc<dyn Fn(native_hyui_preview::PreviewKind)> = Rc::new({
         let state = state.clone();
         let status = status.clone();
-        move || {
-            let (path, draft) = {
+        move |kind| {
+            let (path, draft, project) = {
                 let ide = state.borrow();
                 let Some(doc) = ide.layout.as_ref() else {
                     status.set_text("Open a Hydrogen .hyui document first");
                     return;
                 };
-                (doc.path.clone(), doc.source().ok())
+                (
+                    doc.path.clone(),
+                    doc.source().ok(),
+                    ide.project.as_ref().map(|project| project.path.clone()),
+                )
             };
-            if !path.exists() {
-                status.set_text("Save the Hydrogen UI file before opening its native preview");
+            if !path.is_file() {
+                status.set_text("Save the Hydrogen .hyui file before opening its OS preview");
                 return;
             }
             if let Some(draft) = draft {
                 if std::fs::read_to_string(&path).ok().as_deref() != Some(draft.as_str()) {
-                    status.set_text("Save XML Source changes before launching the exact OS preview");
+                    status.set_text("Save XML Source changes before launching a real OS preview");
                     return;
                 }
             }
             let runtime = std::env::var("QUARK_HYUI_RUNTIME")
                 .unwrap_or_else(|_| "hyui".to_owned());
-            match std::process::Command::new(&runtime)
-                .arg("--document")
-                .arg(&path)
-                .spawn()
-            {
-                Ok(_child) => status.set_text("Hydrogen opened a native OS preview window"),
-                Err(error) => status.set_text(&format!(
-                    "Cannot start native preview ({error}). Set QUARK_HYUI_RUNTIME to your hyui executable."
-                )),
+            let compiler = std::env::var("QUARK_HYDROGEN_COMPILER")
+                .unwrap_or_else(|_| "hy".to_owned());
+            let process = native_hyui_preview::command(
+                &runtime,
+                &path,
+                project.as_deref(),
+                &compiler,
+                kind,
+            );
+            match process.and_then(|mut command| command.spawn().map(|_| ()).map_err(|e| {
+                format!(
+                    "Could not start Hydrogen's native runtime: {e}.                      Install hyui or set QUARK_HYUI_RUNTIME."
+                )
+            })) {
+                Ok(()) => status.set_text(match kind {
+                    native_hyui_preview::PreviewKind::Window => {
+                        "Opening the exact OS window with saved XML defaults"
+                    }
+                    native_hyui_preview::PreviewKind::Application => {
+                        "Hydrogen is compiling and launching the real interactive UI; see terminal for errors"
+                    }
+                }),
+                Err(error) => status.set_text(&error),
             }
         }
+    });
+    open_true_preview.on_click({
+        let launch = launch_hydrogen_preview.clone();
+        move || launch(native_hyui_preview::PreviewKind::Window)
+    });
+    open_backend_preview.on_click({
+        let launch = launch_hydrogen_preview.clone();
+        move || launch(native_hyui_preview::PreviewKind::Application)
     });
     xml_editor.on_change({
         let state = state.clone();
