@@ -2086,7 +2086,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let dock_refresh_hook: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
-        use gtk4::prelude::Cast;
+        use gtk4::glib::object::Cast;
         use naui::Widget as _;
         let toolbox = toolbox.native_widget();
         let symbols = symbols_section.native_widget();
