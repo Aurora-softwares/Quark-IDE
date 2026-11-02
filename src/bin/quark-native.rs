@@ -2015,6 +2015,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
             }
+            // Editors for choice-backed controls use the same labels the
+            // running Hydrogen application will display. The stored value
+            // remains a zero-based index in the XML.
+            let list_items = if matches!(kind.as_str(), "Select" | "RadioGroup" | "ListBox") {
+                fields
+                    .iter()
+                    .find(|field| field.name == "items")
+                    .map(|field| field.value.clone())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
             let mut last_group = "";
             for field in fields {
                 if field.group != last_group {
@@ -2053,45 +2065,90 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 if let Ok(label) = ui.label(&caption) {
                     row.append(&label);
                 }
-                if let Ok(value_field) = ui.text_input(&display_value) {
-                    let edit_row = match ui.stack(Orientation::Horizontal) {
-                        Ok(row) => row,
-                        Err(_) => continue,
-                    };
-                    edit_row.set_spacing(4.0);
+                let Ok(edit_row) = ui.stack(Orientation::Horizontal) else {
+                    continue;
+                };
+                edit_row.set_spacing(4.0);
+                let draft = Rc::new(RefCell::new(display_value.clone()));
+                let mut choices = Vec::<String>::new();
+                let mut option_is_index = false;
+                if matches!(
+                    name.as_str(),
+                    "visible" | "enabled" | "fill" | "checked" | "running"
+                        | "primary" | "indeterminate" | "open"
+                ) {
+                    choices = vec!["false".to_owned(), "true".to_owned()];
+                } else if kind == "Window" && name == "theme" {
+                    choices = vec!["system".to_owned(), "light".to_owned(), "dark".to_owned()];
+                } else if name == "value"
+                    && matches!(kind.as_str(), "Select" | "RadioGroup" | "ListBox")
+                    && !list_items.is_empty()
+                {
+                    choices = list_items
+                        .split('|')
+                        .enumerate()
+                        .map(|(index, item)| format!("{index} · {item}"))
+                        .collect();
+                    option_is_index = true;
+                }
+                if !choices.is_empty() {
+                    if let Ok(selector) = ui.combo_box() {
+                        let labels = choices.iter().map(String::as_str).collect::<Vec<_>>();
+                        selector.set_items(&labels);
+                        let selected = if option_is_index {
+                            display_value.parse::<usize>().unwrap_or(0)
+                        } else {
+                            choices
+                                .iter()
+                                .position(|choice| choice == &display_value)
+                                .unwrap_or(0)
+                        };
+                        selector.set_selected(selected.min(choices.len() - 1));
+                        let draft = draft.clone();
+                        selector.on_select(move |index| {
+                            if let Some(value) = choices.get(index) {
+                                *draft.borrow_mut() = if option_is_index {
+                                    index.to_string()
+                                } else {
+                                    value.clone()
+                                };
+                            }
+                        });
+                        edit_row.append(&selector);
+                    }
+                } else if let Ok(value_field) = ui.text_input(&display_value) {
                     value_field.set_sizing(Sizing::fill_width());
-                    let draft = Rc::new(RefCell::new(display_value));
                     value_field.on_change({
                         let draft = draft.clone();
                         move |next| *draft.borrow_mut() = next.to_owned()
                     });
                     edit_row.append(&value_field);
-                    if let Ok(apply_button) = ui.button("✓") {
-                        let update = apply_xml_property.clone();
-                        #[cfg(target_os = "linux")]
-                        {
-                            use gtk4::prelude::*;
-                            use naui::Widget as _;
-                            apply_button.native_widget().set_tooltip_text(Some(
-                                "Apply this property to the Hydrogen UI XML",
-                            ));
-                        }
-                        apply_button.on_click(move || {
-                            let chosen = draft.borrow().clone();
-                            if human_tab_index {
-                                if let Ok(page) = chosen.trim().parse::<usize>() {
-                                    if page > 0 {
-                                        update(name.clone(), (page - 1).to_string());
-                                    }
-                                }
-                            } else {
-                                update(name.clone(), chosen);
-                            }
-                        });
-                        edit_row.append(&apply_button);
-                    }
-                    row.append(&edit_row);
                 }
+                if let Ok(apply_button) = ui.button("✓") {
+                    let update = apply_xml_property.clone();
+                    #[cfg(target_os = "linux")]
+                    {
+                        use gtk4::prelude::*;
+                        use naui::Widget as _;
+                        apply_button.native_widget().set_tooltip_text(Some(
+                            "Apply this property to the Hydrogen UI XML",
+                        ));
+                    }
+                    apply_button.on_click(move || {
+                        let chosen = draft.borrow().clone();
+                        if human_tab_index {
+                            if let Ok(page) = chosen.trim().parse::<usize>() {
+                                if page > 0 {
+                                    update(name.clone(), (page - 1).to_string());
+                                }
+                            }
+                        } else {
+                            update(name.clone(), chosen);
+                        }
+                    });
+                    edit_row.append(&apply_button);
+                }
+                row.append(&edit_row);
                 native_property_content.append(&row);
             }
             if let Ok(label) = ui.label("Add or update an attribute") {
