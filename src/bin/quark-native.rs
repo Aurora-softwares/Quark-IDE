@@ -807,13 +807,12 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
 fn right_split_position(height: f64, preferred: f64, properties_first: bool) -> f64 {
     // First use: pinned side sections split evenly. A user's explicitly
     // resized Properties height is retained after pinning or reordering.
-    let properties_height = if (preferred - native_layout::PaneSizes::default().properties).abs()
-        < f64::EPSILON
-    {
-        (height - 6.0).max(0.0) / 2.0
-    } else {
-        preferred
-    };
+    let properties_height =
+        if (preferred - native_layout::PaneSizes::default().properties).abs() < f64::EPSILON {
+            (height - 6.0).max(0.0) / 2.0
+        } else {
+            preferred
+        };
     if properties_first {
         properties_height.max(110.0)
     } else {
@@ -1658,9 +1657,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let displayed_paths = Rc::new(RefCell::new(initial_paths));
     let selected_explorer_path: Rc<RefCell<Option<PathBuf>>> = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
-    let explorer_menu_hook: Rc<
-        RefCell<Option<Rc<dyn Fn(native_solution_explorer::MenuAction)>>>,
-    > = Rc::new(RefCell::new(None));
+    let explorer_menu_hook: native_solution_explorer::MenuCallback = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
     {
         use naui::Widget as _;
@@ -4794,6 +4791,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let startup_project = startup_project.clone();
         let solution_query = solution_query.clone();
         let displayed_paths = displayed_paths.clone();
+        let selected_explorer_path = selected_explorer_path.clone();
         let solution_descending = solution_descending.clone();
         let solution_list_mode = solution_list_mode.clone();
         let symbols_list = symbols_list.clone();
@@ -4807,6 +4805,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
             symbols_list.set_items(&project_symbols(&ide));
             tree.set_items(&items);
+            *selected_explorer_path.borrow_mut() = None;
             *displayed_paths.borrow_mut() = paths;
             let project_name = display_project_name(&ide);
             workspace_name.set_text(&project_name);
@@ -5039,16 +5038,23 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
         *explorer_menu_hook.borrow_mut() = Some(Rc::new(move |command| {
-            use native_solution_explorer::{FileAction, MenuAction};
+            use native_model::FileAction;
+            use native_solution_explorer::MenuAction;
             let root = {
                 let ide = state.borrow();
                 ide.project
                     .as_ref()
                     .and_then(|project| project.path.parent().map(Path::to_path_buf))
                     .or_else(|| ide.workspace.folders.last().cloned())
-                    .unwrap_or_else(|| PathBuf::from("."))
             };
-            let target = selected.borrow().clone().unwrap_or_else(|| root.clone());
+            let Some(root) = root else {
+                status.set_text("Open a workspace before using Explorer actions.");
+                return;
+            };
+            let Some(target) = selected.borrow().clone() else {
+                status.set_text("Select a file or folder before using Explorer actions.");
+                return;
+            };
             if !target.exists() {
                 status.set_text("Selected explorer entry no longer exists. Refresh the project.");
                 return;
@@ -5106,7 +5112,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             return;
                         }
                     }
-                    match native_solution_explorer::file_action(&root, &target, action) {
+                    match native_model::file_action(&root, &target, action) {
                         Ok(changed) => {
                             *selected.borrow_mut() = Some(changed.clone());
                             refresh();

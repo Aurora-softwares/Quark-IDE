@@ -1841,6 +1841,19 @@
       ]
     },
     {
+      "id": "native-solution-explorer-file-actions",
+      "category": "Native Solution Explorer",
+      "feature": "Linux Solution Explorer context menu invokes root-bound create, rename, delete and reveal actions only for the selected row",
+      "tests": [
+        "native_model::tests::context_menu_requires_a_hit_on_the_selected_row",
+        "native_model::tests::file_actions_create_rename_and_delete_without_overwriting_existing_entries",
+        "native_model::tests::file_actions_reject_path_traversal_external_paths_and_root_removal"
+      ],
+      "platforms": [
+        "linux"
+      ]
+    },
+    {
       "id": "native-launcher-collapsible-recent-groups",
       "category": "Native Start Window",
       "feature": "Collapsible pinned/today/week/month/older groups with search showing matching projects",

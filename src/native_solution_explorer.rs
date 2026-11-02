@@ -145,104 +145,6 @@ pub fn project(
     )
 }
 
-/// File system mutations are kept separate from GTK callbacks so the exact
-/// root restriction and overwrite rules can be unit-tested on every OS.
-#[cfg(any(target_os = "linux", test))]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FileAction {
-    NewFile(String),
-    NewFolder(String),
-    Rename(String),
-    Delete,
-}
-
-#[cfg(any(target_os = "linux", test))]
-fn validate_name(name: &str) -> Result<(), String> {
-    if name.is_empty()
-        || name == "."
-        || name == ".."
-        || name.contains('/')
-        || name.contains('\\')
-        || name.contains('\0')
-        || std::path::Path::new(name).components().count() != 1
-    {
-        return Err("Names must be a single file or folder name, without path separators".into());
-    }
-    Ok(())
-}
-
-#[cfg(any(target_os = "linux", test))]
-pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<PathBuf, String> {
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("Workspace folder is unavailable: {error}"))?;
-    let metadata = std::fs::symlink_metadata(selected)
-        .map_err(|error| format!("Selected entry is unavailable: {error}"))?;
-    if metadata.file_type().is_symlink() {
-        return Err("Refusing to modify a symbolic link from Solution Explorer".into());
-    }
-    let selected = selected.canonicalize().map_err(|error| error.to_string())?;
-    if !selected.starts_with(&root) {
-        return Err("Selected entry is outside the open workspace".into());
-    }
-    let creating_file = matches!(&action, FileAction::NewFile(_));
-    let result = match action {
-        FileAction::NewFile(name) | FileAction::NewFolder(name) => {
-            validate_name(&name)?;
-            let directory = if selected.is_dir() {
-                selected.clone()
-            } else {
-                selected
-                    .parent()
-                    .ok_or_else(|| "Selected entry has no parent directory".to_owned())?
-                    .to_path_buf()
-            };
-            let target = directory.join(name);
-            if target.exists() {
-                return Err("A file or folder already exists with that name".into());
-            }
-            if creating_file {
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&target)
-                    .map_err(|error| format!("Cannot create file: {error}"))?;
-            } else {
-                std::fs::create_dir(&target)
-                    .map_err(|error| format!("Cannot create folder: {error}"))?;
-            }
-            target
-        }
-        FileAction::Rename(name) => {
-            validate_name(&name)?;
-            if selected == root {
-                return Err("Cannot rename the workspace root".into());
-            }
-            let target = selected.with_file_name(name);
-            if target.exists() {
-                return Err("Cannot rename: destination already exists".into());
-            }
-            std::fs::rename(&selected, &target)
-                .map_err(|error| format!("Cannot rename entry: {error}"))?;
-            target
-        }
-        FileAction::Delete => {
-            if selected == root {
-                return Err("Cannot delete the workspace root".into());
-            }
-            if selected.is_dir() {
-                std::fs::remove_dir_all(&selected)
-                    .map_err(|error| format!("Cannot delete folder: {error}"))?;
-            } else {
-                std::fs::remove_file(&selected)
-                    .map_err(|error| format!("Cannot delete file: {error}"))?;
-            }
-            selected
-        }
-    };
-    Ok(result)
-}
-
 /// Explorer actions invoked through the native context menu. File mutations
 /// always go through file_action() with a checked workspace root.
 #[cfg(target_os = "linux")]
@@ -256,14 +158,17 @@ pub enum MenuAction {
     Reveal,
 }
 
+#[cfg(target_os = "linux")]
+pub type MenuCallback = std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(MenuAction)>>>>;
+
 /// Attach the OS's native secondary-click menu to the Solution Explorer.
 /// The IDE supplies a callback to bind the selection to safe file operations.
 #[cfg(target_os = "linux")]
-pub fn install_context_menu(
-    tree: &gtk4::Widget,
-    callback: std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(MenuAction)>>>>,
-) {
+pub fn install_context_menu(tree: &gtk4::Widget, callback: MenuCallback) {
     use gtk4::prelude::*;
+    let Ok(list) = tree.clone().downcast::<gtk4::ListBox>() else {
+        return;
+    };
     let popover = gtk4::Popover::new();
     popover.set_has_arrow(true);
     popover.set_parent(tree);
@@ -293,6 +198,11 @@ pub fn install_context_menu(
     gesture.set_button(3);
     gesture.set_propagation_phase(gtk4::PropagationPhase::Capture);
     gesture.connect_pressed(move |_, _, x, y| {
+        let clicked = list.row_at_y(y as i32).map(|row| row.index());
+        let selected = list.selected_row().map(|row| row.index());
+        if !crate::native_model::menu_targets_selected(clicked, selected) {
+            return;
+        }
         popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
         popover.popup();
     });
@@ -396,40 +306,6 @@ pub fn confirm_delete(anchor: &gtk4::Widget, file: &Path, apply: impl Fn() + 'st
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn file_actions_create_rename_and_delete_without_overwriting_existing_entries() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        let created = file_action(root, root, FileAction::NewFolder("sources".into())).unwrap();
-        assert!(created.is_dir());
-        let source = file_action(root, &created, FileAction::NewFile("Main.hy".into())).unwrap();
-        assert!(source.is_file());
-        assert!(file_action(root, &created, FileAction::NewFile("Main.hy".into())).is_err());
-        let moved = file_action(root, &source, FileAction::Rename("Program.hy".into())).unwrap();
-        assert!(moved.is_file());
-        assert!(!source.exists());
-        file_action(root, &moved, FileAction::Delete).unwrap();
-        assert!(!moved.exists());
-    }
-
-    #[test]
-    fn file_actions_reject_path_traversal_external_paths_and_root_removal() {
-        let dir = tempfile::tempdir().unwrap();
-        let other = tempfile::tempdir().unwrap();
-        assert!(file_action(
-            dir.path(),
-            dir.path(),
-            FileAction::NewFile("../escape".into())
-        )
-        .is_err());
-        assert!(file_action(dir.path(), dir.path(), FileAction::NewFolder("x/y".into())).is_err());
-        assert!(file_action(dir.path(), dir.path(), FileAction::Delete).is_err());
-        let outside = other.path().join("outside.hy");
-        std::fs::write(&outside, "test").unwrap();
-        assert!(file_action(dir.path(), &outside, FileAction::Delete).is_err());
-        assert_eq!(std::fs::read_to_string(outside).unwrap(), "test");
-    }
-
     #[test]
     fn nested_directory_selection_resolves_correct_file() {
         let base = Path::new("/project");
