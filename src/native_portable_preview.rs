@@ -95,11 +95,9 @@ fn render_node(
     let selected = on_select.clone();
     let selected_path = path.clone();
     choose.on_click(move || selected(selected_path.clone()));
-    select_row.append(&choose);
     if is_container {
+        select_row.append(&choose);
         select_row.append(&ui.label(&node_title(node)).map_err(|e| e.to_string())?);
-    }
-    if is_container {
         row.append(&select_row);
     } else {
         row.append(&choose);
