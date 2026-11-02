@@ -2811,7 +2811,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // single-pane selection stacks. Changing tabs never destroys a relocated
     // widget or reattaches it to the old region by accident.
     #[cfg(target_os = "linux")]
-    let (left_dock_host, right_dock_host, bottom_dock_host) = {
+    let (left_dock_host, right_dock_host, bottom_dock_host, left_stacked, right_stacked) = {
         use gtk4::prelude::*;
         use naui::Widget as _;
         let left = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
@@ -2829,12 +2829,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             .native_widget()
             .downcast::<gtk4::Box>()
             .expect("native bottom dock must be a GTK Box");
-        left_parent.append(&left);
-        right_parent.append(&right);
-        right_parent.reorder_child_after(&right, Some(&inspector.native_widget()));
+        // Side guests are vertical neighbours of the primary panels, not
+        // additional columns squeezed into the editor or side rail.
+        let left_primary = left_content.native_widget();
+        let right_primary = inspector.native_widget();
+        assert!(native_dock_runtime::detach(&left_primary));
+        assert!(native_dock_runtime::detach(&right_primary));
+        let left_pair = gtk4::Paned::new(gtk4::Orientation::Vertical);
+        left_pair.set_start_child(Some(&left_primary));
+        left_pair.set_end_child(Some(&left));
+        let right_pair = gtk4::Paned::new(gtk4::Orientation::Vertical);
+        right_pair.set_start_child(Some(&right_primary));
+        right_pair.set_end_child(Some(&right));
+        for pair in [&left_pair, &right_pair] {
+            pair.set_vexpand(true);
+            pair.set_hexpand(true);
+            pair.set_resize_start_child(true);
+            pair.set_resize_end_child(true);
+            pair.set_shrink_start_child(false);
+            pair.set_shrink_end_child(false);
+            pair.add_css_class("quark-resize-pane");
+        }
+        left_parent.append(&left_pair);
+        right_parent.prepend(&right_pair);
         bottom_parent.append(&bottom_host);
-        (left, right, bottom_host)
+        (left, right, bottom_host, left_pair, right_pair)
     };
+    #[cfg(target_os = "linux")]
+    let left_stack_counts = Rc::new(Cell::new((usize::MAX, usize::MAX)));
+    #[cfg(target_os = "linux")]
+    let right_stack_counts = Rc::new(Cell::new((usize::MAX, usize::MAX)));
 
     let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
         let left_split = left_split.clone();
@@ -3042,7 +3066,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 DockId::TestResults => &tests,
                 DockId::FindResults => &find,
             };
-            if id.default_zone() == zone {
+            let attached = if id.default_zone() == zone {
                 match id {
                     DockId::Toolbox
                     | DockId::Symbols
@@ -3065,7 +3089,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     DockZone::Right => native_dock_runtime::attach_box(widget, &right_host),
                     DockZone::Bottom => native_dock_runtime::attach_box(widget, &bottom_host),
                 }
+            };
+            if attached {
+                // A single moved panel fills its host. Multiple panels become
+                // independent, draggable nested GtkPaned sections.
+                native_dock_runtime::rebalance_side_host(&left_host);
+                native_dock_runtime::rebalance_side_host(&right_host);
             }
+            attached
         })
     };
     #[cfg(target_os = "linux")]
@@ -3259,6 +3290,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let document_workspace = document_workspace.clone();
         let tab_mode = tab_mode.clone();
         let active_side_tab = active_side_tab.clone();
+        let left_stacked = left_stacked.clone();
+        let right_stacked = right_stacked.clone();
+        let left_stack_counts = left_stack_counts.clone();
+        let right_stack_counts = right_stack_counts.clone();
         move || {
             let layout = model.borrow();
             #[cfg(target_os = "linux")]
@@ -3409,6 +3444,63 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
                 bottom_dock_host.set_visible(has_bottom_guests);
+                left_stacked.set_visible(left_open || has_left_guests);
+                right_stacked.set_visible(right_open);
+                let left_guest_count = layout
+                    .sections_in(native_docking::DockZone::Left)
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.id.default_zone() != native_docking::DockZone::Left
+                            && layout.visible(entry.id, active.get())
+                            && !is_detached(entry.id)
+                    })
+                    .count();
+                let right_guest_count = layout
+                    .sections_in(native_docking::DockZone::Right)
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.id.default_zone() != native_docking::DockZone::Right
+                            && layout.visible(entry.id, active.get())
+                            && !is_detached(entry.id)
+                    })
+                    .count();
+                let left_counts = (usize::from(left_open), left_guest_count);
+                if left_stack_counts.replace(left_counts) != left_counts
+                    && left_counts.0 > 0
+                    && left_counts.1 > 0
+                {
+                    let pair = left_stacked.clone();
+                    gtk4::glib::idle_add_local_once(move || {
+                        let height = pair.allocated_height();
+                        if height > 0 {
+                            pair.set_position(native_dock_runtime::equal_stack_position(
+                                height,
+                                left_counts.0,
+                                left_counts.1,
+                            ));
+                        }
+                    });
+                }
+                let right_counts = (
+                    usize::from(right_solution) + usize::from(right_properties),
+                    right_guest_count,
+                );
+                if right_stack_counts.replace(right_counts) != right_counts
+                    && right_counts.0 > 0
+                    && right_counts.1 > 0
+                {
+                    let pair = right_stacked.clone();
+                    gtk4::glib::idle_add_local_once(move || {
+                        let height = pair.allocated_height();
+                        if height > 0 {
+                            pair.set_position(native_dock_runtime::equal_stack_position(
+                                height,
+                                right_counts.0,
+                                right_counts.1,
+                            ));
+                        }
+                    });
+                }
             }
             if left_open || has_left_guests {
                 left_split.set_position(remembered.toolbox.max(155.0));
