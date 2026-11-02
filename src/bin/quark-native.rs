@@ -1487,8 +1487,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        portable_preview.native_widget().set_halign(gtk4::Align::Start);
-        portable_preview.native_widget().set_valign(gtk4::Align::Start);
+        portable_preview
+            .native_widget()
+            .set_halign(gtk4::Align::Start);
+        portable_preview
+            .native_widget()
+            .set_valign(gtk4::Align::Start);
     }
     let portable_scroll = ui.scroll()?;
     portable_scroll.set_sizing(Sizing::fill());
