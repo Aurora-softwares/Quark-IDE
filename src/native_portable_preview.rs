@@ -43,6 +43,7 @@ fn image_source(document: &Path, source: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
+#[allow(clippy::too_many_arguments)] // Recursive renderer forwards native UI, selection state and document context.
 fn render_children(
     ui: &Ui,
     parent: &naui::Stack,
@@ -74,6 +75,7 @@ fn render_children(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)] // Recursive renderer forwards native UI, selection state and document context.
 fn render_node(
     ui: &Ui,
     parent: &naui::Stack,
