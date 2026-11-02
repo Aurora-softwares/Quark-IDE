@@ -43,6 +43,30 @@ fn image_source(document: &Path, source: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
+/// Only active controls claim the native design-time click sequence. A
+/// container must allow the event to reach its nested child for selection.
+fn design_press_claims_activation(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Button"
+            | "MenuItem"
+            | "ToolButton"
+            | "Input"
+            | "PasswordInput"
+            | "SearchInput"
+            | "NumberInput"
+            | "TextArea"
+            | "CheckBox"
+            | "Switch"
+            | "Select"
+            | "RadioGroup"
+            | "Slider"
+            | "ListBox"
+            | "Table"
+            | "FilePicker"
+    )
+}
+
 #[allow(clippy::too_many_arguments)] // Recursive renderer forwards native UI, selection state and document context.
 fn render_children(
     ui: &Ui,
@@ -130,11 +154,14 @@ fn render_node(
         capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
         let selected = on_select.clone();
         let selected_path = path.clone();
+        let claims_activation = design_press_claims_activation(kind);
         capture.connect_pressed(move |gesture, _, _, _| {
             selected(selected_path.clone());
-            // A designer click is a selection, not a command. Claiming the
-            // GTK sequence suppresses default button/input/slider actions.
-            gesture.set_state(gtk4::EventSequenceState::Claimed);
+            // Do not claim on containers: allow a nested interactive child to
+            // receive its design-time selection event instead.
+            if claims_activation {
+                gesture.set_state(gtk4::EventSequenceState::Claimed);
+            }
         });
         row.native_widget().add_controller(capture);
     }
@@ -872,6 +899,16 @@ mod tests {
         assert_eq!(design_tab_index(startup, None, count), Some(0));
         assert_eq!(design_tab_index(startup, Some(1), count), Some(1));
         assert_eq!(tabs.attribute("value"), Some("0"));
+    }
+
+    #[test]
+    fn interactive_controls_claim_design_presses_but_containers_do_not() {
+        for kind in ["Button", "Input", "Slider", "CheckBox", "ListBox", "Table", "Select"] {
+            assert!(design_press_claims_activation(kind), "{kind}");
+        }
+        for kind in ["Window", "Panel", "ColumnPanel", "GridPanel", "Tabs", "Tab"] {
+            assert!(!design_press_claims_activation(kind), "{kind}");
+        }
     }
 
     #[test]
