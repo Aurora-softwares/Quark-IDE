@@ -3988,6 +3988,79 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
         }
     });
+    // Format the active saved .hy file with the selected Hydrogen executable.
+    // Never replace dirty buffers, and apply worker results on the native UI thread.
+    let format_action: Rc<dyn Fn()> = Rc::new({
+        let state = state.clone();
+        let editor = editor.clone();
+        let status = status.clone();
+        let output = output.clone();
+        let ui = ui.clone();
+        move || {
+            let (path, saved) = {
+                let ide = state.borrow();
+                let Some(doc) = ide.document.as_ref().filter(|_| ide.page == Page::Code) else {
+                    status.set_text("Open a Hydrogen .hy source file before formatting.");
+                    return;
+                };
+                if doc.dirty() {
+                    status.set_text("Save your changes before formatting the document.");
+                    return;
+                }
+                (doc.path.clone(), doc.saved.clone())
+            };
+            if std::fs::read_to_string(&path).ok().as_deref() != Some(saved.as_str()) {
+                status.set_text("Source changed on disk. Reopen it before formatting.");
+                return;
+            }
+            let compiler = match native_compiler::resolve() {
+                Ok(path) => path,
+                Err(error) => {
+                    status.set_text(&error);
+                    return;
+                }
+            };
+            status.set_text("Formatting Hydrogen document…");
+            let result_state = state.clone();
+            let result_editor = editor.clone();
+            let result_status = status.clone();
+            let result_output = output.clone();
+            let sender = ui.tasks().channel(move |(log, formatted): (native_commands::ResultLog, Option<String>)| {
+                result_output.set_text(&log.text);
+                if !log.success {
+                    result_status.set_text("Hydrogen format failed — see Output.");
+                    return;
+                }
+                let Some(formatted) = formatted else {
+                    result_status.set_text("Formatter succeeded but the document could not be reloaded.");
+                    return;
+                };
+                let still_open = {
+                    let mut ide = result_state.borrow_mut();
+                    if let Some(doc) = ide.document.as_mut() {
+                        if doc.path == path && doc.saved == saved && !doc.dirty() {
+                            doc.saved = formatted.clone();
+                            doc.text = formatted.clone();
+                            true
+                        } else { false }
+                    } else { false }
+                };
+                if still_open {
+                    result_editor.set_text(&formatted);
+                    result_status.set_text("Hydrogen formatting completed.");
+                } else {
+                    result_status.set_text("Document changed while formatting; reopen it to see the result.");
+                }
+            });
+            std::thread::spawn(move || {
+                let log = native_commands::format_document(&compiler, &path);
+                let formatted = if log.success {
+                    std::fs::read_to_string(&path).ok()
+                } else { None };
+                let _ = sender.send((log, formatted));
+            });
+        }
+    });
     for (button, task) in [
         (&build_button, native_commands::Task::Build),
         (&run_button, native_commands::Task::RunWithoutDebugging),
@@ -4057,6 +4130,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let open_layout = open_layout.clone();
         let refresh_project = refresh_project.clone();
         let task_action = task_action.clone();
+        let format_action = format_action.clone();
         let show_bottom = show_bottom.clone();
         let left_panel = left_panel.clone();
         let status = status.clone();
@@ -4111,6 +4185,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     window.close();
                 }
             }
+            (1, 6) => format_action(),
             (1, _) => status.set_text("Native editor editing commands are being integrated."),
             (2, 0) => show_page(Page::Empty),
             (2, 1) => show_page(Page::Code),
