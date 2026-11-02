@@ -240,6 +240,32 @@ pub fn available_properties(
     Ok((kind.to_owned(), fields))
 }
 
+/// Design-time page choices are independent of the Tabs.value attribute,
+/// which always describes the application's persisted startup page.
+pub fn design_tab_pages(source: &str, path: &[usize]) -> Result<Vec<String>, String> {
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    if doc.root_element().tag_name().name() != "Window" {
+        return Err("Expected a Hydrogen <Window> document".into());
+    }
+    let tabs = element_at(&doc, path)?;
+    if tabs.tag_name().name() != "Tabs" {
+        return Err("Design page selection requires a <Tabs> element".into());
+    }
+    Ok(tabs
+        .children()
+        .filter(|child| child.is_element() && child.tag_name().name() == "Tab")
+        .enumerate()
+        .map(|(index, child)| {
+            let title = child.attribute("title").unwrap_or("").trim();
+            if title.is_empty() {
+                format!("Page {}", index + 1)
+            } else {
+                format!("{} · {}", index + 1, title)
+            }
+        })
+        .collect())
+}
+
 /// An editor-only element navigator. Includes hidden and non-visual
 /// elements so every supported property remains reachable without drawing
 /// artificial selection buttons over the live application preview.
@@ -480,6 +506,25 @@ mod tests {
         assert!(fields
             .iter()
             .any(|f| f.name == "futureSetting" && f.group == "Other"));
+    }
+
+    #[test]
+    fn design_page_choices_follow_nested_tab_titles_without_modifying_startup_page() {
+        let xml = r#"<Window><ColumnPanel><Tabs value="0"><Tab title="Home"/><Separator/><Tab title="Settings"/><Tab><Label text="Hi"/></Tab></Tabs></ColumnPanel></Window>"#;
+        assert_eq!(
+            design_tab_pages(xml, &[0, 0]).unwrap(),
+            ["1 · Home", "2 · Settings", "Page 3"]
+        );
+        assert!(xml.contains("value=\"0\""));
+    }
+
+    #[test]
+    fn design_page_selector_rejects_non_tab_and_stale_paths() {
+        let xml = r#"<Window><Tabs><Tab title="First"/></Tabs><Button/></Window>"#;
+        assert_eq!(design_tab_pages(xml, &[0]).unwrap(), ["1 · First"]);
+        assert!(design_tab_pages(xml, &[]).is_err());
+        assert!(design_tab_pages(xml, &[1]).is_err());
+        assert!(design_tab_pages(xml, &[0, 4]).is_err());
     }
 
     #[test]
