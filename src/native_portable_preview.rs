@@ -334,6 +334,7 @@ fn render_node(
         }
         "ColumnPanel" | "Tab" | "Window" => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+            children.set_sizing(Sizing::fill_width());
             children.set_spacing(
                 node.attribute("gap")
                     .and_then(|v| v.parse::<f64>().ok())
@@ -471,6 +472,7 @@ fn render_node(
                 Orientation::Horizontal
             };
             let children = ui.stack(direction).map_err(|e| e.to_string())?;
+            children.set_sizing(Sizing::fill_width());
             let gap = node
                 .attribute("gap")
                 .and_then(|v| v.parse::<f64>().ok())
@@ -507,6 +509,7 @@ fn render_node(
         }
         "GridPanel" => {
             let grid = ui.grid().map_err(|e| e.to_string())?;
+            grid.set_sizing(Sizing::fill_width());
             let maximum_columns = node
                 .attribute("columns")
                 .and_then(|n| n.parse::<usize>().ok())
@@ -562,6 +565,7 @@ fn render_node(
                     continue;
                 }
                 let page = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+                page.set_sizing(Sizing::fill_width());
                 let mut tab_path = path.clone();
                 tab_path.push(position);
                 render_children(
