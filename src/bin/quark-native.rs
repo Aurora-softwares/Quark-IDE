@@ -2185,9 +2185,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             drop(doc);
             design_surface.clear();
             design_surface.attach(&design_header, GridCell::new(0, 0));
-            property_editor.clear();
+            // Do not unparent the active text field while a live edit is
+            // arriving. GTK/AppKit/WinUI focus and IME state live in it.
+            if !skip_properties_on_preview_refresh.get() {
+                property_editor.clear();
+            }
             if is_native {
-                property_editor.append(&native_property_scroll);
+                if !skip_properties_on_preview_refresh.get() {
+                    property_editor.append(&native_property_scroll);
+                }
                 portable_preview.clear();
                 if let Some(xml) = xml {
                     match native_portable_preview::render(
