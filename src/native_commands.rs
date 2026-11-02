@@ -11,6 +11,7 @@ use std::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Task {
     Build,
+    Test,
     Check,
     Rebuild,
     Clean,
@@ -23,6 +24,7 @@ impl Task {
         match self {
             Self::Build => "Build Solution",
             Self::Check => "Check Solution",
+            Self::Test => "Run Hydrogen Tests",
             Self::Rebuild => "Rebuild Solution",
             Self::Clean => "Clean Solution",
             Self::RunWithoutDebugging => "Start Without Debugging",
@@ -266,7 +268,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                     })
                 })
         }
-        Task::Build | Task::Check | Task::Rebuild | Task::RunWithoutDebugging => {
+        Task::Build | Task::Check | Task::Test | Task::Rebuild | Task::RunWithoutDebugging => {
             if task == Task::Rebuild {
                 if let Err(error) = clean_generated(&plan) {
                     return ResultLog::error(format!("Rebuild could not clean outputs: {error}"));
@@ -277,6 +279,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                     vec!["run".into(), project.to_string_lossy().into_owned()]
                 }
                 Task::Check => vec!["check".into(), project.to_string_lossy().into_owned()],
+                Task::Test => vec!["test".into(), project.to_string_lossy().into_owned()],
                 _ => plan.args.clone(),
             };
             let output_parent = if plan.output_is_directory {
@@ -284,7 +287,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
             } else {
                 plan.output.parent().unwrap_or_else(|| Path::new("."))
             };
-            if !matches!(task, Task::RunWithoutDebugging | Task::Check) {
+            if !matches!(task, Task::RunWithoutDebugging | Task::Check | Task::Test) {
                 if let Err(error) = fs::create_dir_all(output_parent) {
                     return ResultLog::error(format!("Cannot create build directory: {error}"));
                 }
@@ -297,6 +300,7 @@ pub fn run(task: Task, compiler: &str, project: Option<&Path>) -> ResultLog {
                         match task {
                             Task::RunWithoutDebugging => "run",
                             Task::Check => "check",
+                            Task::Test => "test",
                             _ => "build",
                         },
                         project.display(),
