@@ -27,6 +27,12 @@ pub fn detach(widget: &gtk4::Widget) -> bool {
             return true;
         }
     }
+    if let Ok(popover) = parent.clone().downcast::<gtk4::Popover>() {
+        if popover.child().as_ref() == Some(widget) {
+            popover.set_child(None::<&gtk4::Widget>);
+            return true;
+        }
+    }
     if let Ok(window) = parent.downcast::<gtk4::Window>() {
         if window.child().as_ref() == Some(widget) {
             window.set_child(None::<&gtk4::Widget>);
@@ -105,6 +111,37 @@ pub fn install_preview_css() {
             );
         }
     });
+}
+
+/// An unpinned section opens over the workspace as a native, auto-dismissing
+/// GTK popover. No editor resize is necessary. Keep the popover for reuse:
+/// anchors own their children and a second temporary window is unnecessary.
+pub fn open_auto_hide(
+    anchor: &gtk4::Widget,
+    panel: &gtk4::Widget,
+    existing: Option<&gtk4::Popover>,
+    position: gtk4::PositionType,
+    on_closed: Rc<dyn Fn()>,
+) -> Option<gtk4::Popover> {
+    let popover = if let Some(existing) = existing {
+        existing.clone()
+    } else {
+        let popup = gtk4::Popover::new();
+        popup.set_autohide(true);
+        popup.set_has_arrow(false);
+        popup.set_position(position);
+        popup.set_size_request(
+            if position == gtk4::PositionType::Top { 460 } else { 340 },
+            360,
+        );
+        popup.set_parent(anchor);
+        popup.connect_closed(move |_| on_closed());
+        popup
+    };
+    if !detach(panel) { return None; }
+    popover.set_child(Some(panel));
+    popover.popup();
+    Some(popover)
 }
 
 /// A detached panel owns its original, live GTK widget. Closing the floating
