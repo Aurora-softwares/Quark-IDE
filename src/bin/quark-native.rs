@@ -557,8 +557,8 @@ fn retain_trailing_size(split: &naui::SplitView) {
                 if let Some(display) = gtk4::gdk::Display::default() {
                     let provider = gtk4::CssProvider::new();
                     provider.load_from_data(
-                        "paned.quark-resize-pane > separator { background: #484a53; min-width: 7px; min-height: 7px; } \
-                         paned.quark-resize-pane > separator:hover { background: #817a98; }"
+                        "paned.quark-resize-pane > separator { background: #41434a; min-width: 5px; min-height: 5px; } \
+                         paned.quark-resize-pane > separator:hover { background: #77717f; }"
                     );
                     gtk4::style_context_add_provider_for_display(
                         &display,
@@ -577,6 +577,23 @@ fn retain_trailing_size(split: &naui::SplitView) {
 
 #[cfg(not(target_os = "linux"))]
 fn retain_trailing_size(_split: &naui::SplitView) {}
+
+/// The left splitter preserves its start child (toolbox), while the right
+/// and bottom splitters preserve their end children. They still share the
+/// same understated GTK separator styling.
+#[cfg(target_os = "linux")]
+fn style_left_split(split: &naui::SplitView) {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    if let Ok(paned) = split.native_widget().downcast::<gtk4::Paned>() {
+        paned.add_css_class("quark-resize-pane");
+        paned.set_resize_start_child(false);
+        paned.set_resize_end_child(true);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn style_left_split(_split: &naui::SplitView) {}
 
 /// Read the actual GtkPaned allocation rather than treating the initial
 /// window dimensions as permanent. The fallback handles pre-layout calls.
@@ -1335,6 +1352,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     left_split.set_end(&document_workspace);
     left_split.set_position(preferred.toolbox);
     left_split.set_min_sizes(155.0, 200.0);
+    style_left_split(&left_split);
 
     let main_workspace = ui.split_view(Orientation::Horizontal)?;
     main_workspace.set_sizing(Sizing::fill());
