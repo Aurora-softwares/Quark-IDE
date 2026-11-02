@@ -1611,9 +1611,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 pin.set_text(if pinned { "◆" } else { "◇" });
                 status.set_text(if pinned {
-                    "Section pinned. Pinned sections reserve space in their dock."
+                    "Pinned preference saved."
                 } else {
-                    "Section unpinned. The docking renderer will auto-hide it."
+                    "Unpinned preference saved; overlay auto-hide is not active yet."
                 });
             }
         });
