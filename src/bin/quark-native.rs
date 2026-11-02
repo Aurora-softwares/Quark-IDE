@@ -2679,10 +2679,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 };
                 pin.set_text(if pinned { "◆" } else { "◇" });
                 #[cfg(target_os = "linux")]
-                if let Some(popup) = auto_hide_popovers.borrow().get(&id).cloned() {
-                    if popup.is_visible() {
-                        use gtk4::prelude::*;
-                        popup.popdown();
+                {
+                    use gtk4::prelude::*;
+                    if let Some(popup) = auto_hide_popovers.borrow().get(&id).cloned() {
+                        if popup.is_visible() { popup.popdown(); }
                     }
                 }
                 refresh_docks();
