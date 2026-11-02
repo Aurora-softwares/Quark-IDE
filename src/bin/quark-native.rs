@@ -2203,9 +2203,29 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // The same model that persists pinned state now controls *actual* GTK
     // pane visibility. Auto-hidden regions retain narrow native tab rails;
     // restoring one reads its last saved user size rather than overwriting it.
+    #[cfg(target_os = "linux")]
+    let dock_widgets = {
+        use naui::Widget as _;
+        [
+            (native_docking::DockId::Toolbox, toolbox.native_widget()),
+            (native_docking::DockId::Symbols, symbols_section.native_widget()),
+            (native_docking::DockId::Search, code_search_view.native_widget()),
+            (native_docking::DockId::Server, server_view.native_widget()),
+            (native_docking::DockId::Data, data_view.native_widget()),
+            (native_docking::DockId::Solution, solution_pane.native_widget()),
+            (native_docking::DockId::Properties, properties_pane.native_widget()),
+            (native_docking::DockId::Output, output_section.native_widget()),
+            (native_docking::DockId::ErrorList, error_section.native_widget()),
+            (native_docking::DockId::Debug, debug_section.native_widget()),
+            (native_docking::DockId::TestResults, test_section.native_widget()),
+            (native_docking::DockId::FindResults, find_section.native_widget()),
+        ]
+    };
     let refresh_docks: Rc<dyn Fn()> = Rc::new({
         let model = dock_model.clone();
         let active = active_dock.clone();
+        #[cfg(target_os = "linux")]
+        let dock_widgets = dock_widgets.clone();
         let sizes = pane_sizes.clone();
         let left_content = left_content.clone();
         #[cfg(target_os = "linux")]
@@ -2246,18 +2266,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let right_properties = layout.section(native_docking::DockId::Properties)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Properties, active.get());
-            let has_right_guests = [native_docking::DockId::Toolbox]
-                .iter().any(|id| layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
+            let has_right_guests = native_docking::DockId::ALL.iter()
+                .any(|id| id.default_zone() != native_docking::DockZone::Right
+                    && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
                     && layout.visible(*id, active.get()));
-            let has_left_guests = [
-                native_docking::DockId::Solution, native_docking::DockId::Properties,
-            ].iter().any(|id| layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
-                && layout.visible(*id, active.get()));
-            let has_bottom_guests = [
-                native_docking::DockId::Toolbox, native_docking::DockId::Solution,
-                native_docking::DockId::Properties,
-            ].iter().any(|id| layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
-                && layout.visible(*id, active.get()));
+            let has_left_guests = native_docking::DockId::ALL.iter()
+                .any(|id| id.default_zone() != native_docking::DockZone::Left
+                    && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
+                    && layout.visible(*id, active.get()));
+            let has_bottom_guests = native_docking::DockId::ALL.iter()
+                .any(|id| id.default_zone() != native_docking::DockZone::Bottom
+                    && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
+                    && layout.visible(*id, active.get()));
             let right_open = right_solution || right_properties || has_right_guests;
             let bottom_open = has_bottom_guests || [
                 native_docking::DockId::Output,
@@ -2285,6 +2305,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     s.zone == native_docking::DockZone::Bottom)
                     && layout.visible(*id, active.get()));
                 bottom_pages.native_widget().set_visible(bottom_original_visible);
+                for (id, widget) in &dock_widgets {
+                    widget.set_visible(layout.visible(*id, active.get()));
+                }
                 left_dock_host.set_visible(has_left_guests);
                 right_dock_host.set_visible(has_right_guests);
                 bottom_dock_host.set_visible(has_bottom_guests);
