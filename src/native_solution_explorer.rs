@@ -161,73 +161,15 @@ pub enum MenuAction {
 #[cfg(target_os = "linux")]
 pub type MenuCallback = std::rc::Rc<std::cell::RefCell<Option<std::rc::Rc<dyn Fn(MenuAction)>>>>;
 
-pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<PathBuf, String> {
-    let root = root
-        .canonicalize()
-        .map_err(|error| format!("Workspace folder is unavailable: {error}"))?;
-    let metadata = std::fs::symlink_metadata(selected)
-        .map_err(|error| format!("Selected entry is unavailable: {error}"))?;
-    if metadata.file_type().is_symlink() {
-        return Err("Refusing to modify a symbolic link from Solution Explorer".into());
-    }
-    let selected = selected.canonicalize().map_err(|error| error.to_string())?;
-    if !selected.starts_with(&root) {
-        return Err("Selected entry is outside the open workspace".into());
-    }
-    let creating_file = matches!(&action, FileAction::NewFile(_));
-    let result = match action {
-        FileAction::NewFile(name) | FileAction::NewFolder(name) => {
-            validate_name(&name)?;
-            let directory = if selected.is_dir() {
-                selected.clone()
-            } else {
-                selected
-                    .parent()
-                    .ok_or_else(|| "Selected entry has no parent directory".to_owned())?
-                    .to_path_buf()
-            };
-            let target = directory.join(name);
-            if target.exists() {
-                return Err("A file or folder already exists with that name".into());
-            }
-            if creating_file {
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&target)
-                    .map_err(|error| format!("Cannot create file: {error}"))?;
-            } else {
-                std::fs::create_dir(&target)
-                    .map_err(|error| format!("Cannot create folder: {error}"))?;
-            }
-            target
-        }
-        FileAction::Rename(name) => {
-            validate_name(&name)?;
-            if selected == root {
-                return Err("Cannot rename the workspace root".into());
-            }
-            let target = selected.with_file_name(name);
-            if target.exists() {
-                return Err("Cannot rename: destination already exists".into());
-            }
-            std::fs::rename(&selected, &target)
-                .map_err(|error| format!("Cannot rename entry: {error}"))?;
-            target
-        }
-        FileAction::Delete => {
-            if selected == root {
-                return Err("Cannot delete the workspace root".into());
-            }
-            if selected.is_dir() {
-                std::fs::remove_dir_all(&selected)
-                    .map_err(|error| format!("Cannot delete folder: {error}"))?;
-            } else {
-                std::fs::remove_file(&selected)
-                    .map_err(|error| format!("Cannot delete file: {error}"))?;
-            }
-            selected
-        }
+#[cfg(target_os = "linux")]
+pub fn install_context_menu(
+    tree: &gtk4::Widget,
+    callback: MenuCallback,
+    context_selection: std::rc::Rc<std::cell::Cell<bool>>,
+) {
+    use gtk4::prelude::*;
+    let Ok(list) = tree.clone().downcast::<gtk4::ListBox>() else {
+        return;
     };
     let popover = gtk4::Popover::new();
     popover.set_has_arrow(true);
@@ -265,7 +207,11 @@ pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<P
         if !crate::native_model::menu_targets_selected(Some(clicked_row.index()), selected) {
             // Context actions must target the row beneath the pointer,
             // even when it was not previously selected.
+            // GTK selection callbacks normally open documents. A secondary
+            // click changes selection only; the user chooses Open from the menu.
+            context_selection.set(true);
             list.select_row(Some(&clicked_row));
+            context_selection.set(false);
         }
         popover.set_pointing_to(Some(&gtk4::gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
         popover.popup();
