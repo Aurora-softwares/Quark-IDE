@@ -33,6 +33,7 @@ def check_startup(binary: Path, seconds: float = 5.0) -> None:
         )
         try:
             deadline = time.monotonic() + seconds
+            mapped_window = False
             while time.monotonic() < deadline:
                 exit_code = process.poll()
                 if exit_code is not None:
@@ -42,8 +43,18 @@ def check_startup(binary: Path, seconds: float = 5.0) -> None:
                         f"stdout: {stdout.decode(errors='replace')[-3000:]}\n"
                         f"stderr: {stderr.decode(errors='replace')[-6000:]}"
                     )
+                if not mapped_window:
+                    windows = subprocess.run(
+                        ["xdotool", "search", "--onlyvisible", "--name", "Quark"],
+                        capture_output=True,
+                        check=False,
+                        text=True,
+                    )
+                    mapped_window = windows.returncode == 0 and bool(windows.stdout.strip())
                 time.sleep(0.1)
-            print(f"Quark native GTK startup smoke passed: alive for {seconds:.1f} seconds.")
+            if not mapped_window:
+                raise RuntimeError("Quark process stayed alive but no mapped GUI window was visible.")
+            print(f"Quark native GTK startup smoke passed: mapped window visible for {seconds:.1f} seconds.")
         finally:
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGTERM)
