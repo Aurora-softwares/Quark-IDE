@@ -2247,7 +2247,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 scroll.vadjustment().set_step_increment(18.0);
             }
         }
-        for label in [&output, &debug_view, &tests_view, &terminal_output] {
+        for label in [&output, &debug_view, &tests_view] {
             if let Ok(text) = label.native_widget().downcast::<gtk4::Label>() {
                 text.set_xalign(0.0);
                 text.set_yalign(0.0);
