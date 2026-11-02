@@ -509,8 +509,10 @@ fn set_console_text(label: &naui::Label, text: &str, palette: native_console::Pa
             return;
         }
     }
+    // AppKit/WinUI can display readable PTY text even before they gain
+    // native attributed-string colour rendering.
     let _ = palette;
-    label.set_text(text);
+    label.set_text(&native_console::remove_escape_sequences(text));
 }
 
 #[allow(clippy::too_many_arguments)] // UI control handles are intentionally passed together.
