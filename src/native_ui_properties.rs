@@ -271,8 +271,14 @@ pub fn design_tab_pages(source: &str, path: &[usize]) -> Result<Vec<String>, Str
 pub fn property_choices(kind: &str, name: &str, fields: &[PropertyField]) -> Vec<(String, String)> {
     if matches!(
         name,
-        "visible" | "enabled" | "fill" | "checked" | "primary" | "indeterminate"
-            | "running" | "open"
+        "visible"
+            | "enabled"
+            | "fill"
+            | "checked"
+            | "primary"
+            | "indeterminate"
+            | "running"
+            | "open"
     ) {
         return ["false", "true"]
             .iter()
@@ -370,7 +376,14 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
     }
     if matches!(
         name,
-        "visible" | "enabled" | "fill" | "checked" | "primary" | "indeterminate" | "running" | "open"
+        "visible"
+            | "enabled"
+            | "fill"
+            | "checked"
+            | "primary"
+            | "indeterminate"
+            | "running"
+            | "open"
     ) && value != "true"
         && value != "false"
     {
@@ -381,8 +394,16 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
     }
     if matches!(
         name,
-        "width" | "height" | "padding" | "gap" | "breakpoint" | "minItemWidth" | "preferredWidth"
-            | "minimum" | "maximum" | "interval"
+        "width"
+            | "height"
+            | "padding"
+            | "gap"
+            | "breakpoint"
+            | "minItemWidth"
+            | "preferredWidth"
+            | "minimum"
+            | "maximum"
+            | "interval"
     ) || (name == "value" && matches!(kind, "Slider" | "NumberInput" | "ProgressBar"))
     {
         let number = value
@@ -391,9 +412,17 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
         if !number.is_finite() {
             return Err(format!("{name} must be a finite number"));
         }
-        if matches!(name, "width" | "height" | "padding" | "gap" | "breakpoint"
-            | "minItemWidth" | "preferredWidth" | "interval")
-            && number < 0.0
+        if matches!(
+            name,
+            "width"
+                | "height"
+                | "padding"
+                | "gap"
+                | "breakpoint"
+                | "minItemWidth"
+                | "preferredWidth"
+                | "interval"
+        ) && number < 0.0
         {
             return Err(format!("{name} must not be negative"));
         }
@@ -437,7 +466,8 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
                 .filter(|child| child.is_element() && child.tag_name().name() == "Tab")
                 .count()
         } else {
-            let choices = node.attribute(if kind == "Table" { "rows" } else { "items" })
+            let choices = node
+                .attribute(if kind == "Table" { "rows" } else { "items" })
                 .unwrap_or("");
             if choices.is_empty() {
                 0
@@ -448,7 +478,9 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
             }
         };
         if count > 0 && index >= count || count == 0 && index != 0 {
-            return Err(format!("{kind} selection {index} is outside the available {count} choices"));
+            return Err(format!(
+                "{kind} selection {index} is outside the available {count} choices"
+            ));
         }
     }
     Ok(())
@@ -666,7 +698,9 @@ mod tests {
         assert!(set_attribute(xml, &[0], "value", "31").is_err());
         assert!(set_attribute(xml, &[0], "value", "NaN").is_err());
         assert!(set_attribute(xml, &[1], "checked", "maybe").is_err());
-        assert!(set_attribute(xml, &[0], "value", "12.5").unwrap().contains("value=\"12.5\""));
+        assert!(set_attribute(xml, &[0], "value", "12.5")
+            .unwrap()
+            .contains("value=\"12.5\""));
         assert!(set_attribute(xml, &[1], "checked", "false").is_ok());
     }
 
@@ -677,8 +711,12 @@ mod tests {
         assert!(set_attribute(xml, &[0], "value", "-1").is_err());
         assert!(set_attribute(xml, &[1], "value", "3").is_err());
         assert!(set_attribute(xml, &[], "theme", "banana").is_err());
-        assert!(set_attribute(xml, &[0], "value", "1").unwrap().contains("<Tabs value=\"1\""));
-        assert!(set_attribute(xml, &[1], "value", "2").unwrap().contains("value=\"2\""));
+        assert!(set_attribute(xml, &[0], "value", "1")
+            .unwrap()
+            .contains("<Tabs value=\"1\""));
+        assert!(set_attribute(xml, &[1], "value", "2")
+            .unwrap()
+            .contains("value=\"2\""));
         assert!(set_attribute(xml, &[], "theme", "dark").is_ok());
     }
 
@@ -688,12 +726,19 @@ mod tests {
         let (_, window) = available_properties(xml, &[]).unwrap();
         assert_eq!(
             property_choices("Window", "theme", &window),
-            [("system".into(), "system".into()), ("light".into(), "light".into()), ("dark".into(), "dark".into())]
+            [
+                ("system".into(), "system".into()),
+                ("light".into(), "light".into()),
+                ("dark".into(), "dark".into())
+            ]
         );
         let (_, checkbox) = available_properties(xml, &[0]).unwrap();
         assert_eq!(
             property_choices("CheckBox", "checked", &checkbox),
-            [("false".into(), "false".into()), ("true".into(), "true".into())]
+            [
+                ("false".into(), "false".into()),
+                ("true".into(), "true".into())
+            ]
         );
     }
 
@@ -703,7 +748,11 @@ mod tests {
         let (_, fields) = available_properties(xml, &[0]).unwrap();
         assert_eq!(
             property_choices("Select", "value", &fields),
-            [("0 · Apple".into(), "0".into()), ("1 · Banana".into(), "1".into()), ("2 · Cherry".into(), "2".into())]
+            [
+                ("0 · Apple".into(), "0".into()),
+                ("1 · Banana".into(), "1".into()),
+                ("2 · Cherry".into(), "2".into())
+            ]
         );
         assert!(property_choices("Select", "items", &fields).is_empty());
         let (_, input) = available_properties(xml, &[1]).unwrap();
