@@ -102,6 +102,23 @@ mod tests {
     }
 
     #[test]
+    fn native_preview_passes_paths_with_spaces_as_single_arguments() {
+        let directory = tempfile::tempdir().unwrap();
+        let view = directory.path().join("My UI Layout.hyui");
+        std::fs::write(&view, "<Window version=\"1\"/>").unwrap();
+        let process = command("hyui", &view, None, "hy", PreviewKind::Window).unwrap();
+        let args = process
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(args.len(), 2);
+        assert_eq!(
+            std::path::PathBuf::from(&args[1]),
+            view.canonicalize().unwrap(),
+        );
+    }
+
+    #[test]
     fn invalid_layout_and_missing_backend_are_rejected() {
         let directory = tempfile::tempdir().unwrap();
         let wrong = directory.path().join("Studio.hyyui");
