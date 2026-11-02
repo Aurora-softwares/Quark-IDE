@@ -2388,7 +2388,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     main_workspace.set_min_sizes(300.0, native_shell::SIDE_RAIL_WIDTH);
     document_workspace.set_min_sizes(160.0, 35.0);
     #[cfg(target_os = "linux")]
-    *dock_refresh_hook.borrow_mut() = Some(refresh_docks.clone());
+    {
+        *dock_refresh_hook.borrow_mut() = Some(refresh_docks.clone());
+    }
     refresh_docks();
     #[cfg(target_os = "linux")]
     let show_auto_hide: Rc<dyn Fn(native_docking::DockId, gtk4::Widget)> = {
