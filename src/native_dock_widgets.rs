@@ -107,6 +107,43 @@ pub fn section_panel(ui: &Ui, id: DockId) -> naui::Result<(naui::Stack, DockHead
     Ok((panel, header))
 }
 
+/// An internal drag payload is limited to Quark's known dock IDs; arbitrary
+/// dropped text is never treated as a command or a path.
+pub fn drag_token(id: DockId) -> String {
+    format!("quark-dock:{id:?}")
+}
+pub fn parse_drag_token(value: &str) -> Option<DockId> {
+    let tag = value.strip_prefix("quark-dock:")?;
+    DockId::ALL.into_iter().find(|id| format!("{id:?}") == tag)
+}
+
+/// GTK adds a native pointer drag to the common header and passes a validated
+/// source ID to the owning dock host. The host is responsible for moving
+/// widgets and persisting the new layout, not this shared visual component.
+#[cfg(target_os = "linux")]
+pub fn enable_header_drag(
+    header: &DockHeader,
+    id: DockId,
+    on_drop: impl Fn(DockId) -> bool + 'static,
+) {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    let source = gtk4::DragSource::new();
+    source.set_actions(gtk4::gdk::DragAction::MOVE);
+    let token = drag_token(id);
+    source.connect_prepare(move |_, _, _| {
+        Some(gtk4::gdk::ContentProvider::for_value(&token.to_value()))
+    });
+    header.row.native_widget().add_controller(source);
+    let target = gtk4::DropTarget::new(String::static_type(), gtk4::gdk::DragAction::MOVE);
+    target.connect_drop(move |_, value, _, _| {
+        value.get::<String>().ok()
+            .and_then(|token| parse_drag_token(&token))
+            .is_some_and(|source| on_drop(source))
+    });
+    header.row.native_widget().add_controller(target);
+}
+
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     let row = ui.stack(Orientation::Horizontal)?;
     row.set_spacing(5.0);
@@ -156,6 +193,15 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dock_drag_tokens_reject_unknown_and_external_text() {
+        for id in DockId::ALL {
+            assert_eq!(parse_drag_token(&drag_token(id)), Some(id));
+        }
+        assert_eq!(parse_drag_token("quark-dock:__unknown__"), None);
+        assert_eq!(parse_drag_token("../src/main.rs"), None);
+    }
+
     #[test]
     fn every_dock_has_vector_geometry_without_font_fallbacks() {
         for id in DockId::ALL {
