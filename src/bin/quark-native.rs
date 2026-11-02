@@ -1818,25 +1818,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         right_rail.append(&tab);
         right_tabs.push(tab);
     }
-    for (index, tab) in right_tabs.iter().enumerate() {
-        let tabs = right_tabs.clone();
-        let active = right_active.clone();
-        let inspector = inspector.clone();
-        tab.on_pointer(move |event| {
-            if event.phase == PointerPhase::Down {
-                active.set(index);
-                for tab in &tabs {
-                    tab.redraw();
-                }
-                let height = split_extent(&inspector, 795.0);
-                inspector.set_position(if index == 0 {
-                    (height - 200.0).max(110.0)
-                } else {
-                    180.0
-                });
-            }
-        });
-    }
     let right_region = ui.stack(Orientation::Horizontal)?;
     right_region.set_sizing(Sizing::fill());
     right_region.set_spacing(0.0);
@@ -2032,6 +2013,34 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         centre.native_widget().add_controller(dismiss);
     }
 
+    for (index, tab) in right_tabs.iter().enumerate() {
+        let tabs = right_tabs.clone();
+        let active = right_active.clone();
+        let inspector = inspector.clone();
+        let active_dock = active_dock.clone();
+        let refresh_docks = refresh_docks.clone();
+        tab.on_pointer(move |event| {
+            if event.phase == PointerPhase::Down {
+                active.set(index);
+                active_dock.set(Some(if index == 0 {
+                    native_docking::DockId::Solution
+                } else {
+                    native_docking::DockId::Properties
+                }));
+                refresh_docks();
+                for tab in &tabs {
+                    tab.redraw();
+                }
+                let height = split_extent(&inspector, 795.0);
+                inspector.set_position(if index == 0 {
+                    (height - 200.0).max(110.0)
+                } else {
+                    180.0
+                });
+            }
+        });
+    }
+
     // Shared dock headers now own pin and collapse state. Persist settings
     // separately from sizes, so moving and hiding never destroys a user's
     // previous preferred dimensions.
@@ -2205,6 +2214,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     // Native docking/tab selection is independent of the active document.
     let show_bottom: Rc<dyn Fn(usize)> = Rc::new({
+        let active_dock = active_dock.clone();
+        let refresh_docks = refresh_docks.clone();
         let bottom_pages = bottom_pages.clone();
         let output_scroll = output_scroll.clone();
         let errors_view = errors_view.clone();
@@ -2212,6 +2223,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let tests_view = tests_view.clone();
         let find_view = find_view.clone();
         move |page| {
+            active_dock.set(Some(match page {
+                1 => native_docking::DockId::ErrorList,
+                2 => native_docking::DockId::Debug,
+                3 => native_docking::DockId::TestResults,
+                4 => native_docking::DockId::FindResults,
+                _ => native_docking::DockId::Output,
+            }));
+            refresh_docks();
             bottom_pages.clear();
             match page {
                 1 => bottom_pages.append(&errors_view),
