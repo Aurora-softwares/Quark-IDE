@@ -58,7 +58,15 @@ pub fn attach_paned(
 ) -> bool {
     let occupied = if start { host.start_child() } else { host.end_child() };
     if occupied.as_ref() == Some(widget) { return true; }
-    if occupied.is_some() { return false; }
+    if occupied.is_some() {
+        // The user may have swapped Solution and Properties. Redocking one
+        // must use the free sibling slot rather than silently rejecting it.
+        let alternate = if start { host.end_child() } else { host.start_child() };
+        if alternate.is_none() {
+            return attach_paned(widget, host, !start);
+        }
+        return false;
+    }
     if !detach(widget) { return false; }
     if start { host.set_start_child(Some(widget)); }
     else { host.set_end_child(Some(widget)); }
