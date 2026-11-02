@@ -334,9 +334,49 @@ fn render_node(
             );
             row.append(&spacer);
         }
-        "ListBox" | "Table" | "Spinner" | "FilePicker" => {
-            // These require a full presenter, not a misleading text stand-in.
-            // The hierarchy inspector still exposes every attribute.
+        "ListBox" => {
+            let list = ui.list().map_err(|e| e.to_string())?;
+            let items = node.attribute("items").unwrap_or("");
+            list.set_items(&naui::ListItem::list(items.split('|')));
+            list.set_selected(node.attribute("value")
+                .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0));
+            list.set_sizing(Sizing::new().height(Length::Fixed(
+                node.attribute("height").and_then(|v| v.parse::<f64>().ok()).unwrap_or(160.0),
+            )));
+            let select = on_select.clone();
+            list.on_select(move |_| select(path.clone()));
+            row.append(&list);
+        }
+        "Table" => {
+            let table = ui.table().map_err(|e| e.to_string())?;
+            table.set_columns(&naui::TableColumn::list(
+                node.attribute("columns").unwrap_or("").split('|'),
+            ));
+            let rows = node.attribute("rows").unwrap_or("");
+            table.set_rows(&rows.lines().map(|line| {
+                naui::TableRow::new(line.split('|'))
+            }).collect::<Vec<_>>());
+            table.set_sizing(Sizing::new().height(Length::Fixed(
+                node.attribute("height").and_then(|v| v.parse::<f64>().ok()).unwrap_or(160.0),
+            )));
+            table.set_selected(node.attribute("value")
+                .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0));
+            let select = on_select.clone();
+            table.on_select(move |_| select(path.clone()));
+            row.append(&table);
+        }
+        "FilePicker" => {
+            // Hydrogen's picker is a native button until its dialog opens.
+            // A design-time click selects the control; no real OS picker runs.
+            let button = ui.button(node.attribute("text").unwrap_or("Choose file…"))
+                .map_err(|e| e.to_string())?;
+            let select = on_select.clone();
+            button.on_click(move || select(path.clone()));
+            row.append(&button);
+        }
+        "Spinner" => {
+            // Spinner is deliberately omitted until the platform indicator
+            // can be hosted without an inaccurate imitation.
         }
         _ => {
             // Unknown future runtime controls are not faked with labels.
