@@ -48,7 +48,10 @@ enum Scope {
 /// types. Ignore control-flow and declaration modifiers to avoid reporting
 /// expressions such as "return Call()" as function definitions.
 fn identifier(token: &str) -> bool {
-    token.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+    token
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_')
         && token.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
@@ -56,12 +59,37 @@ fn possible_type(token: &str) -> bool {
     identifier(token)
         && !matches!(
             token,
-            "return" | "throw" | "yield" | "await" | "new" | "if" | "else"
-                | "while" | "for" | "foreach" | "switch" | "case" | "break"
-                | "continue" | "using" | "namespace" | "class" | "struct"
-                | "interface" | "enum" | "public" | "private" | "protected"
-                | "internal" | "static" | "readonly" | "const" | "virtual"
-                | "override" | "abstract" | "async"
+            "return"
+                | "throw"
+                | "yield"
+                | "await"
+                | "new"
+                | "if"
+                | "else"
+                | "while"
+                | "for"
+                | "foreach"
+                | "switch"
+                | "case"
+                | "break"
+                | "continue"
+                | "using"
+                | "namespace"
+                | "class"
+                | "struct"
+                | "interface"
+                | "enum"
+                | "public"
+                | "private"
+                | "protected"
+                | "internal"
+                | "static"
+                | "readonly"
+                | "const"
+                | "virtual"
+                | "override"
+                | "abstract"
+                | "async"
         )
 }
 
@@ -213,18 +241,24 @@ pub fn add_source(outline: &mut SymbolNode, path: &Path, source: &str) {
                         path.extend(types.iter().cloned());
                         path
                     };
-                    let kind = if following == Some("(")
-                        && has_method_body(&tokens, idx + 2)
-                    {
-                        Some(if types.is_empty() { "function" } else { "method" })
+                    let kind = if following == Some("(") && has_method_body(&tokens, idx + 2) {
+                        Some(if types.is_empty() {
+                            "function"
+                        } else {
+                            "method"
+                        })
                     } else if matches!(following, Some("=" | ";" | ","))
                         && (!stack.is_empty() || !types.is_empty())
                     {
-                        Some(if types.is_empty() || stack.iter().any(|scope| matches!(scope, Scope::Other)) {
-                            "variable"
-                        } else {
-                            "field"
-                        })
+                        Some(
+                            if types.is_empty()
+                                || stack.iter().any(|scope| matches!(scope, Scope::Other))
+                            {
+                                "variable"
+                            } else {
+                                "field"
+                            },
+                        )
                     } else {
                         None
                     };
@@ -274,12 +308,24 @@ mod tests {
             "namespace App { class Program { int count; void Run() { int local = 3; } } void Utility() {} }",
         );
         let app = &tree.branches["App"];
-        assert!(app.items.iter().any(|item| item.name == "Program" && item.kind == "class"));
-        assert!(app.items.iter().any(|item| item.name == "Utility" && item.kind == "function"));
+        assert!(app
+            .items
+            .iter()
+            .any(|item| item.name == "Program" && item.kind == "class"));
+        assert!(app
+            .items
+            .iter()
+            .any(|item| item.name == "Utility" && item.kind == "function"));
         let members = &app.branches["Program"].items;
-        assert!(members.iter().any(|item| item.name == "count" && item.kind == "field"));
-        assert!(members.iter().any(|item| item.name == "Run" && item.kind == "method"));
-        assert!(members.iter().any(|item| item.name == "local" && item.kind == "variable"));
+        assert!(members
+            .iter()
+            .any(|item| item.name == "count" && item.kind == "field"));
+        assert!(members
+            .iter()
+            .any(|item| item.name == "Run" && item.kind == "method"));
+        assert!(members
+            .iter()
+            .any(|item| item.name == "local" && item.kind == "variable"));
     }
 
     #[test]
@@ -292,7 +338,9 @@ mod tests {
         );
         let members = &tree.branches["Program"].items;
         assert!(members.iter().any(|item| item.name == "Main"));
-        assert!(!members.iter().any(|item| item.name == "Fake" || item.name == "Hidden" || item.name == "Call"));
+        assert!(!members
+            .iter()
+            .any(|item| item.name == "Fake" || item.name == "Hidden" || item.name == "Call"));
     }
 
     #[test]
