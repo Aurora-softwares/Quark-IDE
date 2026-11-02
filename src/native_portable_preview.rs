@@ -76,6 +76,24 @@ fn render_node(
     }
     let row = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     row.set_spacing(0.0);
+    // Honor the same common layout attributes as the Hydrogen runtime.
+    // These are design-time measurements, not changes to the XML source.
+    if node.attribute("fill") == Some("true") {
+        row.set_sizing(Sizing::fill_width());
+    } else if let Some(width) = node
+        .attribute("preferredWidth")
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 20.0)
+    {
+        row.set_sizing(Sizing::new().width(Length::Fixed(width.min(2400.0))));
+    }
+    #[cfg(target_os = "linux")]
+    if let Some(tip) = node.attribute("tooltip").filter(|value| !value.is_empty()) {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        row.native_widget().set_tooltip_text(Some(tip));
+    }
+    let enabled = node.attribute("enabled") != Some("false");
 
     match kind {
         "Panel" => {
@@ -277,10 +295,11 @@ fn render_node(
             }
             row.append(&label);
         }
-        "Button" | "MenuItem" => {
+        "Button" | "MenuItem" | "ToolButton" => {
             let button = ui
                 .button(node.attribute("text").unwrap_or("Button"))
                 .map_err(|e| e.to_string())?;
+            button.set_enabled(enabled);
             let selected = on_select.clone();
             button.on_click(move || selected(path.clone()));
             row.append(&button);
@@ -290,6 +309,7 @@ fn render_node(
                 .text_input(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
+            input.set_enabled(enabled);
             input.set_sizing(Sizing::new().width(Length::Fixed(190.0)));
             let select = on_select.clone();
             input.on_change(move |_| select(path.clone()));
@@ -298,6 +318,7 @@ fn render_node(
         "PasswordInput" => {
             let input = ui.password_input().map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
+            input.set_enabled(enabled);
             let select = on_select.clone();
             input.on_change(move |_| select(path.clone()));
             row.append(&input);
@@ -306,6 +327,7 @@ fn render_node(
             let input = ui.search_input().map_err(|e| e.to_string())?;
             input.set_text(node.attribute("text").unwrap_or(""));
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
+            input.set_enabled(enabled);
             let select = on_select.clone();
             input.on_change(move |_| select(path.clone()));
             row.append(&input);
@@ -316,6 +338,7 @@ fn render_node(
                 .and_then(|v| v.parse::<f64>().ok())
                 .unwrap_or(0.0);
             let input = ui.number_input(value).map_err(|e| e.to_string())?;
+            input.set_enabled(enabled);
             input.set_range(
                 node.attribute("minimum")
                     .and_then(|v| v.parse::<f64>().ok()),
@@ -331,6 +354,7 @@ fn render_node(
                 .text_area(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
+            input.set_enabled(enabled);
             input.set_sizing(
                 Sizing::new().width(Length::Fill).height(Length::Fixed(
                     node.attribute("height")
@@ -348,6 +372,7 @@ fn render_node(
                 .checkbox(node.attribute("text").unwrap_or("Check box"))
                 .map_err(|e| e.to_string())?;
             input.set_checked(node.attribute("checked") == Some("true"));
+            input.set_enabled(enabled);
             let select = on_select.clone();
             input.on_toggle(move |_| select(path.clone()));
             row.append(&input);
@@ -357,6 +382,7 @@ fn render_node(
                 .toggle(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             input.set_on(node.attribute("checked") == Some("true"));
+            input.set_enabled(enabled);
             let select = on_select.clone();
             input.on_toggle(move |_| select(path.clone()));
             row.append(&input);
