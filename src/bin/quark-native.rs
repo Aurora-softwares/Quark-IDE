@@ -2178,21 +2178,25 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             } else { gtk4::glib::Propagation::Proceed }
         });
         widget.add_controller(controller);
-        // Notify the PTY when the actual native viewport is resized. This
-        // matters for shells and applications that rely on terminal geometry.
-        let scroll_widget = terminal_scroll.native_widget();
+        // GTK widgets do not expose a portable notify::width property.
+        // Sample the actual viewport while the terminal exists and resize the
+        // PTY only when its rows/columns change. Never block the UI thread.
+        let viewport = terminal_scroll.native_widget().downgrade();
         let send = terminal_input_sender.clone();
-        scroll_widget.connect_notify_local(Some("width"), move |widget, _| {
+        let last_size = Rc::new(Cell::new((0_u16, 0_u16)));
+        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(200), move || {
+            let Some(widget) = viewport.upgrade() else {
+                return gtk4::glib::ControlFlow::Break;
+            };
+            if !widget.is_visible() {
+                return gtk4::glib::ControlFlow::Continue;
+            }
             let cols = (widget.width().max(80) / 8).clamp(10, 300) as u16;
             let rows = (widget.height().max(36) / 17).clamp(2, 100) as u16;
-            let _ = send.send(native_terminal::Input::Resize { rows, cols });
-        });
-        let scroll_widget = terminal_scroll.native_widget();
-        let send = terminal_input_sender.clone();
-        scroll_widget.connect_notify_local(Some("height"), move |widget, _| {
-            let cols = (widget.width().max(80) / 8).clamp(10, 300) as u16;
-            let rows = (widget.height().max(36) / 17).clamp(2, 100) as u16;
-            let _ = send.send(native_terminal::Input::Resize { rows, cols });
+            if last_size.replace((rows, cols)) != (rows, cols) {
+                let _ = send.send(native_terminal::Input::Resize { rows, cols });
+            }
+            gtk4::glib::ControlFlow::Continue
         });
     }
 
