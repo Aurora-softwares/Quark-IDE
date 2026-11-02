@@ -9,7 +9,7 @@ use std::{
     rc::Rc,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Preferences {
     pub appearance: Appearance,
@@ -17,17 +17,6 @@ pub struct Preferences {
     pub debugging: Debugging,
     pub build: Build,
     pub hydrogen: Hydrogen,
-}
-impl Default for Preferences {
-    fn default() -> Self {
-        Self {
-            appearance: Appearance::default(),
-            editor: Editor::default(),
-            debugging: Debugging::default(),
-            build: Build::default(),
-            hydrogen: Hydrogen::default(),
-        }
-    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -152,22 +141,6 @@ fn checkbox(parent: &gtk4::Box, label: &str, active: bool, enabled: bool) -> gtk
     check.set_sensitive(enabled);
     parent.append(&check);
     check
-}
-fn wire_checkbox(
-    check: &gtk4::CheckButton,
-    state: &Rc<RefCell<Preferences>>,
-    path: &Path,
-    update: impl Fn(&mut Preferences, bool) + 'static,
-) {
-    let state = state.clone();
-    let path = path.to_path_buf();
-    check.connect_toggled(move |check| {
-        let mut prefs = state.borrow_mut();
-        update(&mut prefs, check.is_active());
-        if let Err(error) = save(&path, &prefs) {
-            eprintln!("Quark: could not save preferences: {error}");
-        }
-    });
 }
 pub fn show(path: PathBuf) {
     let preferences = load(&path);
