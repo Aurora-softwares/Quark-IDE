@@ -174,6 +174,13 @@ fn remove_direct_box_children(host: &gtk4::Box) -> bool {
     true
 }
 
+/// Safely reset the current contents of a GTK tool host. This must never
+/// call naui::Stack::clear(): it may still track a SizeBin already relocated
+/// into a different native dock, which triggers a GTK non-child assertion.
+pub fn clear_box_children(host: &gtk4::Box) -> bool {
+    remove_direct_box_children(host)
+}
+
 /// Stack an arbitrary number of moved panels in a vertical native splitter
 /// chain. Each live panel is reparented, never recreated, and single panels
 /// fill the entire host without leaving a redundant divider. Call only after
