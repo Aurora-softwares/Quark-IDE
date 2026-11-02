@@ -1626,7 +1626,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         select_native_element.clone(),
                         design_tab_selection.clone(),
                     ) {
-                        Ok(view) => portable_preview.append(&view),
+                        Ok(view) => {
+                            portable_preview.append(&view);
+                            if let Ok(missing) =
+                                native_portable_preview::missing_native_controls(&xml)
+                            {
+                                if !missing.is_empty() {
+                                    status.set_text(&format!(
+                                        "Use OS Window for accurate rendering of: {}",
+                                        missing.join(", ")
+                                    ));
+                                }
+                            }
+                        }
                         Err(error) => {
                             status.set_text(&format!("Cannot render Hydrogen UI: {error}"))
                         }
