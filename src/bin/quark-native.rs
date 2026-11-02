@@ -5,9 +5,9 @@
 //! This native frontend deliberately shares .hyproj, .hy and .hyui files
 //! instead of silently converting or rewriting them.
 
-#[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
-#[path = "../editor.rs"]
-mod editor;
+#[allow(dead_code)] // Shared Rust lexer is independent of UI frameworks.
+#[path = "../hydrogen_lexer.rs"]
+mod hydrogen_lexer;
 #[allow(dead_code)] // Shared legacy APIs are migrated incrementally.
 #[path = "../hydrogen.rs"]
 mod hydrogen;
@@ -77,9 +77,6 @@ mod storage;
 #[allow(dead_code)] // Shared APIs remain available to the other frontend and future native integration.
 #[path = "../symbols.rs"]
 mod symbols;
-#[allow(dead_code)] // Required by the shared editor lexer; native theme integration is pending.
-#[path = "../theme.rs"]
-mod theme;
 #[path = "../ui_xml.rs"]
 mod ui_xml;
 
