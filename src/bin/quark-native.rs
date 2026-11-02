@@ -1851,10 +1851,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
         }
     });
+    let active_dock = Rc::new(Cell::new(None::<native_docking::DockId>));
     left_split.on_resize({
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
+        let model = dock_model.clone();
+        let active = active_dock.clone();
         move |position| {
+            let has_open_left = [
+                native_docking::DockId::Toolbox, native_docking::DockId::Symbols,
+                native_docking::DockId::Search, native_docking::DockId::Server,
+                native_docking::DockId::Data,
+            ].iter().any(|id| model.borrow().visible(*id, active.get()));
+            if !has_open_left || position < 100.0 { return; }
             let mut next = sizes.get();
             next.toolbox = position;
             next = next.sanitize();
@@ -1866,7 +1875,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
         let main_workspace = main_workspace.clone();
+        let model = dock_model.clone();
+        let active = active_dock.clone();
         move |position| {
+            if ![native_docking::DockId::Solution, native_docking::DockId::Properties]
+                .iter().any(|id| model.borrow().visible(*id, active.get())) {
+                return;
+            }
             let mut next = sizes.get();
             next.inspector = (split_extent(&main_workspace, 1480.0) - position - 6.0).max(0.0);
             next = next.sanitize();
@@ -1878,7 +1893,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let sizes = pane_sizes.clone();
         let path = pane_path.clone();
         let document_workspace = document_workspace.clone();
+        let model = dock_model.clone();
+        let active = active_dock.clone();
         move |position| {
+            if ![
+                native_docking::DockId::Output, native_docking::DockId::ErrorList,
+                native_docking::DockId::Debug, native_docking::DockId::TestResults,
+                native_docking::DockId::FindResults,
+            ].iter().any(|id| model.borrow().visible(*id, active.get())) {
+                return;
+            }
             let mut next = sizes.get();
             next.output = (split_extent(&document_workspace, 860.0) - position - 6.0).max(0.0);
             next = next.sanitize();
@@ -1902,7 +1926,6 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // The same model that persists pinned state now controls *actual* GTK
     // pane visibility. Auto-hidden regions retain narrow native tab rails;
     // restoring one reads its last saved user size rather than overwriting it.
-    let active_dock = Rc::new(Cell::new(None::<native_docking::DockId>));
     let refresh_docks: Rc<dyn Fn()> = Rc::new({
         let model = dock_model.clone();
         let active = active_dock.clone();
@@ -2343,6 +2366,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let side_tabs = side_tabs.clone();
         let left_rail = left_rail.clone();
         let left_panel = left_panel.clone();
+        let refresh_docks = refresh_docks.clone();
+        let active_dock = active_dock.clone();
         move |requested| {
             let (page, tabs, active_path) = {
                 let mut ide = state.borrow_mut();
@@ -2365,6 +2390,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 tab.redraw();
             }
             left_panel(0);
+            active_dock.set(None);
+            refresh_docks();
             centre.clear();
             document_tabs.clear();
             document_overflow.clear();
