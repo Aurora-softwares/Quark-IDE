@@ -983,16 +983,43 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     document_bar.attach(&document_tabs, GridCell::new(0, 0));
     document_bar.attach(&document_overflow, GridCell::new(1, 0));
     let tab_offset = Rc::new(Cell::new(0_usize));
+    let visible_tab_capacity = Rc::new(Cell::new(3_usize));
+    // The centre width changes when docks pin/unpin or the OS window resizes.
+    // The one-pixel underline reports real viewport allocations and defers
+    // tab relayout until after native draw callbacks return.
+    let document_width = Rc::new(Cell::new(620.0_f64));
+    type DocumentRelayout = Rc<dyn Fn()>;
+    let document_relayout: Rc<RefCell<Option<DocumentRelayout>>> =
+        Rc::new(RefCell::new(None));
+    let width_signal = ui.tasks().channel({
+        let width = document_width.clone();
+        let relayout = document_relayout.clone();
+        move |next_width: f64| {
+            if next_width > 0.0 && (width.get() - next_width).abs() > 6.0 {
+                width.set(next_width);
+                if let Some(redraw) = relayout.borrow().as_ref() {
+                    redraw();
+                }
+            }
+        }
+    });
     type TabSelector = Rc<dyn Fn(Page, PathBuf)>;
     let tab_selector: Rc<RefCell<Option<TabSelector>>> = Rc::new(RefCell::new(None));
     let tab_accent = ui.canvas()?;
     tab_accent.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(1.0)));
-    tab_accent.on_draw(|painter| {
-        let (r, g, b) = (0x44, 0x4a, 0x55);
-        painter.fill_rect(
-            Rect::new(0.0, 0.0, painter.width(), painter.height()),
-            Color::rgb(r, g, b),
-        );
+    tab_accent.on_draw({
+        let width_signal = width_signal.clone();
+        let document_width = document_width.clone();
+        move |painter| {
+            let (r, g, b) = (0x44, 0x4a, 0x55);
+            painter.fill_rect(
+                Rect::new(0.0, 0.0, painter.width(), painter.height()),
+                Color::rgb(r, g, b),
+            );
+            if (document_width.get() - painter.width()).abs() > 6.0 {
+                let _ = width_signal.send(painter.width());
+            }
+        }
     });
 
     let pages = ui.stack(Orientation::Vertical)?;
@@ -2056,6 +2083,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let empty_workspace = empty_workspace.clone();
         let ui = ui.clone();
         let tab_offset = tab_offset.clone();
+        let visible_tab_capacity = visible_tab_capacity.clone();
+        let document_width = document_width.clone();
         let tab_selector = tab_selector.clone();
         let show_page_redraw = show_page_redraw.clone();
         let code = code.clone();
@@ -2099,19 +2128,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             document_tabs.clear();
             document_overflow.clear();
 
-            const VISIBLE_TABS: usize = 3;
-            let maximum_offset = tabs.len().saturating_sub(VISIBLE_TABS);
+            let filenames: Vec<String> = tabs
+                .iter()
+                .map(|(_, path)| {
+                    path.file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| path.display().to_string())
+                })
+                .collect();
+            let visible_tabs =
+                native_shell::document_visible_capacity(document_width.get(), &filenames);
+            visible_tab_capacity.set(visible_tabs.max(1));
+            let maximum_offset = tabs.len().saturating_sub(visible_tabs);
             let offset = tab_offset.get().min(maximum_offset);
             tab_offset.set(offset);
-            for (kind, path) in tabs.iter().skip(offset).take(VISIBLE_TABS) {
+            for (kind, path) in tabs.iter().skip(offset).take(visible_tabs) {
                 let filename = path
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| path.display().to_string());
                 let selected = active_path.as_ref() == Some(path);
                 if let Ok(tab) = ui.canvas() {
-                    let tab_width =
-                        (filename.chars().count() as f64 * 7.0 + 20.0).clamp(70.0, 144.0);
+                    let tab_width = native_shell::document_tab_width(&filename);
                     tab.set_sizing(
                         Sizing::new()
                             .width(Length::Fixed(tab_width))
@@ -2147,7 +2185,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     document_tabs.append(&tab);
                 }
             }
-            if native_shell::document_overflow(tabs.len(), VISIBLE_TABS) {
+            if native_shell::document_overflow(tabs.len(), visible_tabs) {
                 if let Ok(previous) = ui.button("‹") {
                     previous.set_enabled(offset > 0);
                     let shift = tab_offset.clone();
@@ -2177,7 +2215,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     document_overflow.append(&next);
                 }
             }
-            if native_shell::document_overflow(tabs.len(), VISIBLE_TABS) {
+            if native_shell::document_overflow(tabs.len(), visible_tabs) {
                 if let Ok(all) = ui.combo_box() {
                     let mut labels = vec!["⌄".to_owned()];
                     labels.extend(tabs.iter().map(|(_, path)| {
@@ -2205,8 +2243,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             if !tabs.is_empty() {
                 document_bar.set_column_track(
                     1,
-                    Track::Fixed(if native_shell::document_overflow(tabs.len(), VISIBLE_TABS) {
-                        122.0
+                    Track::Fixed(if native_shell::document_overflow(tabs.len(), visible_tabs) {
+                        native_shell::DOCUMENT_OVERFLOW_WIDTH
                     } else {
                         0.0
                     }),
@@ -2253,6 +2291,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     *show_page_redraw.borrow_mut() = Some(show_page.clone());
+    *document_relayout.borrow_mut() = Some(Rc::new({
+        let show_page = show_page.clone();
+        let state = state.clone();
+        move || {
+            let page = state.borrow().page;
+            show_page(page);
+        }
+    }));
     for (kind, button) in toolbox_buttons {
         let show_page = show_page.clone();
         let state = state.clone();
@@ -2324,7 +2370,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .iter()
                         .position(|(kind, candidate)| *kind == Page::Code && candidate == &path)
                         .unwrap_or(0);
-                    tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
+                    let capacity = visible_tab_capacity.get().max(1);
+                    tab_offset.set(
+                        index
+                            .saturating_sub(capacity.saturating_sub(1))
+                            .min(tabs.len().saturating_sub(capacity)),
+                    );
                     editor.set_text(&text);
                     symbols_list.set_items(&project_symbols(&state.borrow()));
                     show_page(Page::Code);
@@ -2368,7 +2419,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .iter()
                         .position(|(kind, candidate)| *kind == Page::Design && candidate == &path)
                         .unwrap_or(0);
-                    tab_offset.set(index.saturating_sub(2).min(tabs.len().saturating_sub(3)));
+                    let capacity = visible_tab_capacity.get().max(1);
+                    tab_offset.set(
+                        index
+                            .saturating_sub(capacity.saturating_sub(1))
+                            .min(tabs.len().saturating_sub(capacity)),
+                    );
                     design_mode.set(true);
                     show_page(Page::Design);
                     canvas.redraw();
