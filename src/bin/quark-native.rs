@@ -13,12 +13,10 @@ mod editor;
 mod hydrogen;
 #[path = "../native_commands.rs"]
 mod native_commands;
-#[path = "../native_console.rs"]
-mod native_console;
-#[path = "../native_terminal.rs"]
-mod native_terminal;
 #[path = "../native_compiler.rs"]
 mod native_compiler;
+#[path = "../native_console.rs"]
+mod native_console;
 #[cfg(target_os = "linux")]
 #[path = "../native_dock_runtime.rs"]
 mod native_dock_runtime;
@@ -53,6 +51,8 @@ mod native_start_window;
 #[cfg(target_os = "linux")]
 #[path = "../native_syntax.rs"]
 mod native_syntax;
+#[path = "../native_terminal.rs"]
+mod native_terminal;
 #[path = "../native_ui_properties.rs"]
 mod native_ui_properties;
 #[path = "../problems.rs"]
@@ -542,7 +542,11 @@ fn run_task(
         .and_then(|path| path.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| PathBuf::from("."));
     status.set_text(&format!("{}…", task.label()));
-    set_console_text(&output, &format!("Running {}…", task.label()), native_console::Palette::Output);
+    set_console_text(
+        &output,
+        &format!("Running {}…", task.label()),
+        native_console::Palette::Output,
+    );
     let sender = ui
         .tasks()
         .channel(move |result: native_commands::ResultLog| {
@@ -1889,29 +1893,55 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let summary = error_summary.clone();
         move || {
             let needle = query.borrow().to_lowercase();
-            let filtered = errors.borrow().iter().filter(|problem| {
-                (!only_errors.get() || problem.severity == problems::Severity::Error)
-                    && (needle.is_empty()
-                        || problem.message.to_lowercase().contains(&needle)
-                        || problem.path.to_string_lossy().to_lowercase().contains(&needle))
-            }).cloned().collect::<Vec<_>>();
+            let filtered = errors
+                .borrow()
+                .iter()
+                .filter(|problem| {
+                    (!only_errors.get() || problem.severity == problems::Severity::Error)
+                        && (needle.is_empty()
+                            || problem.message.to_lowercase().contains(&needle)
+                            || problem
+                                .path
+                                .to_string_lossy()
+                                .to_lowercase()
+                                .contains(&needle))
+                })
+                .cloned()
+                .collect::<Vec<_>>();
             let count = filtered.len();
             *visible.borrow_mut() = filtered.clone();
             summary.set_text(&format!("{count} matching issue(s)"));
-            if folded.get() { list.set_items(&[]); }
-            else {
-                list.set_items(&filtered.iter().map(|problem| ListItem::new(format!(
-                    "{}: {}:{} — {}",
-                    if problem.severity == problems::Severity::Error { "Error" } else { "Warning" },
-                    problem.path.display(), problem.line, problem.message,
-                ))).collect::<Vec<_>>());
+            if folded.get() {
+                list.set_items(&[]);
+            } else {
+                list.set_items(
+                    &filtered
+                        .iter()
+                        .map(|problem| {
+                            ListItem::new(format!(
+                                "{}: {}:{} — {}",
+                                if problem.severity == problems::Severity::Error {
+                                    "Error"
+                                } else {
+                                    "Warning"
+                                },
+                                problem.path.display(),
+                                problem.line,
+                                problem.message,
+                            ))
+                        })
+                        .collect::<Vec<_>>(),
+                );
             }
         }
     });
     error_query.on_change({
         let query = error_filter.clone();
         let refresh = refresh_errors.clone();
-        move |text| { *query.borrow_mut() = text.to_owned(); refresh(); }
+        move |text| {
+            *query.borrow_mut() = text.to_owned();
+            refresh();
+        }
     });
     errors_only_button.on_click({
         let value = errors_only.clone();
@@ -1919,7 +1949,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let refresh = refresh_errors.clone();
         move || {
             value.set(!value.get());
-            button.set_text(if value.get() { "Errors only: On" } else { "Errors only: Off" });
+            button.set_text(if value.get() {
+                "Errors only: On"
+            } else {
+                "Errors only: Off"
+            });
             refresh();
         }
     });
@@ -1930,7 +1964,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let list = error_list.clone();
         move || {
             folded.set(!folded.get());
-            button.set_text(if folded.get() { "Expand ▸" } else { "Fold ▾" });
+            button.set_text(if folded.get() {
+                "Expand ▸"
+            } else {
+                "Fold ▾"
+            });
             #[cfg(target_os = "linux")]
             {
                 use gtk4::prelude::*;
@@ -2020,7 +2058,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         bottom_tabs.native_widget().set_valign(gtk4::Align::Start);
         bottom_pages.native_widget().set_vexpand(true);
         output_scroll.native_widget().set_vexpand(true);
-        for scroller in [&output_scroll, &debug_scroll, &test_scroll, &terminal_scroll] {
+        for scroller in [
+            &output_scroll,
+            &debug_scroll,
+            &test_scroll,
+            &terminal_scroll,
+        ] {
             let view = scroller.native_widget();
             view.add_css_class("quark-terminal-surface");
             view.set_vexpand(true);
@@ -2071,7 +2114,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                  }
                  .quark-bottom-tabs {
                     border-bottom: 1px solid alpha(@theme_fg_color, 0.18);
-                 }"
+                 }",
             );
             gtk4::style_context_add_provider_for_display(
                 &display,
@@ -2092,14 +2135,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         move |event: native_terminal::Input| {
             match event {
                 native_terminal::Input::Bytes(bytes) => parser.borrow_mut().process(&bytes),
-                native_terminal::Input::Resize { rows, cols } =>
-                    parser.borrow_mut().set_size(rows, cols),
+                native_terminal::Input::Resize { rows, cols } => {
+                    parser.borrow_mut().set_size(rows, cols)
+                }
             }
             let rendered = parser.borrow().screen().contents_formatted_basic();
             set_console_text(&display, &rendered, native_console::Palette::Output);
         }
     });
-    let terminal_dir = state.borrow().workspace.selected.as_ref()
+    let terminal_dir = state
+        .borrow()
+        .workspace
+        .selected
+        .as_ref()
         .and_then(|path| path.parent().map(Path::to_path_buf))
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     std::thread::spawn(move || {
@@ -2107,7 +2155,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             Ok(session) => session,
             Err(error) => {
                 let _ = terminal_sender.send(native_terminal::Input::Bytes(
-                    format!("Terminal startup failed: {error}").into_bytes()
+                    format!("Terminal startup failed: {error}").into_bytes(),
                 ));
                 return;
             }
@@ -2115,7 +2163,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         loop {
             match terminal_input_receiver.try_recv() {
                 Ok(native_terminal::Input::Bytes(data)) => {
-                    if session.send(&data).is_err() { break; }
+                    if session.send(&data).is_err() {
+                        break;
+                    }
                 }
                 Ok(native_terminal::Input::Resize { rows, cols }) => {
                     let _ = session.resize(rows, cols);
@@ -2125,7 +2175,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
             let data = session.poll();
-            if !data.is_empty() && terminal_sender.send(native_terminal::Input::Bytes(data)).is_err() { break; }
+            if !data.is_empty()
+                && terminal_sender
+                    .send(native_terminal::Input::Bytes(data))
+                    .is_err()
+            {
+                break;
+            }
             std::thread::sleep(std::time::Duration::from_millis(28));
         }
     });
@@ -2140,7 +2196,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let line = terminal_line.clone();
         move || {
             let value = std::mem::take(&mut *line.borrow_mut());
-            let _ = send.send(native_terminal::Input::Bytes(format!("{value}\r").into_bytes()));
+            let _ = send.send(native_terminal::Input::Bytes(
+                format!("{value}\r").into_bytes(),
+            ));
             entry.set_text("");
         }
     });
@@ -2169,15 +2227,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 Key::Page_Down => Some(b"\x1b[6~".to_vec()),
                 _ => key.to_unicode().map(|ch| {
                     if modifiers.contains(gtk4::gdk::ModifierType::CONTROL_MASK)
-                        && ch.is_ascii_alphabetic() {
+                        && ch.is_ascii_alphabetic()
+                    {
                         vec![(ch.to_ascii_uppercase() as u8 - b'A') + 1]
-                    } else { ch.to_string().into_bytes() }
+                    } else {
+                        ch.to_string().into_bytes()
+                    }
                 }),
             };
             if let Some(bytes) = code {
                 let _ = send.send(native_terminal::Input::Bytes(bytes));
                 gtk4::glib::Propagation::Stop
-            } else { gtk4::glib::Propagation::Proceed }
+            } else {
+                gtk4::glib::Propagation::Proceed
+            }
         });
         widget.add_controller(controller);
         // GTK widgets do not expose a portable notify::width property.
@@ -3656,10 +3719,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 4 => native_docking::DockId::FindResults,
                 _ => native_docking::DockId::Output,
             };
-            if page != 5 && dock_model
-                .borrow()
-                .section(id)
-                .is_some_and(|section| section.zone != native_docking::DockZone::Bottom)
+            if page != 5
+                && dock_model
+                    .borrow()
+                    .section(id)
+                    .is_some_and(|section| section.zone != native_docking::DockZone::Bottom)
             {
                 return; // This tool already lives in another dock host.
             }
@@ -3746,7 +3810,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 if page == 5 {
                     use gtk4::prelude::*;
                     let focus = terminal_focus.clone();
-                    gtk4::glib::idle_add_local_once(move || { focus.grab_focus(); });
+                    gtk4::glib::idle_add_local_once(move || {
+                        focus.grab_focus();
+                    });
                 }
                 if page != 5 {
                     let id = match page {
@@ -4688,7 +4754,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let ui = ui.clone();
         let show_bottom = show_bottom.clone();
         move |task| {
-            show_bottom(if task == native_commands::Task::Test { 3 } else { 0 });
+            show_bottom(if task == native_commands::Task::Test {
+                3
+            } else {
+                0
+            });
             run_task(
                 task,
                 state.clone(),
