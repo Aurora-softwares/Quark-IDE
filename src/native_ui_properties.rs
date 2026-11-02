@@ -18,6 +18,7 @@ fn element_at<'a, 'input>(
     Ok(node)
 }
 
+#[allow(dead_code)] // Backwards-compatible API for other frontends and unit tests.
 pub fn properties(source: &str, path: &[usize]) -> Result<(String, Vec<(String, String)>), String> {
     let parsed = Document::parse(source).map_err(|e| e.to_string())?;
     if parsed.root_element().tag_name().name() != "Window" {
