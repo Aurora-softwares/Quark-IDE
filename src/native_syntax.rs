@@ -5,7 +5,7 @@
 use gtk4::prelude::*;
 use naui::Widget as _;
 
-use crate::editor::{self, TokenKind};
+use crate::hydrogen_lexer::{self, TokenKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Syntax {
@@ -77,7 +77,7 @@ fn syntax_kind(kind: TokenKind) -> Option<Syntax> {
 fn hydrogen_spans(source: &str) -> Vec<(Syntax, usize, usize)> {
     let mut start = 0;
     let mut spans = Vec::new();
-    for (kind, token) in editor::tokenize(source) {
+    for (kind, token) in hydrogen_lexer::tokenize(source) {
         let end = start + token.chars().count();
         if let Some(style) = syntax_kind(kind) {
             spans.push((style, start, end));
