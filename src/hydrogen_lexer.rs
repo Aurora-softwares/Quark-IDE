@@ -286,14 +286,19 @@ pub fn completion_context(source: &str, cursor_char: usize) -> bool {
     true
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn native_lexer_reconstructs_unicode_source_exactly() {
         let source = "namespace Ω { string 名 = \"✅\"; } // note";
-        assert_eq!(tokenize(source).into_iter().map(|(_, token)| token).collect::<String>(), source);
+        assert_eq!(
+            tokenize(source)
+                .into_iter()
+                .map(|(_, token)| token)
+                .collect::<String>(),
+            source
+        );
     }
     #[test]
     fn native_completion_respects_utf8_caret_and_literal_context() {
