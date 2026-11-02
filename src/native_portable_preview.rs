@@ -28,17 +28,17 @@ pub fn design_tab_index(
 /// Resolve an image exactly as the Hydrogen runtime does: relative to
 /// its .hyui document, not to Quark's current working directory.
 fn image_source(document: &Path, source: &str) -> String {
-    if source.is_empty()
-        || source.contains("://")
-        || source.starts_with("data:")
-    {
+    if source.is_empty() || source.contains("://") || source.starts_with("data:") {
         return source.to_owned();
     }
     let source_path = Path::new(source);
     let path = if source_path.is_absolute() {
         source_path.to_path_buf()
     } else {
-        document.parent().unwrap_or_else(|| Path::new(".")).join(source_path)
+        document
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(source_path)
     };
     path.to_string_lossy().into_owned()
 }
@@ -748,8 +748,14 @@ mod tests {
             image_source(&document, "assets/logo.png"),
             directory.path().join("assets/logo.png").to_string_lossy()
         );
-        assert_eq!(image_source(&document, "data:image/png;base64,a"), "data:image/png;base64,a");
-        assert_eq!(image_source(&document, "https://example.com/logo.png"), "https://example.com/logo.png");
+        assert_eq!(
+            image_source(&document, "data:image/png;base64,a"),
+            "data:image/png;base64,a"
+        );
+        assert_eq!(
+            image_source(&document, "https://example.com/logo.png"),
+            "https://example.com/logo.png"
+        );
     }
 
     #[test]
