@@ -21,7 +21,10 @@ fn render_dock_icon(p: &mut Painter, id: DockId) {
         DockId::Output | DockId::TestResults => Color::rgb(0x70, 0xc3, 0x94),
         _ => Color::rgb(0x81, 0xae, 0xe6),
     };
-    p.fill_rect(Rect::new(2.0, 3.0, 23.0, 24.0), Color::rgb(0x36, 0x39, 0x42));
+    p.fill_rect(
+        Rect::new(2.0, 3.0, 23.0, 24.0),
+        Color::rgb(0x36, 0x39, 0x42),
+    );
     match id {
         DockId::Toolbox | DockId::Data => {
             for y in [9.0, 16.0] {
