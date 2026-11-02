@@ -137,13 +137,47 @@ fn property_group(kind: &str, name: &str) -> &'static str {
     if name.starts_with("on") {
         return "Events & behaviour";
     }
-    if matches!(name, "text" | "title" | "placeholder" | "source" | "items" | "rows" | "columns" | "accessibleName") {
+    if matches!(
+        name,
+        "text"
+            | "title"
+            | "placeholder"
+            | "source"
+            | "items"
+            | "rows"
+            | "columns"
+            | "accessibleName"
+    ) {
         return "Content & accessibility";
     }
-    if matches!(name, "visible" | "enabled" | "checked" | "running" | "primary" | "indeterminate" | "open" | "value") {
+    if matches!(
+        name,
+        "visible"
+            | "enabled"
+            | "checked"
+            | "running"
+            | "primary"
+            | "indeterminate"
+            | "open"
+            | "value"
+    ) {
         return "State & behaviour";
     }
-    if matches!(name, "width" | "height" | "padding" | "gap" | "breakpoint" | "minItemWidth" | "preferredWidth" | "fill" | "theme" | "material" | "role" | "tone") {
+    if matches!(
+        name,
+        "width"
+            | "height"
+            | "padding"
+            | "gap"
+            | "breakpoint"
+            | "minItemWidth"
+            | "preferredWidth"
+            | "fill"
+            | "theme"
+            | "material"
+            | "role"
+            | "tone"
+    ) {
         return "Appearance & layout";
     }
     "Other"
@@ -414,10 +448,16 @@ mod tests {
     fn runtime_popovers_toolbars_and_defaults_are_editable_before_being_set() {
         let xml = r#"<Window version="1"><Toolbar><ToolButton id="run"/></Toolbar><Popover target="run"/></Window>"#;
         let (_, button) = available_properties(xml, &[0, 0]).unwrap();
-        assert!(button.iter().any(|field| field.name == "text" && !field.explicitly_set));
-        assert!(button.iter().any(|field| field.name == "onClick" && field.group == "Events & behaviour"));
+        assert!(button
+            .iter()
+            .any(|field| field.name == "text" && !field.explicitly_set));
+        assert!(button
+            .iter()
+            .any(|field| field.name == "onClick" && field.group == "Events & behaviour"));
         let (_, popover) = available_properties(xml, &[1]).unwrap();
-        assert!(popover.iter().any(|field| field.name == "open" && field.value == "false"));
+        assert!(popover
+            .iter()
+            .any(|field| field.name == "open" && field.value == "false"));
         assert!(popover.iter().any(|field| field.name == "onClose"));
     }
 
