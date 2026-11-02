@@ -2037,6 +2037,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // zone uses the native sidecar host. Unsupported compound bottom tabs are
     // rejected rather than silently persisting a move that cannot be shown.
     #[cfg(target_os = "linux")]
+    let dock_refresh_hook: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "linux")]
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
         use naui::Widget as _;
         let toolbox = toolbox.native_widget();
@@ -2102,12 +2104,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let model = dock_model.clone();
             let path = dock_path.clone();
             let status = status.clone();
+            let refresh = dock_refresh_hook.clone();
             native_dock_runtime::install_zone_target(
                 &widget, zone, Rc::new(move |source, destination| {
                     let previous = model.borrow().section(source).map(|s| s.zone);
                     if previous == Some(destination) { return false; }
                     if !route(source, destination) { return false; }
                     model.borrow_mut().move_to(source, destination);
+                    if let Some(refresh) = refresh.borrow().as_ref() { refresh(); }
                     if let Err(error) = model.borrow().save(&path) {
                         status.set_text(&format!("Cannot save dock move: {error}"));
                     } else {
@@ -2133,6 +2137,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let active = active_dock.clone();
         let sizes = pane_sizes.clone();
         let left_content = left_content.clone();
+        #[cfg(target_os = "linux")]
+        let left_dock_host = left_dock_host.clone();
+        #[cfg(target_os = "linux")]
+        let right_dock_host = right_dock_host.clone();
+        #[cfg(target_os = "linux")]
+        let bottom_dock_host = bottom_dock_host.clone();
         let solution_pane = solution_pane.clone();
         let properties_pane = properties_pane.clone();
         let inspector = inspector.clone();
@@ -2157,11 +2167,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     _ => native_docking::DockId::Toolbox,
                 }
             };
-            let left_open = layout.visible(selected_left, active.get());
-            let right_solution = layout.visible(native_docking::DockId::Solution, active.get());
-            let right_properties = layout.visible(native_docking::DockId::Properties, active.get());
-            let right_open = right_solution || right_properties;
-            let bottom_open = [
+            let left_open = layout.visible(selected_left, active.get())
+                && layout.section(selected_left).is_some_and(|s| s.zone == native_docking::DockZone::Left);
+            let right_solution = layout.section(native_docking::DockId::Solution)
+                .is_some_and(|s| s.zone == native_docking::DockZone::Right)
+                && layout.visible(native_docking::DockId::Solution, active.get());
+            let right_properties = layout.section(native_docking::DockId::Properties)
+                .is_some_and(|s| s.zone == native_docking::DockZone::Right)
+                && layout.visible(native_docking::DockId::Properties, active.get());
+            let has_right_guests = [native_docking::DockId::Toolbox]
+                .iter().any(|id| layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
+                    && layout.visible(*id, active.get()));
+            let has_left_guests = [
+                native_docking::DockId::Solution, native_docking::DockId::Properties,
+            ].iter().any(|id| layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
+                && layout.visible(*id, active.get()));
+            let has_bottom_guests = [
+                native_docking::DockId::Toolbox, native_docking::DockId::Solution,
+                native_docking::DockId::Properties,
+            ].iter().any(|id| layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
+                && layout.visible(*id, active.get()));
+            let right_open = right_solution || right_properties || has_right_guests;
+            let bottom_open = has_bottom_guests || [
                 native_docking::DockId::Output,
                 native_docking::DockId::ErrorList,
                 native_docking::DockId::Debug,
@@ -2174,12 +2201,17 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 use gtk4::prelude::*;
                 use naui::Widget as _;
                 left_content.native_widget().set_visible(left_open);
-                solution_pane.native_widget().set_visible(right_solution);
-                properties_pane.native_widget().set_visible(right_properties);
-                inspector.native_widget().set_visible(right_open);
+                solution_pane.native_widget().set_visible(
+                    layout.visible(native_docking::DockId::Solution, active.get()));
+                properties_pane.native_widget().set_visible(
+                    layout.visible(native_docking::DockId::Properties, active.get()));
+                inspector.native_widget().set_visible(right_solution || right_properties);
                 bottom_pages.native_widget().set_visible(bottom_open);
+                left_dock_host.set_visible(has_left_guests);
+                right_dock_host.set_visible(has_right_guests);
+                bottom_dock_host.set_visible(has_bottom_guests);
             }
-            if left_open {
+            if left_open || has_left_guests {
                 left_split.set_position(remembered.toolbox.max(155.0));
             } else {
                 left_split.set_position(native_shell::SIDE_RAIL_WIDTH);
@@ -2202,6 +2234,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     left_split.set_min_sizes(native_shell::SIDE_RAIL_WIDTH, 200.0);
     main_workspace.set_min_sizes(300.0, native_shell::SIDE_RAIL_WIDTH);
     document_workspace.set_min_sizes(160.0, 35.0);
+    #[cfg(target_os = "linux")]
+    *dock_refresh_hook.borrow_mut() = Some(refresh_docks.clone());
     refresh_docks();
     #[cfg(target_os = "linux")]
     {
