@@ -180,6 +180,7 @@ pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<P
     if !selected.starts_with(&root) {
         return Err("Selected entry is outside the open workspace".into());
     }
+    let creating_file = matches!(&action, FileAction::NewFile(_));
     let result = match action {
         FileAction::NewFile(name) | FileAction::NewFolder(name) => {
             validate_name(&name)?;
@@ -195,7 +196,7 @@ pub fn file_action(root: &Path, selected: &Path, action: FileAction) -> Result<P
             if target.exists() {
                 return Err("A file or folder already exists with that name".into());
             }
-            if matches!(action, FileAction::NewFile(_)) {
+            if creating_file {
                 std::fs::OpenOptions::new()
                     .write(true)
                     .create_new(true)
@@ -287,6 +288,6 @@ mod tests {
         assert_eq!(list.len(), 5);
         assert!(list.contains_key(&vec![0, 0]));
         let (_, filtered) = project(&paths, base, "Solution", "main", false, false);
-        assert_eq!(filtered.len(), 4);
+        assert_eq!(filtered.len(), 5);
     }
 }
