@@ -111,6 +111,37 @@ keyboard handling, Hydrogen renderer sharing and screenshot comparisons
 remain unverified or incomplete. Track the strict migration in
 [#100](https://github.com/Aurora-softwares/Quark-IDE/issues/100).
 
+## Hydrogen Studio layout parity — screenshot review, 2026-11-02
+
+The latest user screenshot highlighted **container-level** differences even when
+individual controls appeared OS-native. It is a layout regression, not a reason
+to replace the approved GTK4/libadwaita, WinUI 3 or AppKit controls.
+
+Development changes:
+- Horizontal `RowPanel` width hints now preserve each child's explicit
+  `preferredWidth`: the Studio Application settings and Your workspace
+  panels are **600px** and **340px**, not two equal cells.
+- `Panel` and `GridPanel` contents stretch to their allotted native width,
+  and nested rows, columns and tab pages propagate that width consistently.
+  Text input, sliders, selections and progress bars now follow Hydrogen's
+  native `fill` defaults, rather than the designer's hard-coded 190px input.
+- GTK labels use the runtime's left alignment rather than centred content.
+- GTK `MenuBar` groups are shown as native `GtkMenuButton` controls (`Studio`
+  and `Help` in this fixture); nested actions are not presented as a row of
+  ordinary buttons. No Hydrogen events are invoked by the designer.
+- The outer designer viewport has a separate 16px inset and theme-sensitive
+  GTK shadow, without modifying the saved Hydrogen `Window.padding`.
+- Added native designer unit tests for fixed preferred widths, flexible
+  allocations, hidden children, runtime horizontal-fill defaults, menu
+  semantics and the theme-aware inset.
+
+**Acceptance remains open:** compare the same Studio.hyui file between
+Quark's Design pane and Hydrogen's launched GTK application at 1120, 800
+and 360 width. GTK `FlowBox` reflow as the window is resized and precise
+AppKit/WinUI layout parity still require screenshot/interaction verification.
+Do not treat these layout source changes alone as visual acceptance or full
+cross-platform UI framework migration (#89 and #100).
+
 ## Required checks before any Release merge
 
 Run on each supported OS, using a compatible Rust toolchain:
