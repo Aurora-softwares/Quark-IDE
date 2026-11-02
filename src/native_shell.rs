@@ -81,7 +81,10 @@ pub fn document_visible_capacity(width: f64, filenames: &[String]) -> usize {
     } else {
         620.0
     };
-    let total = filenames.iter().map(|name| document_tab_width(name)).sum::<f64>()
+    let total = filenames
+        .iter()
+        .map(|name| document_tab_width(name))
+        .sum::<f64>()
         + (filenames.len().saturating_sub(1) as f64 * 3.0);
     if total <= width {
         return filenames.len();
@@ -104,7 +107,6 @@ pub fn document_visible_capacity(width: f64, filenames: &[String]) -> usize {
 pub fn document_overflow(open_count: usize, visible_capacity: usize) -> bool {
     visible_capacity > 0 && open_count > visible_capacity
 }
-
 
 /// Quark's palette: Hydrogen electron cyan, orbital blue, quark violet.
 pub const HYDROGEN_CYAN: (u8, u8, u8) = (50, 212, 226);
@@ -158,7 +160,11 @@ mod tests {
 
     #[test]
     fn document_tabs_use_measured_width_and_hide_overflow_when_everything_fits() {
-        let names = vec!["Program.hy".into(), "Studio.hyui".into(), "README.md".into()];
+        let names = vec![
+            "Program.hy".into(),
+            "Studio.hyui".into(),
+            "README.md".into(),
+        ];
         assert_eq!(document_visible_capacity(1100.0, &names), 3);
         assert!(document_visible_capacity(235.0, &names) < 3);
         assert_eq!(document_visible_capacity(90.0, &names), 1);
