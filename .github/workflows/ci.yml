@@ -70,6 +70,9 @@ jobs:
       - name: Native GTK stacked docking ownership regression under Xvfb
         if: runner.os == 'Linux'
         run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings cargo test --features native-ui --bin quark-native moved_stacks_reparent_without_gtk_non_child_warnings -- --ignored --test-threads=1
+      - name: Native GTK Solution Explorer context-menu ownership regression under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' env G_DEBUG=fatal-warnings cargo test --features native-ui --bin quark-native context_menu_does_not_poison_listbox_row_rebuild -- --ignored --test-threads=1
       - uses: actions/upload-artifact@v4
         with:
           name: quark-native-${{ runner.os }}
