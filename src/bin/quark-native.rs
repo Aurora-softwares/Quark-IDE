@@ -3265,10 +3265,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     };
     #[cfg(target_os = "linux")]
     let dock_widgets = {
-        use naui::Widget as _;
         use gtk4::glib::object::Cast;
+        use naui::Widget as _;
         [
-            (native_docking::DockId::Toolbox, toolbox.size_bin().upcast::<gtk4::Widget>()),
+            (
+                native_docking::DockId::Toolbox,
+                toolbox.size_bin().upcast::<gtk4::Widget>(),
+            ),
             (
                 native_docking::DockId::Symbols,
                 symbols_section.size_bin().upcast::<gtk4::Widget>(),
@@ -3277,8 +3280,14 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 native_docking::DockId::Search,
                 code_search_view.size_bin().upcast::<gtk4::Widget>(),
             ),
-            (native_docking::DockId::Server, server_view.size_bin().upcast::<gtk4::Widget>()),
-            (native_docking::DockId::Data, data_view.size_bin().upcast::<gtk4::Widget>()),
+            (
+                native_docking::DockId::Server,
+                server_view.size_bin().upcast::<gtk4::Widget>(),
+            ),
+            (
+                native_docking::DockId::Data,
+                data_view.size_bin().upcast::<gtk4::Widget>(),
+            ),
             (
                 native_docking::DockId::Solution,
                 solution_pane.size_bin().upcast::<gtk4::Widget>(),
@@ -3295,7 +3304,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 native_docking::DockId::ErrorList,
                 error_section.size_bin().upcast::<gtk4::Widget>(),
             ),
-            (native_docking::DockId::Debug, debug_section.size_bin().upcast::<gtk4::Widget>()),
+            (
+                native_docking::DockId::Debug,
+                debug_section.size_bin().upcast::<gtk4::Widget>(),
+            ),
             (
                 native_docking::DockId::TestResults,
                 test_section.size_bin().upcast::<gtk4::Widget>(),
@@ -3774,8 +3786,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     #[cfg(target_os = "linux")]
     {
-        use naui::Widget as _;
         use gtk4::glib::object::Cast;
+        use naui::Widget as _;
         for (id, header, widget) in [
             (
                 native_docking::DockId::Toolbox,
