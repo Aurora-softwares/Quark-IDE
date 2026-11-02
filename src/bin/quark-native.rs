@@ -835,8 +835,8 @@ fn apply_right_dock_order(
     let Ok(paned) = inspector.native_widget().downcast::<gtk4::Paned>() else {
         return false;
     };
-    let solution_widget = solution.native_widget();
-    let properties_widget = properties.native_widget();
+    let solution_widget: gtk4::Widget = solution.size_bin().upcast();
+    let properties_widget: gtk4::Widget = properties.size_bin().upcast();
     let wanted_first = if properties_first {
         &properties_widget
     } else {
@@ -885,7 +885,7 @@ fn apply_bottom_dock_order(
     let mut predecessor: Option<gtk4::Widget> = None;
     for section in layout.sections_in(native_docking::DockZone::Bottom) {
         if let Some((_, button)) = tabs.iter().find(|(id, _)| *id == section.id) {
-            let widget = button.native_widget();
+            let widget: gtk4::Widget = button.size_bin().upcast();
             container.reorder_child_after(&widget, predecessor.as_ref());
             predecessor = Some(widget);
         }
