@@ -491,11 +491,12 @@ mod tests {
     fn auto_hide_only_applies_to_unpinned_sections_and_drops_are_validated() {
         let mut layout = DockLayout::default();
         let mut gesture = DockInteraction::default();
-        gesture.open(&layout, DockId::Toolbox);
-        assert_eq!(gesture.active_popup, Some(DockId::Toolbox));
+        // Toolbox is pinned by default. Exercise auto-hide on Search,
+        // which remains unpinned, and the no-popup pinned Toolbox case.
+        gesture.open(&layout, DockId::Search);
+        assert_eq!(gesture.active_popup, Some(DockId::Search));
         gesture.blur();
         assert_eq!(gesture.active_popup, None);
-        layout.pin(DockId::Toolbox, true);
         gesture.open(&layout, DockId::Toolbox);
         assert_eq!(gesture.active_popup, None);
         gesture.begin_drag(DockId::Toolbox);
