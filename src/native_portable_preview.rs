@@ -55,7 +55,10 @@ fn render_node(
         return Ok(());
     }
     let kind = node.tag_name().name();
-    if matches!(kind, "Timer" | "Dialog" | "State" | "Clipboard" | "ContextMenu") {
+    if matches!(
+        kind,
+        "Timer" | "Dialog" | "State" | "Clipboard" | "ContextMenu"
+    ) {
         return Ok(());
     }
     let row = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
@@ -78,8 +81,10 @@ fn render_node(
                 .stack(Orientation::Horizontal)
                 .map_err(|e| e.to_string())?;
             children.set_spacing(
-                node.attribute("gap").and_then(|v| v.parse::<f64>().ok())
-                    .unwrap_or(12.0).clamp(0.0, 48.0),
+                node.attribute("gap")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(12.0)
+                    .clamp(0.0, 48.0),
             );
             render_children(ui, &children, node, &path, on_select, design_tabs)?;
             row.append(&children);
@@ -91,8 +96,11 @@ fn render_node(
                 .and_then(|n| n.parse::<usize>().ok())
                 .unwrap_or(3)
                 .clamp(1, 12);
-            let gap = node.attribute("gap").and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(16.0).clamp(0.0, 48.0);
+            let gap = node
+                .attribute("gap")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(16.0)
+                .clamp(0.0, 48.0);
             grid.set_spacing(gap, gap);
             for column in 0..columns {
                 grid.set_column_track(column, Track::FILL);
@@ -125,10 +133,16 @@ fn render_node(
             }
             if count > 0 {
                 // Hydrogen stores zero-based indices. Unset value=0 is page 1.
-                let runtime_default = node.attribute("value")
-                    .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
-                let selection = design_tabs.borrow().get(&path).copied()
-                    .unwrap_or(runtime_default).min(count - 1);
+                let runtime_default = node
+                    .attribute("value")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(0);
+                let selection = design_tabs
+                    .borrow()
+                    .get(&path)
+                    .copied()
+                    .unwrap_or(runtime_default)
+                    .min(count - 1);
                 tabs.set_selected(selection);
                 let design_tabs = design_tabs.clone();
                 let select = on_select.clone();
@@ -153,7 +167,8 @@ fn render_node(
             row.append(&button);
         }
         "Input" => {
-            let input = ui.text_input(node.attribute("text").unwrap_or(""))
+            let input = ui
+                .text_input(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             input.set_placeholder(node.attribute("placeholder").unwrap_or(""));
             input.set_sizing(Sizing::new().width(Length::Fixed(190.0)));
@@ -177,11 +192,16 @@ fn render_node(
             row.append(&input);
         }
         "NumberInput" => {
-            let value = node.attribute("value").and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+            let value = node
+                .attribute("value")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
             let input = ui.number_input(value).map_err(|e| e.to_string())?;
             input.set_range(
-                node.attribute("minimum").and_then(|v| v.parse::<f64>().ok()),
-                node.attribute("maximum").and_then(|v| v.parse::<f64>().ok()),
+                node.attribute("minimum")
+                    .and_then(|v| v.parse::<f64>().ok()),
+                node.attribute("maximum")
+                    .and_then(|v| v.parse::<f64>().ok()),
             );
             let select = on_select.clone();
             input.on_change(move |_| select(path.clone()));
@@ -201,7 +221,8 @@ fn render_node(
             row.append(&input);
         }
         "CheckBox" => {
-            let input = ui.checkbox(node.attribute("text").unwrap_or("Check box"))
+            let input = ui
+                .checkbox(node.attribute("text").unwrap_or("Check box"))
                 .map_err(|e| e.to_string())?;
             input.set_checked(node.attribute("checked") == Some("true"));
             let select = on_select.clone();
@@ -209,7 +230,8 @@ fn render_node(
             row.append(&input);
         }
         "Switch" => {
-            let input = ui.toggle(node.attribute("text").unwrap_or(""))
+            let input = ui
+                .toggle(node.attribute("text").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             input.set_on(node.attribute("checked") == Some("true"));
             let select = on_select.clone();
@@ -220,8 +242,11 @@ fn render_node(
             let input = ui.combo_box().map_err(|e| e.to_string())?;
             let choices: Vec<_> = node.attribute("items").unwrap_or("").split('|').collect();
             input.set_items(&choices);
-            input.set_selected(node.attribute("value")
-                .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0));
+            input.set_selected(
+                node.attribute("value")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(0),
+            );
             let select = on_select.clone();
             input.on_select(move |_| select(path.clone()));
             row.append(&input);
@@ -230,49 +255,83 @@ fn render_node(
             let input = ui.radio_group().map_err(|e| e.to_string())?;
             let choices: Vec<_> = node.attribute("items").unwrap_or("").split('|').collect();
             input.set_items(&choices);
-            input.set_selected(node.attribute("value")
-                .and_then(|v| v.parse::<usize>().ok()).unwrap_or(0));
+            input.set_selected(
+                node.attribute("value")
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(0),
+            );
             let select = on_select.clone();
             input.on_select(move |_| select(path.clone()));
             row.append(&input);
         }
         "Slider" => {
-            let min = node.attribute("minimum").and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
-            let max = node.attribute("maximum").and_then(|v| v.parse::<f64>().ok()).unwrap_or(100.0).max(min + 1.0);
+            let min = node
+                .attribute("minimum")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let max = node
+                .attribute("maximum")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(100.0)
+                .max(min + 1.0);
             let slider = ui.slider(min, max).map_err(|e| e.to_string())?;
-            slider.set_value(node.attribute("value")
-                .and_then(|v| v.parse::<f64>().ok()).unwrap_or(min).clamp(min, max));
+            slider.set_value(
+                node.attribute("value")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(min)
+                    .clamp(min, max),
+            );
             let select = on_select.clone();
             slider.on_change(move |_| select(path.clone()));
             row.append(&slider);
         }
         "ProgressBar" => {
             let progress = ui.progress_bar().map_err(|e| e.to_string())?;
-            let min = node.attribute("minimum").and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
-            let max = node.attribute("maximum").and_then(|v| v.parse::<f64>().ok()).unwrap_or(100.0);
-            let value = node.attribute("value").and_then(|v| v.parse::<f64>().ok()).unwrap_or(min);
-            progress.set_value(if max > min { (value - min) / (max - min) } else { 0.0 });
+            let min = node
+                .attribute("minimum")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let max = node
+                .attribute("maximum")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(100.0);
+            let value = node
+                .attribute("value")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(min);
+            progress.set_value(if max > min {
+                (value - min) / (max - min)
+            } else {
+                0.0
+            });
             row.append(&progress);
         }
         "Image" => {
-            let image = ui.image(node.attribute("source").unwrap_or(""))
+            let image = ui
+                .image(node.attribute("source").unwrap_or(""))
                 .map_err(|e| e.to_string())?;
             row.append(&image);
         }
         "Separator" => {
             let separator = ui.canvas().map_err(|e| e.to_string())?;
             separator.set_sizing(Sizing::new().width(Length::Fill).height(Length::Fixed(1.0)));
-            separator.on_draw(|p| p.fill_rect(
-                naui::Rect::new(0.0, 0.0, p.width(), 1.0),
-                naui::Color::rgb(0x83, 0x86, 0x8c),
-            ));
+            separator.on_draw(|p| {
+                p.fill_rect(
+                    naui::Rect::new(0.0, 0.0, p.width(), 1.0),
+                    naui::Color::rgb(0x83, 0x86, 0x8c),
+                )
+            });
             row.append(&separator);
         }
         "Spacer" => {
             let spacer = ui.spacer().map_err(|e| e.to_string())?;
-            spacer.set_sizing(Sizing::new().height(Length::Fixed(
-                node.attribute("height").and_then(|v| v.parse::<f64>().ok()).unwrap_or(12.0),
-            )));
+            spacer.set_sizing(
+                Sizing::new().height(Length::Fixed(
+                    node.attribute("height")
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(12.0),
+                )),
+            );
             row.append(&spacer);
         }
         "ListBox" | "Table" | "Spinner" | "FilePicker" => {
