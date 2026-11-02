@@ -74,17 +74,54 @@ A selected host Hydrogen compiler is used to build an Australis `.hyproj`. The A
 - All task-status changes await current CI and native manual acceptance.
   This is partial implementation, not closure of #98, #99 or #89.
 
+## Approved UI technology policy — issue #100 (Development, 2026-11-02)
+
+**The final production Quark IDE must use only GTK4/libadwaita (Linux),
+WinUI 3 (Windows), and AppKit (macOS).** Do not introduce or retain a
+cross-platform widget toolkit or independent drawing framework as a fourth
+production UI technology. Native framework APIs own the window, widgets,
+theme, menu, focus, keyboard/IME, docking and control layout on their OS.
+
+Migration done in Development:
+- `quark-native` is now the only default Cargo frontend (`native-ui`).
+  The older `quark-ide` (egui/eframe) binary requires explicit `legacy-ui`
+  and is retained only to migrate existing workflows and preserve tests.
+- CI tests the two frontends with mutually exclusive features; native jobs
+  never request the legacy UI feature.
+- Hydrogen lexer and completion logic are in UI-independent
+  `src/hydrogen_lexer.rs`, shared by the GTK and legacy editors, so native
+  syntax no longer imports the egui renderer or theme module.
+- Designer's embedded Linux tabs now use GTK4 StackSwitcher+Stack, the same
+  native widget pair as Hydrogen's Linux runtime. Its Linux header uses the
+  libadwaita HeaderBar and follows host styling; the embedded header is not
+  an OS-managed window frame.
+- Native Properties offers direct true/false and theme selectors and
+  choice-index selectors; its XML validator rejects non-finite numbers,
+  impossible ranges, invalid flags, and out-of-range choices.
+
+**Migration not done:** Native shell/layout/control rendering still relies
+on `naui` as a platform wrapper. This dependency is prohibited in the final
+architecture and requires rewriting the remaining presentations directly in
+GTK4, WinUI 3 and AppKit. The previous egui binary and dependencies must be
+deleted after feature migration; defaulting to native does not satisfy the
+framework-only requirement by itself. Desktop window decorations can only be
+exact in real OS-managed windows; the standalone Hydrogen runtime window
+remains the native visual authority. Native AppKit/WinUI widgets, read-only
+keyboard handling, Hydrogen renderer sharing and screenshot comparisons
+remain unverified or incomplete. Track the strict migration in
+[#100](https://github.com/Aurora-softwares/Quark-IDE/issues/100).
+
 ## Required checks before any Release merge
 
 Run on each supported OS, using a compatible Rust toolchain:
 
 ```bash
 cargo fmt --all --check
-cargo clippy --all-targets -- -D warnings
-cargo test --all-targets
-cargo clippy --features native-ui --bin quark-native -- -D warnings
-cargo test --features native-ui --bin quark-native
-cargo build --release --features native-ui --bin quark-native
+cargo clippy --no-default-features --features legacy-ui --all-targets -- -D warnings
+cargo test --no-default-features --features legacy-ui --all-targets
+cargo clippy --no-default-features --features native-ui --bin quark-native -- -D warnings
+cargo test --no-default-features --features native-ui --bin quark-native
+cargo build --release --no-default-features --features native-ui --bin quark-native
 ```
 
 Then launch the native binary and manually verify:
