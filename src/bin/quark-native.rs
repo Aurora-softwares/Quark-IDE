@@ -673,6 +673,39 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
     fallback
 }
 
+/// Physically reorder GTK's existing native tool widgets without recreating
+/// their tree, search state, Properties editor or callbacks.
+#[cfg(target_os = "linux")]
+fn apply_right_dock_order(
+    inspector: &naui::SplitView,
+    solution: &naui::Stack,
+    properties: &naui::Stack,
+    properties_first: bool,
+) -> bool {
+    use gtk4::prelude::*;
+    use naui::Widget as _;
+    let Ok(paned) = inspector.native_widget().downcast::<gtk4::Paned>() else {
+        return false;
+    };
+    let solution_widget = solution.native_widget();
+    let properties_widget = properties.native_widget();
+    let wanted_first = if properties_first { &properties_widget } else { &solution_widget };
+    if paned.start_child().as_ref() == Some(wanted_first) {
+        return true;
+    }
+    // Both children must be detached before either can be attached elsewhere.
+    paned.set_start_child(None::<&gtk4::Widget>);
+    paned.set_end_child(None::<&gtk4::Widget>);
+    if properties_first {
+        paned.set_start_child(Some(&properties_widget));
+        paned.set_end_child(Some(&solution_widget));
+    } else {
+        paned.set_start_child(Some(&solution_widget));
+        paned.set_end_child(Some(&properties_widget));
+    }
+    true
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     // Reuse the launcher window. Creating an AppKit window from a button
     // callback and immediately closing the old one can lose activation.
@@ -1923,6 +1956,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    #[cfg(target_os = "linux")]
+    {
+        // Rehydrate the live native order from the user's saved layout.
+        let ids = dock_model.borrow().sections_in(native_docking::DockZone::Right)
+            .iter().map(|entry| entry.id).collect::<Vec<_>>();
+        let properties_first = ids.iter().position(|id| *id == native_docking::DockId::Properties)
+            < ids.iter().position(|id| *id == native_docking::DockId::Solution);
+        apply_right_dock_order(&inspector, &solution_pane, &properties_pane, properties_first);
+    }
+
     // The same model that persists pinned state now controls *actual* GTK
     // pane visibility. Auto-hidden regions retain narrow native tab rails;
     // restoring one reads its last saved user size rather than overwriting it.
@@ -2062,6 +2105,56 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 });
             }
         });
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let reorder: Rc<dyn Fn(native_docking::DockId, native_docking::DockId) -> bool> =
+            Rc::new({
+                let inspector = inspector.clone();
+                let solution = solution_pane.clone();
+                let properties = properties_pane.clone();
+                let model = dock_model.clone();
+                let path = dock_path.clone();
+                let refresh = refresh_docks.clone();
+                let status = status.clone();
+                move |source, destination| {
+                    use native_docking::DockId;
+                    if !matches!(
+                        (source, destination),
+                        (DockId::Solution, DockId::Properties)
+                            | (DockId::Properties, DockId::Solution)
+                    ) {
+                        return false;
+                    }
+                    let properties_first = source == DockId::Properties;
+                    if !apply_right_dock_order(
+                        &inspector, &solution, &properties, properties_first,
+                    ) {
+                        status.set_text("Cannot reorder this native panel.");
+                        return false;
+                    }
+                    {
+                        let mut layout = model.borrow_mut();
+                        layout.reorder_before(source, destination);
+                        if let Err(error) = layout.save(&path) {
+                            status.set_text(&format!("Cannot save dock layout: {error}"));
+                        }
+                    }
+                    refresh();
+                    status.set_text("Tool panels reordered. Layout saved.");
+                    true
+                }
+            });
+        native_dock_widgets::enable_header_drag(
+            &solution_controls, native_docking::DockId::Solution,
+            { let reorder = reorder.clone();
+              move |source| reorder(source, native_docking::DockId::Solution) },
+        );
+        native_dock_widgets::enable_header_drag(
+            &properties_controls, native_docking::DockId::Properties,
+            move |source| reorder(source, native_docking::DockId::Properties),
+        );
     }
 
     // Shared dock headers now own pin and collapse state. Persist settings
