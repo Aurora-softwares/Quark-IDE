@@ -9,6 +9,7 @@ pub struct DockHeader {
     pub row: naui::Stack,
     pub pin: naui::Button,
     pub collapse: naui::Button,
+    pub float: naui::Button,
 }
 
 /// Compact vector icons use the same geometry on GTK, AppKit and WinUI.
@@ -193,6 +194,10 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
     pin.set_sizing(Sizing::new().width(Length::Fixed(34.0)));
     row.append(&pin);
 
+    let float = ui.button("⇱")?;
+    float.set_sizing(Sizing::new().width(Length::Fixed(32.0)));
+    row.append(&float);
+
     let collapse = ui.button("⌄")?;
     collapse.set_sizing(Sizing::new().width(Length::Fixed(34.0)));
     row.append(&collapse);
@@ -207,8 +212,9 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
         collapse
             .native_widget()
             .set_tooltip_text(Some("Collapse or expand the panel content."));
+        float.native_widget().set_tooltip_text(Some("Detach this tool to a native window."));
     }
-    Ok(DockHeader { row, pin, collapse })
+    Ok(DockHeader { row, pin, collapse, float })
 }
 
 #[cfg(test)]
