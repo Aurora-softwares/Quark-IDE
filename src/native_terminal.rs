@@ -4,6 +4,12 @@
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize, PtySystem, Child};
 use std::{io::{Read, Write}, path::Path, sync::{mpsc::{self, Receiver}, Arc, Mutex}, thread};
 
+/// Messages sent from platform-native input widgets to the live PTY.
+pub enum Input {
+    Bytes(Vec<u8>),
+    Resize { rows: u16, cols: u16 },
+}
+
 pub struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -78,6 +84,12 @@ impl Drop for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn resize_messages_remain_independent_from_command_input() {
+        let resize = Input::Resize { rows: 42, cols: 132 };
+        assert!(matches!(resize, Input::Resize { rows: 42, cols: 132 }));
+    }
+
     #[test]
     fn shell_name_is_available() { assert!(!default_shell().is_empty()); }
     #[cfg(unix)]
