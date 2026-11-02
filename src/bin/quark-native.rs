@@ -1445,9 +1445,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         {
                             use gtk4::prelude::*;
                             use naui::Widget as _;
-                            apply_button.native_widget().set_tooltip_text(
-                                Some("Apply this property to the Hydrogen UI XML"),
-                            );
+                            apply_button.native_widget().set_tooltip_text(Some(
+                                "Apply this property to the Hydrogen UI XML",
+                            ));
                         }
                         apply_button.on_click(move || {
                             let chosen = draft.borrow().clone();
