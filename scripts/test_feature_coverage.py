@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 spec = importlib.util.spec_from_file_location("feature_gate", Path(__file__).with_name("check-feature-coverage.py"))
 gate = importlib.util.module_from_spec(spec)
@@ -43,6 +45,36 @@ class CoverageGateTests(unittest.TestCase):
 
     def test_list_parser_counts_tests_not_benchmarks_or_summaries(self):
         self.assertEqual(gate.test_names("a::test: test\nb::bench: benchmark\n1 test, 1 benchmark\n"), {"a::test"})
+
+    def test_native_and_legacy_test_lists_are_collected_separately(self):
+        outputs = [
+            SimpleNamespace(stdout="legacy::test: test\\n"),
+            SimpleNamespace(stdout="native::test: test\\n"),
+        ]
+        with patch.object(gate.subprocess, "run", side_effect=outputs) as run:
+            self.assertEqual(gate.listing(), {"legacy::test", "native::test"})
+        self.assertEqual(run.call_count, 2)
+        first = run.call_args_list[0].args[0]
+        second = run.call_args_list[1].args[0]
+        self.assertIn("legacy-ui", first)
+        self.assertIn("native-ui", second)
+        self.assertIn("--no-default-features", first)
+        self.assertIn("--no-default-features", second)
+
+    def test_ignored_native_and_legacy_test_lists_are_both_checked(self):
+        with patch.object(
+            gate.subprocess, "run",
+            side_effect=[
+                SimpleNamespace(stdout="legacy::ignored: test\\n"),
+                SimpleNamespace(stdout="native::ignored: test\\n"),
+            ],
+        ) as run:
+            self.assertEqual(
+                gate.listing(ignored=True),
+                {"legacy::ignored", "native::ignored"},
+            )
+        for call in run.call_args_list:
+            self.assertIn("--ignored", call.args[0])
 
     def test_empty_and_invalid_registers_fail(self):
         self.assertTrue(gate.validate({}, set()))
