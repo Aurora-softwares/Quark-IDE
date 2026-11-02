@@ -1034,10 +1034,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         left_rail.append(&tab);
         side_tabs.push(tab);
     }
-    let server_view = ui.stack(Orientation::Vertical)?;
-    server_view.append(&ui.label("SERVER EXPLORER")?);
-    let data_view = ui.stack(Orientation::Vertical)?;
-    data_view.append(&ui.label("DATA SOURCES")?);
+    let (server_view, server_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Server)?;
+    server_view.append(&ui.label("Server tools are ready for integration.")?);
+    let (data_view, data_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Data)?;
+    data_view.append(&ui.label("Data sources are ready for integration.")?);
     let symbols_view = ui.grid()?;
     symbols_view.set_sizing(Sizing::fill());
     symbols_view.set_column_track(0, Track::FILL);
@@ -1048,8 +1050,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     symbols_list.set_sizing(Sizing::fill());
     symbols_list.set_items(&project_symbols(&state.borrow()));
     symbols_view.attach(&symbols_list, GridCell::new(0, 1));
-    let code_search_view = ui.stack(Orientation::Vertical)?;
-    code_search_view.append(&ui.label("SEARCH")?);
+    let (symbols_section, symbols_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Symbols)?;
+    symbols_section.append(&symbols_view);
+    let (code_search_view, search_controls) =
+        native_dock_widgets::section_panel(ui, native_docking::DockId::Search)?;
+    code_search_view.append(&ui.label("Search tools are ready for integration.")?);
     let left_content = ui.stack(Orientation::Vertical)?;
     left_content.append(&toolbox);
     left_content.set_sizing(Sizing::fill());
@@ -2048,6 +2054,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
         use naui::Widget as _;
         let toolbox = toolbox.native_widget();
+        let symbols = symbols_section.native_widget();
+        let search = code_search_view.native_widget();
+        let server = server_view.native_widget();
+        let data = data_view.native_widget();
         let solution = solution_pane.native_widget();
         let properties = properties_pane.native_widget();
         let left_home = left_content.native_widget()
@@ -2061,13 +2071,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             use native_docking::{DockId, DockZone};
             let widget = match id {
                 DockId::Toolbox => &toolbox,
+                DockId::Symbols => &symbols,
+                DockId::Search => &search,
+                DockId::Server => &server,
+                DockId::Data => &data,
                 DockId::Solution => &solution,
                 DockId::Properties => &properties,
                 _ => return false,
             };
             if id.default_zone() == zone {
                 match id {
-                    DockId::Toolbox =>
+                    DockId::Toolbox | DockId::Symbols | DockId::Search
+                    | DockId::Server | DockId::Data =>
                         native_dock_runtime::attach_box(widget, &left_home),
                     DockId::Solution | DockId::Properties => {
                         let slot_start = id == DockId::Solution;
@@ -2094,6 +2109,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // builds. Apply the saved coordinates to the real native widget tree.
         for id in [
             native_docking::DockId::Toolbox,
+            native_docking::DockId::Symbols,
+            native_docking::DockId::Search,
+            native_docking::DockId::Server,
+            native_docking::DockId::Data,
             native_docking::DockId::Solution,
             native_docking::DockId::Properties,
         ] {
@@ -2129,10 +2148,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }),
             );
         }
-        native_dock_widgets::enable_header_drag(
-            &toolbox_controls, native_docking::DockId::Toolbox,
-            |_source| false,
-        );
+        for (header, id) in [
+            (&toolbox_controls, native_docking::DockId::Toolbox),
+            (&symbols_controls, native_docking::DockId::Symbols),
+            (&search_controls, native_docking::DockId::Search),
+            (&server_controls, native_docking::DockId::Server),
+            (&data_controls, native_docking::DockId::Data),
+        ] {
+            native_dock_widgets::enable_header_drag(header, id, |_source| false);
+        }
     }
 
     // The same model that persists pinned state now controls *actual* GTK
@@ -2728,6 +2752,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let dock_model = dock_model.clone();
         let left_content = left_content.clone();
         let toolbox = toolbox.clone();
+        let symbols_section = symbols_section.clone();
         let server_view = server_view.clone();
         let data_view = data_view.clone();
         let symbols_view = symbols_view.clone();
@@ -2737,13 +2762,33 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             left_content.clear();
             if tab_mode.get() == Page::Code {
                 match index {
-                    1 => left_content.append(&code_search_view),
-                    _ => left_content.append(&symbols_view),
+                    1 => {
+                        if dock_model.borrow().section(native_docking::DockId::Search)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                            left_content.append(&code_search_view);
+                        }
+                    }
+                    _ => {
+                        if dock_model.borrow().section(native_docking::DockId::Symbols)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                            left_content.append(&symbols_section);
+                        }
+                    },
                 }
             } else {
                 match index {
-                    1 => left_content.append(&server_view),
-                    2 => left_content.append(&data_view),
+                    1 => {
+                        if dock_model.borrow().section(native_docking::DockId::Server)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                            left_content.append(&server_view);
+                        }
+                    }
+                    2 => {
+                        if dock_model.borrow().section(native_docking::DockId::Data)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                            left_content.append(&data_view);
+                        }
+                    },
                     _ => {
                         if dock_model.borrow().section(native_docking::DockId::Toolbox)
                             .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
