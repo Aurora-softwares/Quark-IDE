@@ -568,18 +568,23 @@ fn apply_native_accent(build: &naui::Button, run: &naui::Button) {
                      button.quark-build:hover { background: alpha(#32d4e2, 0.24); } \
                      button.quark-run { background: alpha(#9e71eb, 0.16); \
                        border: 1px solid alpha(#9e71eb, 0.30); border-radius: 8px; } \
-                     button.quark-run:hover { background: alpha(#9e71eb, 0.25); }"
+                     button.quark-run:hover { background: alpha(#9e71eb, 0.25); }",
                 );
                 gtk4::style_context_add_provider_for_display(
-                    &display, &provider, gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                    &display,
+                    &provider,
+                    gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
                 );
             }
         }
     });
     build.native_widget().add_css_class("quark-build");
     run.native_widget().add_css_class("quark-run");
-    build.native_widget().set_tooltip_text(Some("Build the selected Hydrogen project"));
-    run.native_widget().set_tooltip_text(Some("Build and run without attaching a debugger"));
+    build
+        .native_widget()
+        .set_tooltip_text(Some("Build the selected Hydrogen project"));
+    run.native_widget()
+        .set_tooltip_text(Some("Build and run without attaching a debugger"));
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -719,13 +724,20 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Three unobtrusive electron/orbital/quark marks bring identity to the
     // system-native command strip, instead of styling every control.
     let brand_mark = ui.canvas()?;
-    brand_mark.set_sizing(Sizing::new().width(Length::Fixed(24.0)).height(Length::Fixed(25.0)));
+    brand_mark.set_sizing(
+        Sizing::new()
+            .width(Length::Fixed(24.0))
+            .height(Length::Fixed(25.0)),
+    );
     brand_mark.on_draw(|p| {
         for (index, (red, green, blue)) in [
             native_shell::HYDROGEN_CYAN,
             native_shell::ORBIT_BLUE,
             native_shell::QUARK_VIOLET,
-        ].into_iter().enumerate() {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             p.fill_rect(
                 Rect::new(2.0 + index as f64 * 7.0, 5.0, 4.0, 16.0),
                 Color::rgb(red, green, blue),
@@ -1387,7 +1399,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 let name = field.name;
                 let human_tab_index = kind == "Tabs" && name == "value";
                 let display_value = if human_tab_index {
-                    field.value.parse::<usize>().ok()
+                    field
+                        .value
+                        .parse::<usize>()
+                        .ok()
                         .map(|value| (value + 1).to_string())
                         .unwrap_or_else(|| field.value.clone())
                 } else {
