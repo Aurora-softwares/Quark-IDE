@@ -18,6 +18,7 @@ fn render_children(
     path: &[usize],
     on_select: &SelectElement,
     design_tabs: &DesignTabs,
+    available_width: f64,
 ) -> Result<(), String> {
     for (index, child) in node
         .children()
@@ -26,7 +27,7 @@ fn render_children(
     {
         let mut next = path.to_vec();
         next.push(index);
-        render_node(ui, parent, child, next, on_select, design_tabs)?;
+        render_node(ui, parent, child, next, on_select, design_tabs, available_width)?;
     }
     Ok(())
 }
@@ -38,6 +39,7 @@ fn render_node(
     path: Vec<usize>,
     on_select: &SelectElement,
     design_tabs: &DesignTabs,
+    available_width: f64,
 ) -> Result<(), String> {
     // Only draw what Hydrogen will draw. Selection chrome belongs to the
     // Properties hierarchy, never inside the application being previewed.
@@ -55,7 +57,31 @@ fn render_node(
     row.set_spacing(0.0);
 
     match kind {
-        "ColumnPanel" | "Panel" | "Tab" | "ScrollView" | "Window" => {
+        "Panel" => {
+            let panel = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
+            let padding = node.attribute("padding").and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(20.0).clamp(0.0, 80.0);
+            panel.set_padding(Padding::all(padding));
+            panel.set_spacing(node.attribute("gap").and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(12.0).clamp(0.0, 48.0));
+            if let Some(title) = node.attribute("title").filter(|s| !s.is_empty()) {
+                let label = ui.label(title).map_err(|e| e.to_string())?;
+                label.set_style(naui::TextStyle::Heading);
+                panel.append(&label);
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                panel.native_widget().add_css_class("card");
+            }
+            render_children(
+                ui, &panel, node, &path, on_select, design_tabs,
+                (available_width - 2.0 * padding).max(80.0),
+            )?;
+            row.append(&panel);
+        }
+        "ColumnPanel" | "Tab" | "ScrollView" | "Window" => {
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
             children.set_spacing(
                 node.attribute("gap")
@@ -63,25 +89,34 @@ fn render_node(
                     .unwrap_or(12.0)
                     .clamp(0.0, 48.0),
             );
-            render_children(ui, &children, node, &path, on_select, design_tabs)?;
+            render_children(ui, &children, node, &path, on_select, design_tabs, available_width)?;
             row.append(&children);
         }
         "RowPanel" | "MenuBar" | "Menu" => {
-            let children = ui
-                .stack(Orientation::Horizontal)
-                .map_err(|e| e.to_string())?;
-            children.set_spacing(
-                node.attribute("gap")
-                    .and_then(|v| v.parse::<f64>().ok())
-                    .unwrap_or(12.0)
-                    .clamp(0.0, 48.0),
-            );
-            render_children(ui, &children, node, &path, on_select, design_tabs)?;
+            let direction = if kind == "RowPanel"
+                && available_width < node.attribute("breakpoint")
+                    .and_then(|v| v.parse::<f64>().ok()).unwrap_or(700.0)
+            {
+                Orientation::Vertical
+            } else {
+                Orientation::Horizontal
+            };
+            let children = ui.stack(direction).map_err(|e| e.to_string())?;
+            let gap = node.attribute("gap").and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(12.0).clamp(0.0, 48.0);
+            children.set_spacing(gap);
+            let count = node.children().filter(|n| n.is_element()).count().max(1);
+            let child_width = if direction == Orientation::Horizontal {
+                ((available_width - (count as f64 - 1.0) * gap) / count as f64).max(80.0)
+            } else {
+                available_width
+            };
+            render_children(ui, &children, node, &path, on_select, design_tabs, child_width)?;
             row.append(&children);
         }
         "GridPanel" => {
             let grid = ui.grid().map_err(|e| e.to_string())?;
-            let columns = node
+            let maximum_columns = node
                 .attribute("columns")
                 .and_then(|n| n.parse::<usize>().ok())
                 .unwrap_or(3)
@@ -91,6 +126,17 @@ fn render_node(
                 .and_then(|v| v.parse::<f64>().ok())
                 .unwrap_or(16.0)
                 .clamp(0.0, 48.0);
+            let minimum_width = node
+                .attribute("minItemWidth")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(240.0)
+                .clamp(80.0, 1200.0);
+            // Hydrogen's layout is responsive. Use the target window's width
+            // rather than always forcing the maximum columns.
+            let columns = maximum_columns.min(
+                ((available_width + gap) / (minimum_width + gap)).floor()
+                    .max(1.0) as usize,
+            );
             grid.set_spacing(gap, gap);
             for column in 0..columns {
                 grid.set_column_track(column, Track::FILL);
@@ -99,7 +145,10 @@ fn render_node(
                 let cell = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
                 let mut child_path = path.clone();
                 child_path.push(index);
-                render_node(ui, &cell, child, child_path, on_select, design_tabs)?;
+                render_node(
+                    ui, &cell, child, child_path, on_select, design_tabs,
+                    (available_width - gap * (columns as f64 - 1.0)) / columns as f64,
+                )?;
                 grid.attach(&cell, GridCell::new(index % columns, index / columns));
             }
             row.append(&grid);
@@ -117,7 +166,7 @@ fn render_node(
                 let page = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
                 let mut tab_path = path.clone();
                 tab_path.push(position);
-                render_children(ui, &page, tab, &tab_path, on_select, design_tabs)?;
+                render_children(ui, &page, tab, &tab_path, on_select, design_tabs, available_width)?;
                 tabs.add_tab(tab.attribute("title").unwrap_or("Page"), &page);
                 count += 1;
             }
@@ -144,10 +193,22 @@ fn render_node(
             }
             row.append(&tabs);
         }
-        "Label" => row.append(
-            &ui.label(node.attribute("text").unwrap_or("Label"))
-                .map_err(|e| e.to_string())?,
-        ),
+        "Label" => {
+            let label = ui.label(node.attribute("text").unwrap_or(""))
+                .map_err(|e| e.to_string())?;
+            match node.attribute("role").unwrap_or("") {
+                "title" => label.set_style(naui::TextStyle::LargeTitle),
+                "heading" => label.set_style(naui::TextStyle::Heading),
+                "caption" => label.set_style(naui::TextStyle::Caption),
+                _ => {}
+            }
+            match node.attribute("tone").unwrap_or("") {
+                "accent" => label.set_color(naui::TextColor::Accent),
+                "muted" => label.set_color(naui::TextColor::Secondary),
+                _ => {}
+            }
+            row.append(&label);
+        }
         "Button" | "MenuItem" => {
             let button = ui
                 .button(node.attribute("text").unwrap_or("Button"))
@@ -371,7 +432,7 @@ fn render_node(
         _ => {
             // Unknown future runtime controls are not faked with labels.
             let children = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
-            render_children(ui, &children, node, &path, on_select, design_tabs)?;
+            render_children(ui, &children, node, &path, on_select, design_tabs, available_width)?;
             row.append(&children);
         }
     }
@@ -437,7 +498,11 @@ pub fn render(
         }
     });
     outer.append(&titlebar);
-    render_children(ui, &window, root, &[], &on_select, &design_tabs)?;
+    render_children(
+        ui, &window, root, &[], &on_select, &design_tabs,
+        (width - 2.0 * root.attribute("padding")
+            .and_then(|v| v.parse::<f64>().ok()).unwrap_or(24.0)).max(160.0),
+    )?;
     outer.append(&window);
     Ok(outer)
 }
