@@ -1,6 +1,6 @@
 //! Small consistent panel headers built through one native API.
 //! The same layout model is used by GTK, AppKit and WinUI presenters.
-use naui::{Color, Length, Orientation, Point, Rect, Sizing, Ui};
+use naui::{Color, Length, Orientation, Painter, Point, Rect, Sizing, Ui};
 
 use crate::native_docking::DockId;
 
@@ -9,6 +9,65 @@ pub struct DockHeader {
     pub row: naui::Stack,
     pub pin: naui::Button,
     pub collapse: naui::Button,
+}
+
+/// Compact vector icons use the same geometry on GTK, AppKit and WinUI.
+/// Swap this renderer for SVG assets later without modifying dock headers.
+fn render_dock_icon(p: &mut Painter, id: DockId) {
+    let color = match id {
+        DockId::Toolbox | DockId::Symbols => Color::rgb(0x36, 0xc2, 0xd6),
+        DockId::Solution | DockId::Properties => Color::rgb(0x9d, 0x85, 0xeb),
+        DockId::ErrorList | DockId::Debug => Color::rgb(0xe0, 0x9c, 0x6f),
+        DockId::Output | DockId::TestResults => Color::rgb(0x70, 0xc3, 0x94),
+        _ => Color::rgb(0x81, 0xae, 0xe6),
+    };
+    p.fill_rect(Rect::new(2.0, 3.0, 23.0, 24.0), Color::rgb(0x36, 0x39, 0x42));
+    match id {
+        DockId::Toolbox | DockId::Data => {
+            for y in [9.0, 16.0] {
+                for x in [8.0, 15.0] {
+                    p.fill_rect(Rect::new(x, y, 4.0, 4.0), color);
+                }
+            }
+        }
+        DockId::Solution | DockId::Server => {
+            p.fill_rect(Rect::new(7.0, 11.0, 13.0, 10.0), color);
+            p.fill_rect(Rect::new(7.0, 8.0, 7.0, 4.0), color);
+            p.fill_rect(Rect::new(9.0, 15.0, 9.0, 4.0), Color::rgb(0x36, 0x39, 0x42));
+        }
+        DockId::Properties => {
+            for (y, x) in [(10.0, 12.0), (15.0, 17.0), (20.0, 9.0)] {
+                p.fill_rect(Rect::new(7.0, y, 13.0, 1.0), color);
+                p.fill_rect(Rect::new(x, y - 2.0, 3.0, 5.0), color);
+            }
+        }
+        DockId::Output | DockId::Debug => {
+            p.line(Point::new(8.0, 10.0), Point::new(13.0, 15.0), color, 2.0);
+            p.line(Point::new(13.0, 15.0), Point::new(8.0, 20.0), color, 2.0);
+            p.fill_rect(Rect::new(15.0, 19.0, 5.0, 2.0), color);
+        }
+        DockId::Search | DockId::FindResults => {
+            p.line(Point::new(16.0, 18.0), Point::new(20.0, 22.0), color, 2.0);
+            p.fill_rect(Rect::new(9.0, 10.0, 7.0, 2.0), color);
+            p.fill_rect(Rect::new(8.0, 12.0, 2.0, 7.0), color);
+            p.fill_rect(Rect::new(10.0, 18.0, 7.0, 2.0), color);
+            p.fill_rect(Rect::new(16.0, 12.0, 2.0, 7.0), color);
+        }
+        DockId::Symbols => {
+            p.line(Point::new(13.0, 8.0), Point::new(20.0, 15.0), color, 2.0);
+            p.line(Point::new(20.0, 15.0), Point::new(13.0, 22.0), color, 2.0);
+            p.line(Point::new(13.0, 22.0), Point::new(6.0, 15.0), color, 2.0);
+            p.line(Point::new(6.0, 15.0), Point::new(13.0, 8.0), color, 2.0);
+        }
+        DockId::ErrorList => {
+            p.fill_rect(Rect::new(12.0, 9.0, 3.0, 9.0), color);
+            p.fill_rect(Rect::new(12.0, 20.0, 3.0, 3.0), color);
+        }
+        DockId::TestResults => {
+            p.line(Point::new(7.0, 16.0), Point::new(11.0, 20.0), color, 2.0);
+            p.line(Point::new(11.0, 20.0), Point::new(20.0, 10.0), color, 2.0);
+        }
+    }
 }
 
 pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
@@ -28,20 +87,7 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
             .width(Length::Fixed(27.0))
             .height(Length::Fixed(30.0)),
     );
-    icon.on_draw(move |painter| {
-        let (r, g, b) = match id {
-            DockId::Toolbox | DockId::Symbols => (0x36, 0xc2, 0xd6),
-            DockId::Solution | DockId::Properties => (0x9d, 0x85, 0xeb),
-            DockId::ErrorList | DockId::Debug => (0xe0, 0x9c, 0x6f),
-            DockId::Output | DockId::TestResults => (0x70, 0xc3, 0x94),
-            _ => (0x81, 0xae, 0xe6),
-        };
-        painter.fill_rect(
-            Rect::new(2.0, 3.0, 23.0, 24.0),
-            Color::rgb(0x36, 0x39, 0x42),
-        );
-        painter.text(id.glyph(), Point::new(6.0, 8.0), 12.0, Color::rgb(r, g, b));
-    });
+    icon.on_draw(move |painter| render_dock_icon(painter, id));
     row.append(&icon);
 
     let title = ui.label(id.title())?;
@@ -68,4 +114,20 @@ pub fn section_header(ui: &Ui, id: DockId) -> naui::Result<DockHeader> {
             .set_tooltip_text(Some("Collapse or expand the panel content."));
     }
     Ok(DockHeader { row, pin, collapse })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_dock_has_vector_geometry_without_font_fallbacks() {
+        for id in DockId::ALL {
+            let mut painter = Painter::new(27.0, 30.0);
+            render_dock_icon(&mut painter, id);
+            assert!(
+                painter.commands().len() >= 2,
+                "{id:?} must draw an identifiable native tool icon"
+            );
+        }
+    }
 }
