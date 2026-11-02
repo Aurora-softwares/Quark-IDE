@@ -1923,6 +1923,15 @@
         "native_docking::tests::drop_targets_are_distinct_and_the_editor_centre_is_not_a_dock",
         "native_docking::tests::pin_and_collapse_survive_roundtrip"
       ]
+    },
+    {
+      "id": "native-terminal-vt100-cell-rendering",
+      "category": "Native terminal",
+      "feature": "Native PTY presents a VT100 cell grid with per-cell ANSI styling, cursor position and alternate-screen handling, using portable terminal parsing and native painter commands.",
+      "tests": [
+        "terminal::tests::ansi_screen_tracks_colours_cursor_and_alternate_screen",
+        "terminal::tests::control_keys_and_paste_reach_the_os"
+      ]
     }
   ]
 }
