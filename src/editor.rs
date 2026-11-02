@@ -6,7 +6,8 @@ use eframe::egui::{self, Color32};
 // The legacy renderer reuses the same frontend-neutral token model as the
 // native GTK/AppKit/WinUI application. Avoid a second lexer implementation.
 pub use crate::hydrogen_lexer::{
-    completion_candidates, completion_context, insert_completion, prefix_at, tokenize, TokenKind, KEYWORDS,
+    completion_candidates, completion_context, insert_completion, prefix_at, tokenize, TokenKind,
+    KEYWORDS,
 };
 fn highlight_with_palette(
     text: &str,
