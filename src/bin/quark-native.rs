@@ -2082,7 +2082,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Keep one PTY session alive for the duration of the IDE. The worker
     // exclusively owns the PTY handles, and UI input/output crosses channels.
     let (terminal_input_sender, terminal_input_receiver) =
-        std::sync::mpsc::channel::<Vec<u8>>();
+        std::sync::mpsc::channel::<native_terminal::Input>();
     let terminal_parser = Rc::new(RefCell::new(vt100::Parser::new(26, 100, 2000)));
     let terminal_sender = ui.tasks().channel({
         let parser = terminal_parser.clone();
@@ -2106,8 +2106,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         };
         loop {
             match terminal_input_receiver.try_recv() {
-                Ok(data) => {
+                Ok(native_terminal::Input::Bytes(data)) => {
                     if session.send(&data).is_err() { break; }
+                }
+                Ok(native_terminal::Input::Resize { rows, cols }) => {
+                    let _ = session.resize(rows, cols);
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
@@ -2128,7 +2131,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let line = terminal_line.clone();
         move || {
             let value = std::mem::take(&mut *line.borrow_mut());
-            let _ = send.send(format!("{value}\r").into_bytes());
+            let _ = send.send(native_terminal::Input::Bytes(format!("{value}\r").into_bytes()));
             entry.set_text("");
         }
     });
@@ -2163,11 +2166,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }),
             };
             if let Some(bytes) = code {
-                let _ = send.send(bytes);
+                let _ = send.send(native_terminal::Input::Bytes(bytes));
                 gtk4::glib::Propagation::Stop
             } else { gtk4::glib::Propagation::Proceed }
         });
         widget.add_controller(controller);
+        // Notify the PTY when the actual native viewport is resized. This
+        // matters for shells and applications that rely on terminal geometry.
+        let scroll_widget = terminal_scroll.native_widget();
+        let send = terminal_input_sender.clone();
+        scroll_widget.connect_notify_local(Some("width"), move |widget, _| {
+            let cols = (widget.width().max(80) / 8).clamp(10, 300) as u16;
+            let rows = (widget.height().max(36) / 17).clamp(2, 100) as u16;
+            let _ = send.send(native_terminal::Input::Resize { rows, cols });
+        });
+        let scroll_widget = terminal_scroll.native_widget();
+        let send = terminal_input_sender.clone();
+        scroll_widget.connect_notify_local(Some("height"), move |widget, _| {
+            let cols = (widget.width().max(80) / 8).clamp(10, 300) as u16;
+            let rows = (widget.height().max(36) / 17).clamp(2, 100) as u16;
+            let _ = send.send(native_terminal::Input::Resize { rows, cols });
+        });
     }
 
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
