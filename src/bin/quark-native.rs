@@ -15,6 +15,8 @@ mod hydrogen;
 mod native_commands;
 #[path = "../native_compiler.rs"]
 mod native_compiler;
+#[path = "../native_solution_explorer.rs"]
+mod native_solution_explorer;
 #[cfg(target_os = "linux")]
 #[path = "../native_dock_runtime.rs"]
 mod native_dock_runtime;
@@ -422,6 +424,27 @@ fn file_items(ide: &Ide) -> (Vec<TreeItem>, Vec<PathBuf>) {
             .expanded(true)
             .children(children)],
         paths,
+    )
+}
+
+/// Convert discovered Hydrogen files to a hierarchical, selectable
+/// Solution Explorer without changing the project's underlying manifests.
+fn solution_items(
+    ide: &Ide,
+    search: &str,
+    descending: bool,
+    list_mode: bool,
+) -> (Vec<TreeItem>, std::collections::HashMap<Vec<usize>, PathBuf>) {
+    let (_, paths) = file_items(ide);
+    let root = ide.project.as_ref()
+        .and_then(|project| project.path.parent())
+        .or_else(|| ide.workspace.folders.last().map(PathBuf::as_path))
+        .unwrap_or_else(|| Path::new("."));
+    let title = ide.project.as_ref()
+        .map(|project| format!("◇ Solution '{}'", project.name))
+        .unwrap_or_else(|| format!("📁 {}", root.display()));
+    native_solution_explorer::project(
+        &paths, root, &title, search, descending, list_mode,
     )
 }
 
@@ -1448,12 +1471,26 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let refresh_solution = ui.button("⟳")?;
     let collapse_solution = solution_controls.collapse.clone();
     solution_heading.append(&refresh_solution);
+    // A second, consistent panel row owns view controls independently of
+    // the panel title/pin/float/collapse header.
+    let explorer_toolbar = ui.stack(Orientation::Horizontal)?;
+    explorer_toolbar.set_spacing(5.0);
+    let sort_ascending = ui.button("A → Z")?;
+    let sort_descending = ui.button("Z → A")?;
+    let show_tree = ui.button("🌳 Tree")?;
+    let show_list = ui.button("☷ List")?;
+    for button in [&sort_ascending, &sort_descending, &show_tree, &show_list] {
+        explorer_toolbar.append(button);
+    }
+    solution_pane.append(&explorer_toolbar);
     let solution_search = ui.search_input()?;
     solution_search.set_placeholder("Search Solution Explorer (Ctrl+;)");
     solution_pane.append(&solution_search);
     let tree = ui.tree()?;
     tree.set_sizing(Sizing::fill());
-    let (initial_tree, initial_paths) = file_items(&state.borrow());
+    let solution_descending = Rc::new(Cell::new(false));
+    let solution_list_mode = Rc::new(Cell::new(false));
+    let (initial_tree, initial_paths) = solution_items(&state.borrow(), "", false, false);
     let displayed_paths = Rc::new(RefCell::new(initial_paths));
     let solution_query = Rc::new(RefCell::new(String::new()));
     tree.set_items(&initial_tree);
@@ -3761,10 +3798,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let startup_project = startup_project.clone();
         let solution_query = solution_query.clone();
         let displayed_paths = displayed_paths.clone();
+        let solution_descending = solution_descending.clone();
+        let solution_list_mode = solution_list_mode.clone();
         let symbols_list = symbols_list.clone();
         move || {
             let ide = state.borrow();
-            let (items, paths) = filtered_file_items(&ide, &solution_query.borrow());
+            let (items, paths) = solution_items(
+                &ide, &solution_query.borrow(),
+                solution_descending.get(), solution_list_mode.get(),
+            );
             symbols_list.set_items(&project_symbols(&ide));
             tree.set_items(&items);
             *displayed_paths.borrow_mut() = paths;
@@ -3786,6 +3828,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let refresh_project = refresh_project.clone();
         move || refresh_project()
     });
+    for (button, descending) in [(&sort_ascending, false), (&sort_descending, true)] {
+        let refresh_project = refresh_project.clone();
+        let state = solution_descending.clone();
+        button.on_click(move || {
+            state.set(descending);
+            refresh_project();
+        });
+    }
+    for (button, list_mode) in [(&show_tree, false), (&show_list, true)] {
+        let refresh_project = refresh_project.clone();
+        let state = solution_list_mode.clone();
+        button.on_click(move || {
+            state.set(list_mode);
+            refresh_project();
+        });
+    }
 
     let open_source: Rc<dyn Fn(PathBuf)> = Rc::new({
         let state = state.clone();
@@ -3948,11 +4006,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let open_source = open_source.clone();
         let open_layout = open_layout.clone();
         move |position| {
-            if position.len() < 2 || position[0] != 0 {
-                return;
-            }
             let files = displayed_paths.borrow();
-            if let Some(path) = files.get(position[1]).cloned() {
+            if let Some(path) = files.get(&position.to_vec()).cloned() {
                 if path.extension().and_then(|ext| ext.to_str()) == Some("hyui") {
                     open_layout(path);
                 } else {
