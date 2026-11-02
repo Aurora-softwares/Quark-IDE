@@ -16,6 +16,9 @@ mod native_commands;
 #[allow(dead_code)] // Header widget factory shared by all native tool windows.
 #[path = "../native_dock_widgets.rs"]
 mod native_dock_widgets;
+#[cfg(target_os = "linux")]
+#[path = "../native_dock_runtime.rs"]
+mod native_dock_runtime;
 #[allow(dead_code)] // Runtime docking model is introduced progressively to every pane.
 #[path = "../native_docking.rs"]
 mod native_docking;
@@ -1895,6 +1898,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     main_workspace.set_min_sizes(300.0, 220.0);
     retain_trailing_size(&main_workspace);
     root.attach(&main_workspace, GridCell::new(0, 1));
+    // Sidecar GTK hosts keep moved native tool widgets outside the legacy
+    // single-pane selection stacks. Changing tabs never destroys a relocated
+    // widget or reattaches it to the old region by accident.
+    #[cfg(target_os = "linux")]
+    let (left_dock_host, right_dock_host, bottom_dock_host) = {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        let left = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        let right = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        let bottom_host = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+        let left_parent = left_side.native_widget().downcast::<gtk4::Box>()
+            .expect("native left dock must be a GTK Box");
+        let right_parent = right_region.native_widget().downcast::<gtk4::Box>()
+            .expect("native right dock must be a GTK Box");
+        let bottom_parent = bottom.native_widget().downcast::<gtk4::Box>()
+            .expect("native bottom dock must be a GTK Box");
+        left_parent.append(&left);
+        right_parent.append(&right);
+        bottom_parent.append(&bottom_host);
+        (left, right, bottom_host)
+    };
+
 
     let refresh_tracks: Rc<dyn Fn(native_layout::PaneSizes)> = Rc::new({
         let left_split = left_split.clone();
@@ -2005,6 +2030,99 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let properties_first = ids.iter().position(|id| *id == native_docking::DockId::Properties)
             < ids.iter().position(|id| *id == native_docking::DockId::Solution);
         apply_right_dock_order(&inspector, &solution_pane, &properties_pane, properties_first);
+    }
+
+    // Cross-zone routing uses the existing live GTK widgets. The right split
+    // keeps its established two-panel behaviour; moving a tool to a different
+    // zone uses the native sidecar host. Unsupported compound bottom tabs are
+    // rejected rather than silently persisting a move that cannot be shown.
+    #[cfg(target_os = "linux")]
+    let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
+        use naui::Widget as _;
+        let toolbox = toolbox.native_widget();
+        let solution = solution_pane.native_widget();
+        let properties = properties_pane.native_widget();
+        let left_home = left_content.native_widget()
+            .downcast::<gtk4::Box>().expect("left content GTK Box");
+        let inspector_home = inspector.native_widget()
+            .downcast::<gtk4::Paned>().expect("right inspector GTK Paned");
+        let left_host = left_dock_host.clone();
+        let right_host = right_dock_host.clone();
+        let bottom_host = bottom_dock_host.clone();
+        Rc::new(move |id, zone| {
+            use native_docking::{DockId, DockZone};
+            let widget = match id {
+                DockId::Toolbox => &toolbox,
+                DockId::Solution => &solution,
+                DockId::Properties => &properties,
+                _ => return false,
+            };
+            if id.default_zone() == zone {
+                match id {
+                    DockId::Toolbox =>
+                        native_dock_runtime::attach_box(widget, &left_home),
+                    DockId::Solution | DockId::Properties => {
+                        let slot_start = id == DockId::Solution;
+                        native_dock_runtime::attach_paned(
+                            widget, &inspector_home, slot_start,
+                        )
+                    }
+                    _ => false,
+                }
+            } else {
+                match zone {
+                    DockZone::Left => native_dock_runtime::attach_box(widget, &left_host),
+                    DockZone::Right => native_dock_runtime::attach_box(widget, &right_host),
+                    DockZone::Bottom => native_dock_runtime::attach_box(widget, &bottom_host),
+                }
+            }
+        })
+    };
+    #[cfg(target_os = "linux")]
+    {
+        use naui::Widget as _;
+        native_dock_runtime::install_preview_css();
+        // Existing layouts may already contain cross-zone moves from older
+        // builds. Apply the saved coordinates to the real native widget tree.
+        for id in [
+            native_docking::DockId::Toolbox,
+            native_docking::DockId::Solution,
+            native_docking::DockId::Properties,
+        ] {
+            if let Some(zone) = dock_model.borrow().section(id).map(|s| s.zone) {
+                if zone != id.default_zone() { route_dock(id, zone); }
+            }
+        }
+        for (zone, widget) in [
+            (native_docking::DockZone::Left, left_side.native_widget()),
+            (native_docking::DockZone::Right, right_region.native_widget()),
+            (native_docking::DockZone::Bottom, bottom.native_widget()),
+        ] {
+            let route = route_dock.clone();
+            let model = dock_model.clone();
+            let path = dock_path.clone();
+            let status = status.clone();
+            native_dock_runtime::install_zone_target(
+                &widget, zone, Rc::new(move |source, destination| {
+                    let previous = model.borrow().section(source).map(|s| s.zone);
+                    if previous == Some(destination) { return false; }
+                    if !route(source, destination) { return false; }
+                    model.borrow_mut().move_to(source, destination);
+                    if let Err(error) = model.borrow().save(&path) {
+                        status.set_text(&format!("Cannot save dock move: {error}"));
+                    } else {
+                        status.set_text(&format!(
+                            "{} moved to {} dock", source.title(), destination.title(),
+                        ));
+                    }
+                    true
+                }),
+            );
+        }
+        native_dock_widgets::enable_header_drag(
+            &toolbox_controls, native_docking::DockId::Toolbox,
+            |_source| false,
+        );
     }
 
     // The same model that persists pinned state now controls *actual* GTK
@@ -2508,6 +2626,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
 
     let left_panel: Rc<dyn Fn(usize)> = Rc::new({
+        let dock_model = dock_model.clone();
         let left_content = left_content.clone();
         let toolbox = toolbox.clone();
         let server_view = server_view.clone();
@@ -2526,7 +2645,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 match index {
                     1 => left_content.append(&server_view),
                     2 => left_content.append(&data_view),
-                    _ => left_content.append(&toolbox),
+                    _ => {
+                        if dock_model.borrow().section(native_docking::DockId::Toolbox)
+                            .is_some_and(|section| section.zone == native_docking::DockZone::Left) {
+                            left_content.append(&toolbox);
+                        }
+                    },
                 }
             }
         }
