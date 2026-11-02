@@ -139,6 +139,9 @@ pub fn format_document(compiler: &str, source: &Path) -> ResultLog {
         return ResultLog::error(format!("Source file does not exist: {}", source.display()));
     }
     let output = Command::new(compiler)
+        .env("CLICOLOR_FORCE", "1")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
         .arg("fmt")
         .arg(source)
         .current_dir(source.parent().unwrap_or_else(|| Path::new(".")))
@@ -227,6 +230,12 @@ fn invoke_hydrogen(
     Command::new(program)
         .args(args)
         .current_dir(cwd)
+        // Honour ANSI colour output even when Quark captures the pipes.
+        // Compilers that do not support these conventional variables can
+        // safely ignore them.
+        .env("CLICOLOR_FORCE", "1")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
         .output()
         .map_err(|error| launch_diagnostics(program, cwd, args, &error))
 }
