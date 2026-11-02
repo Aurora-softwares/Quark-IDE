@@ -3655,6 +3655,14 @@ fn main() -> naui::Result<()> {
 mod tests {
     use super::*;
     #[test]
+    fn right_dock_height_follows_properties_after_reordering() {
+        let height = 800.0;
+        let preferred = 220.0;
+        assert_eq!(right_split_position(height, preferred, true), 220.0);
+        assert_eq!(right_split_position(height, preferred, false), 574.0);
+    }
+
+    #[test]
     fn entering_full_ide_without_documents_is_a_blank_workspace() {
         let mut ide = Ide::from_workspace(Workspace::default());
         assert_eq!(ide.page, Page::Empty);
