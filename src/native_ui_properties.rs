@@ -779,14 +779,19 @@ mod tests {
 
     #[test]
     fn live_tab_page_edit_is_one_based_but_round_trips_in_xml() {
-        let xml = r#"<Window><Tabs value="0"><Tab title="Home"/><Tab title="Settings"/></Tabs></Window>"#;
+        let xml =
+            r#"<Window><Tabs value="0"><Tab title="Home"/><Tab title="Settings"/></Tabs></Window>"#;
         let runtime = runtime_property_value("Tabs", "value", "2").unwrap();
         assert_eq!(runtime, "1");
         let changed = set_attribute(xml, &[0], "value", &runtime).unwrap();
         assert!(changed.contains("<Tabs value=\"1\""));
         assert!(changed.contains("<Tab title=\"Settings\""));
-        let display = available_properties(&changed, &[0]).unwrap().1
-            .into_iter().find(|field| field.name == "value").unwrap();
+        let display = available_properties(&changed, &[0])
+            .unwrap()
+            .1
+            .into_iter()
+            .find(|field| field.name == "value")
+            .unwrap();
         assert_eq!(display.value, "1");
         assert_eq!(runtime_property_value("Tabs", "value", "1").unwrap(), "0");
     }
@@ -798,7 +803,10 @@ mod tests {
             assert!(runtime_property_value("Tabs", "value", invalid).is_err());
             assert!(original.contains("value=\"0\""));
         }
-        assert_eq!(runtime_property_value("Input", "text", "New & <value>").unwrap(), "New & <value>");
+        assert_eq!(
+            runtime_property_value("Input", "text", "New & <value>").unwrap(),
+            "New & <value>"
+        );
         let changed = set_attribute(original, &[1], "text", "New & <value>").unwrap();
         assert!(changed.contains("New &amp; &lt;value&gt;"));
         assert!(changed.contains("onChange=\"Handle\""));
