@@ -1861,6 +1861,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 Page::Design => pages.append(&designer),
             }
             centre.append(&pages);
+            // Ensure the design host is restored whenever an already-open
+            // .hyui document becomes active again, not only on first open.
+            if page == Page::Design && design_mode.get() {
+                if let Some(refresh) = reload_preview.borrow().as_ref() {
+                    refresh();
+                }
+            }
         }
     });
     *show_page_redraw.borrow_mut() = Some(show_page.clone());
