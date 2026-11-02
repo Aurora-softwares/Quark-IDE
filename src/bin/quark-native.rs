@@ -2278,6 +2278,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             };
             #[cfg(not(target_os = "linux"))]
             let in_popover = |_id: native_docking::DockId| false;
+            #[cfg(target_os = "linux")]
+            let is_detached = |id: native_docking::DockId| {
+                floating_windows.borrow().contains_key(&id) || in_popover(id)
+            };
+            #[cfg(not(target_os = "linux"))]
+            let is_detached = |_id: native_docking::DockId| false;
             let selected_left = if tab_mode.get() == Page::Code {
                 if active_side_tab.get() == 1 {
                     native_docking::DockId::Search
@@ -2292,37 +2298,31 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             };
             let left_open = layout.visible(selected_left, active.get())
-                && !floating_windows.borrow().contains_key(&selected_left)
-                && !in_popover(selected_left)
+                && !is_detached(selected_left)
                 && layout.section(selected_left).is_some_and(|s| s.zone == native_docking::DockZone::Left);
             let right_solution = layout.section(native_docking::DockId::Solution)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Solution, active.get())
-                && !floating_windows.borrow().contains_key(&native_docking::DockId::Solution)
-                && !in_popover(native_docking::DockId::Solution);
+                && !is_detached(native_docking::DockId::Solution);
             let right_properties = layout.section(native_docking::DockId::Properties)
                 .is_some_and(|s| s.zone == native_docking::DockZone::Right)
                 && layout.visible(native_docking::DockId::Properties, active.get())
-                && !floating_windows.borrow().contains_key(&native_docking::DockId::Properties)
-                && !in_popover(native_docking::DockId::Properties);
+                && !is_detached(native_docking::DockId::Properties);
             let has_right_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Right
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Right)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id)
-                    && !in_popover(*id));
+                    && !is_detached(*id));
             let has_left_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Left
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Left)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id)
-                    && !in_popover(*id));
+                    && !is_detached(*id));
             let has_bottom_guests = native_docking::DockId::ALL.iter()
                 .any(|id| id.default_zone() != native_docking::DockZone::Bottom
                     && layout.section(*id).is_some_and(|s| s.zone == native_docking::DockZone::Bottom)
                     && layout.visible(*id, active.get())
-                    && !floating_windows.borrow().contains_key(id)
-                    && !in_popover(*id));
+                    && !is_detached(*id));
             let right_open = right_solution || right_properties || has_right_guests;
             let bottom_open = has_bottom_guests || [
                 native_docking::DockId::Output,
@@ -2333,8 +2333,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             ].iter().any(|id| layout.section(*id).is_some_and(|s|
                 s.zone == native_docking::DockZone::Bottom)
                 && layout.visible(*id, active.get())
-                && !floating_windows.borrow().contains_key(id)
-                    && !in_popover(*id));
+                && !is_detached(*id));
             let remembered = sizes.get();
             #[cfg(target_os = "linux")]
             {
