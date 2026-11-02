@@ -48,8 +48,8 @@ class CoverageGateTests(unittest.TestCase):
 
     def test_native_and_legacy_test_lists_are_collected_separately(self):
         outputs = [
-            SimpleNamespace(stdout="legacy::test: test\\n"),
-            SimpleNamespace(stdout="native::test: test\\n"),
+            SimpleNamespace(stdout="legacy::test: test\n"),
+            SimpleNamespace(stdout="native::test: test\n"),
         ]
         with patch.object(gate.subprocess, "run", side_effect=outputs) as run:
             self.assertEqual(gate.listing(), {"legacy::test", "native::test"})
@@ -65,8 +65,8 @@ class CoverageGateTests(unittest.TestCase):
         with patch.object(
             gate.subprocess, "run",
             side_effect=[
-                SimpleNamespace(stdout="legacy::ignored: test\\n"),
-                SimpleNamespace(stdout="native::ignored: test\\n"),
+                SimpleNamespace(stdout="legacy::ignored: test\n"),
+                SimpleNamespace(stdout="native::ignored: test\n"),
             ],
         ) as run:
             self.assertEqual(
