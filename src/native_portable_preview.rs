@@ -344,11 +344,10 @@ fn render_node(
             row.append(&grid);
         }
         "Tabs" => {
-            // Use the actual native tab widget (GtkNotebook on Linux,
-            // NSSegmentedControl-hosted pages on macOS, WinUI tabs on Windows).
-            // No fake text buttons or duplicate labels.
-            let tabs = ui.tabs().map_err(|e| e.to_string())?;
-            let mut count = 0;
+            // Hydrogen's GTK runtime uses a GtkStackSwitcher + GtkStack,
+            // not GtkNotebook. Keep the same native control pair in the
+            // designer so tab size, typography and theme match the runtime.
+            let mut pages = Vec::new();
             for (position, tab) in node.children().filter(|n| n.is_element()).enumerate() {
                 if tab.tag_name().name() != "Tab" {
                     continue;
@@ -366,29 +365,71 @@ fn render_node(
                     available_width,
                     document,
                 )?;
-                tabs.add_tab(tab.attribute("title").unwrap_or("Page"), &page);
-                count += 1;
+                pages.push((tab.attribute("title").unwrap_or("Page").to_owned(), page));
             }
-            if count > 0 {
-                // Hydrogen stores zero-based indices. Unset value=0 is page 1.
+            if !pages.is_empty() {
                 let runtime_default = node
                     .attribute("value")
                     .and_then(|v| v.parse::<usize>().ok())
                     .unwrap_or(0);
                 let design_override = design_tabs.borrow().get(&path).copied();
-                if let Some(selection) = design_tab_index(runtime_default, design_override, count) {
-                    tabs.set_selected(selection);
+                let chosen = design_tab_index(runtime_default, design_override, pages.len())
+                    .unwrap_or(0);
+                #[cfg(target_os = "linux")]
+                {
+                    use gtk4::prelude::*;
+                    use naui::Widget as _;
+
+                    let stack = gtk4::Stack::new();
+                    stack.set_hhomogeneous(false);
+                    stack.set_vhomogeneous(false);
+                    for (index, (title, page)) in pages.iter().enumerate() {
+                        stack.add_titled(&page.size_bin(), Some(&index.to_string()), title);
+                    }
+                    stack.set_visible_child_name(&chosen.to_string());
+                    let switcher = gtk4::StackSwitcher::new();
+                    switcher.set_stack(Some(&stack));
+
+                    // Tab clicks are design-time selections, not app events.
+                    // Only Properties can change the saved startup value.
+                    let capture = gtk4::GestureClick::new();
+                    capture.set_button(0);
+                    capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
+                    let select = on_select.clone();
+                    let selected_path = path.clone();
+                    capture.connect_pressed(move |gesture, _, _, _| {
+                        select(selected_path.clone());
+                        gesture.set_state(gtk4::EventSequenceState::Claimed);
+                    });
+                    switcher.add_controller(capture);
+                    let keys = gtk4::EventControllerKey::new();
+                    keys.set_propagation_phase(gtk4::PropagationPhase::Capture);
+                    keys.connect_key_pressed(|_, _, _, _| gtk4::glib::Propagation::Stop);
+                    switcher.add_controller(keys);
+
+                    let host = row
+                        .native_widget()
+                        .downcast::<gtk4::Box>()
+                        .map_err(|_| "Native GTK tab host is not a GtkBox")?;
+                    host.append(&switcher);
+                    host.append(&stack);
                 }
-                let design_tabs = design_tabs.clone();
-                let select = on_select.clone();
-                tabs.on_select(move |index| {
-                    design_tabs.borrow_mut().insert(path.clone(), index);
-                    // Select Tabs in the Properties inspector, not Window.
-                    // Design-only navigation never writes Tabs.value.
-                    select(path.clone());
-                });
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let tabs = ui.tabs().map_err(|e| e.to_string())?;
+                    for (title, page) in &pages {
+                        tabs.add_tab(title, page);
+                    }
+                    tabs.set_selected(chosen);
+                    let selection = design_tabs.clone();
+                    let select = on_select.clone();
+                    tabs.on_select(move |index| {
+                        selection.borrow_mut().insert(path.clone(), index);
+                        select(path.clone());
+                    });
+                    row.append(&tabs);
+                }
             }
-            row.append(&tabs);
         }
         "Label" => {
             let label = ui
