@@ -1,0 +1,8 @@
+build/
+*.quark-build
+*.quark-build.runtime/
+*.quark-command.log
+*.quark-build.exe
+*.quark-build.app/
+__pycache__/
+*.pyc

@@ -1,0 +1,11 @@
+format = 2
+name = "Quark"
+version = "0.1.0"
+type = "exe"
+ui = "Quark.hyui"
+sources = [
+    "src/Program.hy",
+    "src/Quark/Workspace.hy",
+    "src/Quark/BuildService.hy",
+    "src/Hydrogen/UI/Application.hy"
+]
