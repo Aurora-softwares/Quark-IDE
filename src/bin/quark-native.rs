@@ -1456,8 +1456,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let design_heading = ui.label("DESIGN")?;
     design_heading.set_color(naui::TextColor::Accent);
     design_header.append(&design_heading);
-    let open_true_preview = ui.button("↗ OS Window")?;
-    let open_backend_preview = ui.button("▶ Run UI with Hydrogen")?;
+    let open_true_preview = ui.button("↗ OS Window (interactive)")?;
+    let open_backend_preview = ui.button("◻ Layout only (no backend)")?;
     design_header.append(&open_true_preview);
     design_header.append(&open_backend_preview);
     design_surface.attach(&design_header, GridCell::new(0, 0));
@@ -1467,7 +1467,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         use naui::Widget as _;
         design_heading.native_widget().set_tooltip_text(Some(
             "Design preview is not a running application. Select controls and edit \
-             their values using Properties; use OS Window to see the running UI.",
+             their values using Properties; OS Window runs Hydrogen with its backend.",
         ));
     }
     let canvas = ui.canvas()?;
@@ -1614,7 +1614,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             };
             status.set_text(match kind {
                 native_hyui_preview::PreviewKind::Window => {
-                    "Launching Hydrogen's actual native OS window…"
+                    "Launching layout-only native window (no Hydrogen events)…"
                 }
                 native_hyui_preview::PreviewKind::Application => {
                     "Building and launching Hydrogen's real interactive application…"
@@ -1647,11 +1647,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
     open_true_preview.on_click({
         let launch = launch_hydrogen_preview.clone();
-        move || launch(native_hyui_preview::PreviewKind::Window)
+        move || launch(native_hyui_preview::kind_for_button(
+            native_hyui_preview::PreviewButton::OsWindow,
+        ))
     });
     open_backend_preview.on_click({
         let launch = launch_hydrogen_preview.clone();
-        move || launch(native_hyui_preview::PreviewKind::Application)
+        move || launch(native_hyui_preview::kind_for_button(
+            native_hyui_preview::PreviewButton::LayoutOnly,
+        ))
     });
     xml_editor.on_change({
         let state = state.clone();
