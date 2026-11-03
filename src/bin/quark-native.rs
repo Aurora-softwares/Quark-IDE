@@ -959,6 +959,13 @@ fn replace_tool_stack(host: &naui::Stack, selected: Option<&dyn naui::Widget>) -
     }
 }
 
+#[cfg(target_os = "macos")]
+fn macos_transition_checkpoint(stage: &str) {
+    if std::env::var_os("QUARK_CI_MACOS_TRANSITION").is_some() {
+        eprintln!("Quark AppKit checkpoint: {stage}");
+    }
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     #[cfg(not(target_os = "linux"))]
     native_preferences_portable::apply_saved_theme(
@@ -970,6 +977,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Replacing the content also makes this transition atomic on every OS.
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("980: let menu = ui.menu_bar()?;");
     let menu = ui.menu_bar()?;
     menu.set_menus(
         &native_shell::MENUS
@@ -1335,6 +1344,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let (data_view, data_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Data)?;
     data_view.append(&ui.label("Data sources are ready for integration.")?);
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("1345: let symbols_view = ui.grid()?;");
     let symbols_view = ui.grid()?;
     symbols_view.set_sizing(Sizing::fill());
     symbols_view.set_column_track(0, Track::FILL);
@@ -1621,6 +1632,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("1631: let status = ui.label(&format!('Ready  |  {}  |  Hydrogen ");
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     // The Hydrogen runtime itself is the reference implementation for
     // exact OS chrome, control spacing and responsive layout. It runs in
@@ -1908,6 +1921,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let (properties_pane, properties_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Properties)?;
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("1918: let properties_toolbar = properties_controls.row.clone();");
     let properties_toolbar = properties_controls.row.clone();
     let flat_properties = ui.stack(Orientation::Vertical)?;
     flat_properties.set_spacing(7.0);
@@ -2431,6 +2446,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         surface.add_controller(target);
     }
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("2441: let select_native_element: native_portable_preview::Select");
     let select_native_element: native_portable_preview::SelectElement = Rc::new({
         let select_element_later = select_element_later.clone();
         move |path| {
@@ -2709,6 +2726,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     #[cfg(not(target_os = "linux"))]
     terminal_section.append(&terminal_input_row);
     #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("2719: let terminal_keys = ui.stack(Orientation::Horizontal)?;");
     let terminal_keys = ui.stack(Orientation::Horizontal)?;
     #[cfg(not(target_os = "linux"))]
     {
@@ -3114,6 +3133,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         });
     }
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("3124: let workspace_name = ui.label(&display_project_name(&state");
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
     // True native splitters provide pointer capture and keyboard resizing.
@@ -3482,6 +3503,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // zone uses the native sidecar host. Unsupported compound bottom tabs are
     // rejected rather than silently persisting a move that cannot be shown.
     #[cfg(target_os = "linux")]
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("3492: let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::");
     let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
@@ -4006,6 +4029,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
     // GTK auto-hide must not change AppKit or WinUI splitter geometry.
     #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("4016: let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});");
     let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
     #[cfg(target_os = "linux")]
     {
@@ -4523,6 +4548,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             control.set_text(if collapsed { "▸" } else { "▾" });
         }
     });
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("4533: let status_bar = ui.stack(Orientation::Horizontal)?;");
     let status_bar = ui.stack(Orientation::Horizontal)?;
     let status_brand = ui.label("● Quark · Hydrogen")?;
     status_brand.set_color(naui::TextColor::Accent);
@@ -4821,6 +4848,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         });
     }
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("4831: let left_panel: Rc<dyn Fn(usize)> = Rc::new({");
     let left_panel: Rc<dyn Fn(usize)> = Rc::new({
         let dock_model = dock_model.clone();
         let left_content = left_content.clone();
@@ -5234,6 +5263,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("5244: *show_page_redraw.borrow_mut() = Some(show_page.clone());");
     *show_page_redraw.borrow_mut() = Some(show_page.clone());
     *document_relayout.borrow_mut() = Some(Rc::new({
         let show_page = show_page.clone();
@@ -5527,6 +5558,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // File > New Project reuses the native launcher wizard as a separate
     // window, without reopening the IDE's removed Start document or closing
     // the IDE when creation completes.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("5537: let show_new_project: Rc<dyn Fn()> = Rc::new({");
     let show_new_project: Rc<dyn Fn()> = Rc::new({
         let ui = ui.clone();
         let window = window.clone();
@@ -5934,6 +5967,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("5944: let sync_design_source: Rc<dyn Fn()> = Rc::new({");
     let sync_design_source: Rc<dyn Fn()> = Rc::new({
         let state = state.clone();
         let xml_editor = xml_editor.clone();
@@ -6431,6 +6466,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     // Projects selected in the small launcher open directly in an editor tab.
     // "Continue without code" enters the full IDE with no selected project.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("6441: let initial_document = {");
     let initial_document = {
         let ide = state.borrow();
         (
@@ -6517,6 +6554,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
             }
             #[cfg(target_os = "macos")]
             {
+                macos_transition_checkpoint("launch: create separate AppKit IDE window");
                 let workspace_window = handle
                     .window(
                         "Quark IDE — Hydrogen Development Environment",
@@ -6524,6 +6562,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
                         940.0,
                     )
                     .map_err(|error| format!("Cannot create AppKit IDE window: {error}"))?;
+                macos_transition_checkpoint("launch: AppKit IDE window created");
                 // No NSView from the launcher is transferred to this window.
                 // Leave the launcher alive if building the IDE fails.
                 build_ide(&handle, launch_state.clone(), workspace_window)
