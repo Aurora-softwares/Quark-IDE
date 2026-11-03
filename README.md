@@ -171,18 +171,18 @@ Quark extensions are explicitly invoked external processes using the native v1 `
 Install Rust, Python 3 (for the feature-coverage gate), and a platform-native compiler toolchain, then run:
 
 ```sh
-cargo run
+cargo run --release --bin quark-native
 ./scripts/release-check.sh
 ```
 
-Binary output: `target/release/quark-ide` on Linux/macOS and `target\release\quark-ide.exe` on Windows. Build on each target OS.
+Default native binary output: `target/release/quark-native` on Linux/macOS and `target\release\quark-native.exe` on Windows. The legacy `quark-ide` binary requires the explicit `legacy-ui` feature. Build on each target OS.
 
 Linux may require native dependencies. On Ubuntu/Debian:
 
 ```sh
-sudo apt install build-essential pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev
+sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev
 ```
 
 On macOS install Xcode Command Line Tools. On Windows install the MSVC Rust toolchain and Visual Studio C++ Build Tools. In PowerShell run the individual formatting, clippy, test and release-build commands from the release-check script.
 
-See [the workspace/terminal/theme report](QUARK-WORKSPACE-UPDATE.md), [the earlier file-safety report](QUARK-RELIABILITY-UPDATE.md) and [manual acceptance checklist](scripts/manual-acceptance.md). All three OS CI jobs and the remaining native/platform/compiler acceptance gates must pass before a binary release. Large files still use egui's full-buffer text layout; highlighting is cached, but very large files can remain expensive. Quark does not yet provide an LSP, debugger, regex search, graphical Git staging/commit workflows or exhaustive xterm compatibility. See [the Visual Studio-style IDE development roadmap](QUARK-FULL-IDE-ROADMAP.md) for the planned project, launch and debugger architecture. ConPTY and native macOS terminal acceptance remain required before release.
+See [the workspace/terminal/theme report](QUARK-WORKSPACE-UPDATE.md), [the earlier file-safety report](QUARK-RELIABILITY-UPDATE.md) and [manual acceptance checklist](scripts/manual-acceptance.md). The six quality/native CI jobs pass on Ubuntu, macOS and Windows at `635ccc7`; the remaining native interaction and Hydrogen compiler acceptance gates must pass before a binary release. See [current native frontend status](docs/NATIVE_FRONTEND_STATUS.md). Large files still use egui's full-buffer text layout; highlighting is cached, but very large files can remain expensive. Quark does not yet provide an LSP, debugger, regex search, graphical Git staging/commit workflows or exhaustive xterm compatibility. See [the Visual Studio-style IDE development roadmap](QUARK-FULL-IDE-ROADMAP.md) for the planned project, launch and debugger architecture. ConPTY and native macOS terminal acceptance remain required before release.

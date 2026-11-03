@@ -21,7 +21,7 @@ python3 scripts/check-feature-coverage.py
 cargo build --release --no-default-features --features native-ui --bin quark-native
 ```
 
-The validator asks Cargo for its actual test inventory, including a separate inventory of ignored tests. It rejects missing names, fewer than two distinct runnable tests, invalid metadata and duplicate feature IDs. Eight Python regressions exercise the validator itself. CI runs it on Linux, macOS and Windows. Unix-specific real-PTY/process-group features are explicitly marked in the register; they do not claim ConPTY coverage.
+The validator asks Cargo for its actual test inventory, including a separate inventory of ignored tests. It rejects missing names, fewer than two distinct runnable tests, invalid metadata and duplicate feature IDs. Eleven Python regressions exercise the validator itself. CI runs it on Linux, macOS and Windows. Unix-specific real-PTY/process-group features are explicitly marked in the register; they do not claim ConPTY coverage.
 
 The register is a reviewed feature inventory, **not a line-coverage percentage** or an automatic proof that every assertion is useful. Adding a feature requires adding its register entry and two behavioural cases, normally a successful interaction and a boundary/failure/regression case. Removing or renaming a referenced test fails the gate. Reviewers must keep the inventory complete and assess whether both tests exercise the promised behaviour.
 
