@@ -309,6 +309,18 @@ fn render_node(
             if let Some(title) = node.attribute("title").filter(|s| !s.is_empty()) {
                 let label = ui.label(title).map_err(|e| e.to_string())?;
                 label.set_style(naui::TextStyle::Heading);
+                // Hydrogen places panel headings at the start of each card,
+                // rather than allowing the generic Stack cross-axis to
+                // centre them.
+                label.set_sizing(Sizing::fill_width());
+                #[cfg(target_os = "linux")]
+                {
+                    use gtk4::prelude::*;
+                    use naui::Widget as _;
+                    if let Ok(native) = label.native_widget().downcast::<gtk4::Label>() {
+                        native.set_xalign(0.0);
+                    }
+                }
                 panel.append(&label);
             }
             #[cfg(target_os = "linux")]
@@ -394,11 +406,18 @@ fn render_node(
                 use gtk4::prelude::*;
                 use naui::Widget as _;
 
-                let bar = row
+                // `row` is a vertical wrapper for ordinary design nodes.
+                // Never append menu buttons directly to it: that creates two
+                // full-width, stacked dropdowns (the screenshot regression).
+                // Hydrogen constructs its MenuBar as a horizontal GtkBox.
+                let host = row
                     .native_widget()
                     .downcast::<gtk4::Box>()
                     .map_err(|_| "Native GTK menu host is not a GtkBox")?;
-                bar.set_spacing(8);
+                let bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+                bar.set_halign(gtk4::Align::Start);
+                bar.set_valign(gtk4::Align::Start);
+                bar.set_hexpand(false);
                 for (index, menu) in node
                     .children()
                     .filter(|child| child.is_element() && child.has_tag_name("Menu"))
@@ -406,6 +425,8 @@ fn render_node(
                 {
                     let button = gtk4::MenuButton::new();
                     button.set_label(menu.attribute("text").unwrap_or("Menu"));
+                    button.set_hexpand(false);
+                    button.set_halign(gtk4::Align::Start);
                     let popover = gtk4::Popover::new();
                     let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
                     for item in menu
@@ -441,6 +462,7 @@ fn render_node(
                     button.add_controller(keys);
                     bar.append(&button);
                 }
+                host.append(&bar);
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -1295,6 +1317,28 @@ mod tests {
         let parsed = roxmltree::Document::parse(xml).unwrap();
         let widths = row_child_widths(parsed.root_element(), 720.0, 20.0);
         assert_eq!(widths, vec![240.0, 220.0, 0.0, 220.0]);
+    }
+
+    #[test]
+    fn hydrogen_menu_bar_groups_keep_source_order_and_a_single_horizontal_row() {
+        let source = include_str!("../tests/fixtures/Studio.hyui");
+        let document = roxmltree::Document::parse(source).unwrap();
+        let bar = document
+            .root_element()
+            .children()
+            .find(|element| element.has_tag_name("MenuBar"))
+            .unwrap();
+        let labels = bar
+            .children()
+            .filter(|child| child.has_tag_name("Menu"))
+            .map(|menu| menu.attribute("text").unwrap_or(""))
+            .collect::<Vec<_>>();
+        assert_eq!(labels, ["Studio", "Help"]);
+        // The GTK renderer constructs one GtkBox(Horizontal) for those
+        // siblings. In particular, MenuBar must not inherit RowPanel's
+        // breakpoint / vertical stacking behaviour.
+        assert_ne!(bar.tag_name().name(), "RowPanel");
+        assert!(bar.attribute("breakpoint").is_none());
     }
 
     #[test]
