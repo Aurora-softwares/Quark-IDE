@@ -10,11 +10,35 @@ namespace Quark {
                 return 0;
             }
             string handler = Application.Handler(args);
-            if (handler == "ShowWelcome") { Application.SetValue("screen", 0); }
-            if (handler == "Continue") { Application.SetValue("screen", 1); }
+            if (handler == "LoadSession") {
+                string kind = Session.Kind();
+                string selected = Session.Path();
+                if (kind == "P") { LoadProject(args, selected); }
+                else if (kind == "S") { LoadDocument(args, selected, false); }
+                else if (kind == "U") { LoadDocument(args, selected, true); }
+                else if (kind == "F") {
+                    Application.SetText("projectTitle", Workspace.BaseName(selected));
+                    Application.SetText("projectPathLabel", selected);
+                    Application.SetText("projectFileList", "Folder opened. Choose a source file or .hyproj with the file pickers.");
+                    Application.SetText("propertyName", Workspace.BaseName(selected));
+                    Application.SetText("propertyType", "Folder workspace (file enumeration not implemented)");
+                    Status("Opened folder " + selected);
+                } else { Status("Empty workspace. Open a project, source file or HYUI document."); }
+                Session.Clear();
+            }
+            if (handler == "BackToStart") {
+                if (Dirty(args)) { Status("Save your changes before returning to Start."); }
+                else if (Session.OpenStart()) { Application.Exit(); }
+                else { Status("Cannot open Start. Build both applications from the repository root."); }
+            }
+            if (handler == "OpenProjectHelp") { Status("Use Open project… in Solution Explorer."); }
+            if (handler == "SelectTool") {
+                Application.SetText("propertyName", "Hydrogen UI component #" + Application.Value(args, "toolboxItems"));
+                Application.SetText("propertyType", "Visual drag/drop editing is not implemented yet.");
+            }
             if (handler == "ShowCode") { ShowEditor(0); }
             if (handler == "ShowUI") { ShowEditor(1); }
-            if (handler == "ShowOutput") { Application.SetValue("screen", 1); }
+            if (handler == "ShowOutput") { Application.SetValue("bottomTabs", 0); }
             if (handler == "About") { Application.SetOpen("aboutDialog", true); }
             if (handler == "PickerCancelled") { Status("File selection cancelled."); }
 
@@ -26,19 +50,6 @@ namespace Quark {
             }
             if (handler == "UIPicked") {
                 LoadDocument(args, Application.Value(args, Application.Sender(args)), true);
-            }
-            if (handler == "CreateProject") {
-                if (Dirty(args)) { Status("Save current edits before creating another project."); return 0; }
-                string folder = Application.Value(args, Application.Sender(args));
-                string name = Application.Value(args, "newName");
-                bool withUI = Application.Value(args, "newUI") == "true";
-                string project = Workspace.Create(folder, name, withUI);
-                if (project == "") {
-                    Status("Could not create project. Check the name and choose a folder without conflicting files.");
-                } else {
-                    LoadProject(args, project);
-                    Status("Created " + project);
-                }
             }
             if (handler == "NewSource") {
                 if (Dirty(args)) { Status("Save edits before creating a new buffer."); return 0; }
@@ -97,7 +108,7 @@ namespace Quark {
                 if (manifest == "") { Status("Open a project first."); }
                 else {
                     Application.SetText("output", Workspace.Preview(manifest));
-                    Application.SetValue("screen", 1);
+                    Application.SetValue("bottomTabs", 0);
                     Application.SetText("propertyType", "Hydrogen format 2 project manifest");
                 }
             }
@@ -123,19 +134,18 @@ namespace Quark {
                 string result = BuildService.Execute(compiler, projectPath, handler, hasUI);
                 Application.SetText("output", result);
                 Application.SetText("status", handler + " finished — see Output for the command result.");
-                Application.SetValue("screen", 1);
+                Application.SetValue("bottomTabs", 0);
             }
             return 0;
         }
 
         private static void ShowEditor(int page) {
-            Application.SetValue("screen", 1);
             Application.SetValue("editorTabs", page);
+            Application.SetText("fileMode", page == 0 ? "Hydrogen source" : "Hydrogen UI XML");
         }
 
         private static void Status(string message) {
             Application.SetText("status", message);
-            Application.SetText("startStatus", message);
         }
 
         private static bool Dirty(string[] args) {
@@ -161,6 +171,7 @@ namespace Quark {
             Application.SetText("projectState", path);
             Application.SetText("manifestState", manifest);
             Application.SetText("projectTitle", Workspace.QuotedSetting(manifest, "name"));
+            Application.SetText("startupProject", Workspace.QuotedSetting(manifest, "name"));
             Application.SetText("projectPathLabel", path);
             Application.SetText("projectFileList", Workspace.ExplorerItems(path, manifest));
             Application.SetValue("projectFileNumber", 1);
