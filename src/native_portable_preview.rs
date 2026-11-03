@@ -1523,7 +1523,7 @@ mod tests {
         let box_widget = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
         let frame = build_gtk_design_panel_frame(&box_widget, 18);
         assert!(frame.has_css_class("card"));
-        assert!(frame.hexpand());
+        assert!(frame.property::<bool>("hexpand"));
         assert_eq!(frame.halign(), gtk4::Align::Fill);
         assert_eq!(frame.child().unwrap(), box_widget.upcast::<gtk4::Widget>());
         assert_eq!(box_widget.margin_start(), 18);
@@ -1550,7 +1550,7 @@ mod tests {
         let bar = build_gtk_design_menu_bar(menu, &[], &select);
         assert_eq!(bar.orientation(), gtk4::Orientation::Horizontal);
         assert_eq!(bar.spacing(), 8);
-        assert!(!bar.hexpand());
+        assert!(!bar.property::<bool>("hexpand"));
         assert_eq!(bar.halign(), gtk4::Align::Start);
 
         let studio = bar
@@ -1565,7 +1565,7 @@ mod tests {
             .unwrap();
         assert_eq!(studio.label().as_deref(), Some("Studio"));
         assert_eq!(help.label().as_deref(), Some("Help"));
-        assert!(!studio.hexpand() && !help.hexpand());
+        assert!(!studio.property::<bool>("hexpand") && !help.property::<bool>("hexpand"));
         assert!(help.next_sibling().is_none());
         assert!(studio.popover().is_some());
         assert!(help.popover().is_some());
