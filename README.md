@@ -1,54 +1,119 @@
 # Quark IDE — Hydrogen Edition
 
-The **Development** branch is a new implementation of Quark in **100% Hydrogen (.hy)** and **Hydrogen UI (.hyui)**. It does not use Rust, egui, GTK bindings written by Quark, JavaScript, Electron, or web UI. HYUI's platform-native runtime is provided by the Hydrogen compiler itself. The original Rust design and its history remain on [Development-RUST](https://github.com/Aurora-softwares/Quark-IDE/tree/Development-RUST).
+Quark's **Development** branch is a new IDE written in Hydrogen (`.hy`) with
+its interface defined in Hydrogen UI (`.hyui`). The previous Rust implementation
+remains available on [Development-RUST](https://github.com/Aurora-softwares/Quark-IDE/tree/Development-RUST).
 
-## Current development version: 0.1.0 (experimental)
+## Current development version: 0.2.0 — separate Start and IDE windows
 
-A Visual Studio-inspired shell: native menus and command toolbar, lightweight start screen, manifest-driven Solution Explorer (numbered file selector), two source tabs, Properties/Inspector, output panel and status bar. This first step deliberately stays close to the existing Quark layout. The new branch has its own codebase rather than Rust migration glue.
+Quark now has **two separate native desktop applications**, not two pages inside
+one window:
 
-**Implemented with real Hydrogen event handlers:** open a .hyproj manifest, load and navigate its declared .hy sources and optional .hyui document, open standalone files, edit both buffers, Save / Save as / Save all, protect unsaved buffers when switching files or building, new source buffer, create a console or native UI starter project in an existing folder without overwriting existing starter files, find the first matching line in the current buffer, inspect the manifest, and run `hy check`, `hy build`, compiled console executables, or `hy ui` native preview. The command output is captured to `<project>.quark-command.log` and displayed in Quark. Build artifacts are written beside the project using the `<project>.quark-build` prefix.
+- **Quark Start Window** (`Quark.hyproj` / `Quark.Start.hyui`): a compact,
+  lightweight launcher with recent projects, search, Open Project, Open Folder,
+  Open Source / HYUI, a native starter-project wizard, GitHub clone, and
+  Continue Without Code.
+- **Quark IDE** (`Quark.IDE.hyproj` / `Quark.hyui`): a full-size
+  Visual Studio-inspired workspace with native menu/toolbar, a left toolbox,
+  centre code/HYUI editors, right Solution Explorer and Properties,
+  and a bottom Output / Error List / Debug / Tests panel.
 
-**Current Hydrogen UI limitations:** Native collection widgets do not yet refresh their rows when the Hydrogen backend changes the `items` property. The Solution Explorer therefore displays a numbered manifest file list with an explicit Open action instead of a misleading dynamic ListBox. HYUI also caps the total event value snapshot at around **24,000 characters** across live inputs, both editor buffers and output. Larger files need a dedicated document/editing protocol before this is suitable for everyday development. Compiler process execution is synchronous; long-running builds and UI previews may block editor interaction until they exit.
+Selecting an existing project, new project, folder or file records a *launch
+request*, starts a **separate QuarkIDE process**, and then issues
+`Hydrogen.UI.Application.Exit()` to close the Start Window. The IDE reads the
+request in its `onLoad` handler and loads the correct workspace. **Return to
+Start** refuses to close if there are unsaved changes. The handoff contains
+only the type and path, never unsaved source code.
 
-**Not yet implemented:** multiple dynamically created tabs, project-wide file enumeration, full solution/project trees, integrated terminal, language server, lexically coloured text, line-number gutter, semantic diagnostics, completion, debugger, breakpoints, refactoring, drag-and-drop UI designer, docking, recent-project persistence, autosave/recovery, build cancellation, and true asynchronous process execution. UI preview launches the *real compiled application*, not an embedded design-time drawing. Host process launching is synchronous, so the IDE may be temporarily unresponsive while a long build or interactive preview runs; this needs an async process API.
+The project still uses **100% Hydrogen and Hydrogen UI for Quark application
+code**. The host-native GTK4, AppKit or WinUI runtime is supplied by Hydrogen,
+not by Rust or Quark-specific C++.
 
-### Build and run
+### Linux: build and launch
 
-The compiler must be bootstrapped from [Hylang-Compiler / Development](https://github.com/Aurora-softwares/Hylang-Compiler/tree/Development), with its native HYUI SDK and runtime installed. From this checkout:
+This version needs the **latest Hylang-Compiler Development** checkout, because
+the native HYUI runtime was extended with `Application.Exit()`, separate GTK
+application instances, and native GTK `TextArea` text updates. The compiled
+Hydrogen Stage 1 must be available on PATH as `hy`, or via `HY`.
 
 ```sh
-hy build Quark.hyproj -o build/Quark
-./build/Quark
+git checkout Development
+git pull
+HY=/path/to/Hylang-Compiler/build/self_hosting/linux/hydrogen-stage1 bash scripts/build.sh
+bash scripts/run.sh
 ```
 
-On Windows the compiled executable has an `.exe` suffix; macOS packages native UI applications as `.app` bundles. Use the target SDK for each host as described in the Hydrogen compiler's `docs/hydrogen-ui-builds.md`. Quark's `Quark.hyproj` uses the installed compiler's current-host default target.
+The build script compiles **both** `build/QuarkIDE` and `build/Quark`.
+Run the launcher from the repository root (`scripts/run.sh` handles this).
+The two applications currently exchange the selection via
+`build/.quark-open-request`, and persist up to ten recent paths in
+`build/.quark-recent`. These are local developer workspace files and should
+not be committed.
 
-Quark includes the upstream `Hydrogen.UI.Application` bridge as plain Hydrogen source (`src/Hydrogen/UI/Application.hy`) to avoid a hard-coded machine-local `project_references` path. Keep this copy in sync with the compiler's `libraries/Hydrogen.UI/Application.hy`. New native UI starters include their own minimal bridge, so they are self-contained.
+A direct build of `Quark.hyproj` creates **only the Start Window**. Always run
+`scripts/build.sh` before testing the two-window flow. On Linux, the IDE is
+detached with `nohup` before the Start Window exits.
 
-On the Start tab, choose a project or file. For a new app, choose a valid project name and an **existing directory**. Tick Hydrogen UI to include `Main.hyui`, `Program.hy`, and the starter event bridge. Files are not silently overwritten.
+### Windows and macOS
 
-Set the compiler executable (default: `hy`) in the Properties pane, then Save, Check, Build, Run or Preview. On macOS/Windows, use the compiler and native UI SDK produced for that OS. Check, Build and Preview invoke the CLI and report real exit status; no build succeeds just because a button was clicked.
+Both native UI manifests can be packaged with a host-specific Hydrogen SDK.
+The HYUI `Exit()` protocol is now implemented for the legacy native host and
+the Windows WinUI runtime too. Companion launch/working-directory packaging
+still needs manual platform verification; on macOS, launching a `.app` through
+`open` may not preserve Quark's working directory. The Linux split-window
+launch path is the primary development target for this iteration.
+
+### Functional workspace backend
+
+The IDE can open `.hyproj`, `.hy` and `.hyui` files, navigate source paths
+declared in a Hydrogen manifest, edit and save named documents, protect
+unsaved buffers when opening another file or changing workspaces, create
+starter console and native UI projects, search within the active buffer,
+inspect the manifest, and invoke Hydrogen `check`, `build`, run-without-
+debugging, and actual native UI preview. Build logs and exit codes are shown
+in Output. The project remains strict about not presenting Run as Debug.
+
+The toolbox and bottom Error/Debug/Test panes visually reserve space for
+future capabilities; tool selection is informational and **is not a real
+drag-and-drop designer**.
+
+**Hydrogen UI limitations:** native collections do not currently repaint
+dynamic `items` values, so Solution Explorer and recent projects use
+working numbered lists. HYUI's event protocol still caps snapshots at
+about 24,000 characters shared across live fields; larger documents need
+a dedicated source-editor backend. Processes run synchronously inside
+Hydrogen event callbacks, so compiler commands can temporarily block the
+IDE and a long-running preview can wait for the preview window to close.
+A source-level debugger, rich editor, Git staging, persistent docking and
+full source recovery are not implemented.
 
 ### Tests
 
 ```sh
-python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 scripts/check-feature-coverage.py
-bash tests/native-smoke.sh
+HY=hy bash tests/native-smoke.sh
 ```
 
-The Python tests are **structural and contract tests**. The native smoke script (requiring a bootstrapped `hy` compiler and HYUI SDK) builds and executes a real Hydrogen backend test before packaging Quark itself; it does not launch an interactive desktop window. Passing any of these tests does not prove native UI behaviour. Native gates still require the Hydrogen compiler, GTK4/WinUI/AppKit runtime, interactive file picking and text editing, a real build, and a starter UI button event on each host. The compiler's own HYUI preflight test should also be run.
+The Python tests validate XML and source contracts, not actual native UI
+behavior. The native smoke script compiles and executes the standalone
+Hydrogen workspace test and packages both desktop frontends; it does not
+exercise the interactive GTK/WinUI/AppKit transition. Visual and
+interaction acceptance on real systems is still required.
 
-### Follow-up / release gates
+### Development progress / release gates
 
-🟢 Rebuild native shell in Hydrogen/HYUI; use a real host-specific window and event bridge.
+🟢 Separate native Start and IDE documents, independently compiled Hydrogen
+applications and an explicit close-after-launch handoff.
 
-🟢 File opening/saving, starter projects, search, compiler check/build, output capture, and native UI preview are wired to backend code.
+🟢 Visual Studio-style three-column workspace, project/file actions, compiler
+integration, project generation, recent paths and source contract CI.
 
-🟡 Verify compiler and runtime integration on Linux, macOS, and Windows; ensure shell execution never freezes the editor. Accept only native interaction smoke tests as evidence.
+🟡 Verify opening and closing both windows on Linux, macOS and Windows;
+complete native packaging, portability and accessibility checks.
 
-🔴 Rich editor API (syntax decorations, line numbers, completion, multiple documents), asynchronous process/log streaming, navigation, diagnostics and real UI designer.
+🔴 Rich editor APIs, asynchronous process execution, robust secure session
+storage, project trees, Git integration, live UI designer, debugger, test
+explorer and release-quality file recovery.
 
-🔴 Safe save/recovery, external modification conflict handling, preferences, Git, proper debug adapter and tests before claiming parity with Rust Quark.
-
-Development work belongs to the [Hydrogen — Development project](https://github.com/orgs/Aurora-softwares/projects/4). Version 0.1.0 is an experimental starting point, not a production release.
+Development work should be tracked in [Hydrogen — Development](https://github.com/orgs/Aurora-softwares/projects/4).

@@ -1,43 +1,60 @@
 {
-  "version": "0.1.0",
-  "note": "Each feature has two independent contract tests; native smoke tests remain required.",
+  "version": "0.2.0",
+  "note": "Two distinct meaningful contract tests per shipped area; native compilation and interaction remain separate acceptance gates.",
   "features": {
-    "native Hydrogen UI shell": [
-      "test_native_shell_has_workspace_regions",
-      "test_native_shell_actions_have_hydrogen_handlers"
+    "separate native start and IDE windows": [
+      "test_launcher_is_a_dedicated_small_native_window",
+      "test_ide_is_its_own_window_without_start_tab"
+    ],
+    "native UI and Hydrogen-only applications": [
+      "test_start_actions_have_hydrogen_handlers",
+      "test_ide_actions_have_hydrogen_handlers",
+      "test_both_executables_are_hydrogen_only"
+    ],
+    "companion executable builds": [
+      "test_two_native_build_targets_are_built_together",
+      "test_both_executables_are_hydrogen_only"
+    ],
+    "lifecycle and project handoff": [
+      "test_hyui_exit_is_supported_in_local_bridge",
+      "test_launch_only_exits_after_successful_handoff",
+      "test_workspace_onload_reads_selection",
+      "test_ide_can_return_to_start_without_losing_edits"
+    ],
+    "recent workspaces": [
+      "test_recent_workspace_history_is_real",
+      "test_start_project_and_folder_actions"
+    ],
+    "starter projects": [
+      "test_start_project_creation_is_connected",
+      "test_starter_creation_does_not_overwrite_files",
+      "test_starter_contains_live_hyui_event_handler"
     ],
     "Hydrogen project loading": [
-      "test_project_manifest_has_only_hydrogen_sources",
-      "test_project_source_paths_allow_multiline_manifest",
-      "test_project_picker_loads_real_manifest"
+      "test_explorer_lists_source_files_from_manifest",
+      "test_project_manifest_supports_multiline_sources",
+      "test_explorer_source_selection_is_connected"
     ],
-    "open and save documents": [
-      "test_standalone_pickup_reads_both_file_types",
-      "test_save_is_connected_to_real_io",
-      "test_dirty_checks_both_buffers_before_switching"
+    "native editor file operations": [
+      "test_editor_opens_and_saves_source_documents",
+      "test_editor_opens_and_saves_hyui_documents",
+      "test_unsaved_documents_block_navigation_and_build"
     ],
-    "starter project creation": [
-      "test_project_creation_validates_filename",
-      "test_project_creation_does_not_overwrite_starter_files",
-      "test_starter_hyui_has_connected_click_event",
-      "test_starter_creation_generates_manifest_and_backend"
-    ],
-    "compiler integration": [
-      "test_compiler_checks_use_real_subprocess",
-      "test_build_persists_stdout_and_stderr",
-      "test_failed_build_cannot_launch_program"
-    ],
-    "native HYUI preview": [
-      "test_ui_preview_uses_official_hy_command",
-      "test_no_debugger_or_designer_parity_claim"
+    "compiler check build and run": [
+      "test_compiler_check_build_run_are_real_processes",
+      "test_compiler_output_and_preview_are_real"
     ],
     "text search": [
-      "test_search_scans_buffer_lines",
-      "test_search_uses_active_document"
+      "test_editor_can_search_active_file",
+      "test_project_manifest_supports_multiline_sources"
     ],
-    "manifest-driven solution explorer": [
-      "test_explorer_is_manifest_driven",
-      "test_explorer_selection_resolves_source_and_ui"
+    "native IDE shell": [
+      "test_ide_has_full_workspace_panels",
+      "test_ide_is_its_own_window_without_start_tab"
+    ],
+    "real native UI preview": [
+      "test_compiler_output_and_preview_are_real",
+      "test_not_yet_supported_features_are_not_fake"
     ]
   }
 }
