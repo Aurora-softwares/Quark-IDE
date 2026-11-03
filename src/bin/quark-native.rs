@@ -1121,6 +1121,32 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     }
+    // Hydrogen-native responsive layout primitives. Unlike flat designer
+    // controls, these are real parent containers in the saved HYUI tree.
+    let responsive_heading = ui.label("Responsive Layouts")?;
+    responsive_heading.set_style(naui::TextStyle::Heading);
+    responsive_heading.set_color(naui::TextColor::Accent);
+    toolbox_items.append(&responsive_heading);
+    let mut responsive_buttons = Vec::new();
+    for (kind, title) in [
+        ("RowPanel", "Responsive Row"),
+        ("ColumnPanel", "Vertical Column"),
+        ("GridPanel", "Responsive Grid"),
+        ("ScrollView", "Scroll View"),
+    ] {
+        let button = ui.button(title)?;
+        button.set_sizing(Sizing::fill_width());
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            button.native_widget().set_tooltip_text(Some(
+                "Drag into a Hydrogen .hyui document, or click to insert into the selected container",
+            ));
+        }
+        toolbox_items.append(&button);
+        responsive_buttons.push((kind, title, button));
+    }
     let toolbox_scroll = ui.scroll()?;
     toolbox_scroll.set_child(&toolbox_items);
     toolbox_scroll.set_sizing(Sizing::fill());
@@ -1129,6 +1155,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     toolbox_search.on_change({
         let entries = toolbox_items.clone();
         let controls = toolbox_buttons.clone();
+        let responsive_controls = responsive_buttons.clone();
+        let responsive_heading = responsive_heading.clone();
         move |search| {
             let query = search.trim().to_lowercase();
             entries.clear();
@@ -1145,6 +1173,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     for (_, button) in visible {
                         entries.append(button);
                     }
+                }
+            }
+            let responsive_visible = responsive_controls
+                .iter()
+                .filter(|(_, title, _)| {
+                    query.is_empty() || title.to_lowercase().contains(&query)
+                })
+                .collect::<Vec<_>>();
+            if !responsive_visible.is_empty() {
+                entries.append(&responsive_heading);
+                for (_, _, button) in responsive_visible {
+                    entries.append(button);
                 }
             }
         }
@@ -1456,6 +1496,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let design_heading = ui.label("DESIGN")?;
     design_heading.set_color(naui::TextColor::Accent);
     design_header.append(&design_heading);
+    let new_ui_project_button = ui.button("＋ New UI App")?;
+    design_header.append(&new_ui_project_button);
     let open_true_preview = ui.button("↗ OS Window (interactive)")?;
     let open_backend_preview = ui.button("◻ Layout only (no backend)")?;
     design_header.append(&open_true_preview);
@@ -5111,6 +5153,37 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             show_page(page);
         }
     }));
+    for (kind, title, button) in responsive_buttons {
+        let show_page = show_page.clone();
+        let state = state.clone();
+        let status = status.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let structural_edit_later = structural_edit_later.clone();
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let source = gtk4::DragSource::new();
+            source.set_actions(gtk4::gdk::DragAction::COPY);
+            let payload = format!("quark-toolbox:{kind}");
+            source.connect_prepare(move |_, _, _| {
+                Some(gtk4::gdk::ContentProvider::for_value(&payload.to_value()))
+            });
+            button.native_widget().add_controller(source);
+        }
+        button.on_click(move || {
+            if !state.borrow().layout.as_ref().is_some_and(|doc| doc.native_window) {
+                status.set_text("Create or open a Hydrogen .hyui project before adding responsive layouts");
+                return;
+            }
+            let _ = structural_edit_later.send(native_ui_properties::StructureEdit::Insert {
+                selected: selected_xml_path.borrow().clone(),
+                kind: kind.to_owned(),
+            });
+            status.set_text(&format!("Adding {title} to Hydrogen UI"));
+            show_page(Page::Design);
+        });
+    }
     for (kind, button) in toolbox_buttons {
         let show_page = show_page.clone();
         let state = state.clone();
@@ -5375,6 +5448,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
+    });
+
+    new_ui_project_button.on_click({
+        let create = show_new_project.clone();
+        move || create()
     });
 
     tree.on_select({
