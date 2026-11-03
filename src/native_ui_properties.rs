@@ -128,6 +128,25 @@ fn default_value(kind: &str, name: &str) -> &'static str {
     }
 }
 
+/// Collapsible Inspector sections are design-session state, never
+/// attributes written to the Hydrogen application XML.
+#[derive(Debug, Default, Clone)]
+pub struct InspectorSections {
+    collapsed: std::collections::HashSet<String>,
+}
+
+impl InspectorSections {
+    pub fn toggle(&mut self, section: &str) {
+        if !self.collapsed.insert(section.to_owned()) {
+            self.collapsed.remove(section);
+        }
+    }
+
+    pub fn is_collapsed(&self, section: &str) -> bool {
+        self.collapsed.contains(section)
+    }
+}
+
 /// Keep design-time presentation separate from the application's runtime
 /// defaults. Every supported XML attribute is editable even if it is absent.
 fn property_group(kind: &str, name: &str) -> &'static str {
@@ -1239,6 +1258,32 @@ mod tests {
             .iter()
             .any(|(path, label)| path == &[0, 1, 0] && label.contains("hidden")));
         assert!(entries.iter().any(|(_, label)| label.contains("Second")));
+    }
+
+    #[test]
+    fn inspector_sections_toggle_independently_and_restore_expanded_state() {
+        let mut inspector = InspectorSections::default();
+        assert!(!inspector.is_collapsed("Appearance & layout"));
+        inspector.toggle("Appearance & layout");
+        assert!(inspector.is_collapsed("Appearance & layout"));
+        assert!(!inspector.is_collapsed("Events & behaviour"));
+        inspector.toggle("Events & behaviour");
+        inspector.toggle("Appearance & layout");
+        assert!(!inspector.is_collapsed("Appearance & layout"));
+        assert!(inspector.is_collapsed("Events & behaviour"));
+    }
+
+    #[test]
+    fn inspector_folding_never_touches_runtime_xml_or_property_groups() {
+        let xml = r#"<Window version="1"><Button id="go" onClick="Go" text="Run" /></Window>"#;
+        let (_, fields) = available_properties(xml, &[0]).unwrap();
+        let mut inspector = InspectorSections::default();
+        for section in fields.iter().map(|field| field.group) {
+            inspector.toggle(section);
+        }
+        assert!(xml.contains("onClick=\"Go\""));
+        assert!(fields.iter().any(|field| field.group == "Events & behaviour"));
+        assert_eq!(properties(xml, &[0]).unwrap().0, "Button");
     }
 
     #[test]
