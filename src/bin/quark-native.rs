@@ -1494,6 +1494,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let design_heading = ui.label("DESIGN")?;
     design_heading.set_color(naui::TextColor::Accent);
     design_header.append(&design_heading);
+    let preview_width_selector = ui.combo_box()?;
+    preview_width_selector.set_items(&[
+        "Document width",
+        "Phone · 360",
+        "Tablet · 800",
+        "Desktop · 1120",
+    ]);
+    preview_width_selector.set_selected(0);
+    design_header.append(&ui.label("Viewport:")?);
+    design_header.append(&preview_width_selector);
     let new_ui_project_button = ui.button("＋ New UI App")?;
     design_header.append(&new_ui_project_button);
     let open_true_preview = ui.button("↗ OS Window (interactive)")?;
@@ -1543,6 +1553,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         Rc::new(RefCell::new(std::collections::HashMap::new()));
     type PreviewRefresh = Rc<dyn Fn()>;
     let reload_preview: Rc<RefCell<Option<PreviewRefresh>>> = Rc::new(RefCell::new(None));
+    let design_viewport_width = Rc::new(Cell::new(None::<f64>));
+    // Defer changing the viewport until the native combo event completes:
+    // preview rebuilding must never unparent a control inside its callback.
+    let apply_viewport_later = ui.tasks().channel({
+        let selection = design_viewport_width.clone();
+        let reload = reload_preview.clone();
+        move |preset: usize| {
+            selection.set(match preset {
+                1 => Some(360.0),
+                2 => Some(800.0),
+                3 => Some(1120.0),
+                _ => None,
+            });
+            if let Some(refresh) = reload.borrow().as_ref() {
+                refresh();
+            }
+        }
+    });
+    preview_width_selector.on_select(move |index| {
+        let _ = apply_viewport_later.send(index);
+    });
     // Preview rerenders must never destroy the active Properties input on
     // each keystroke, otherwise editing even a short string loses focus.
     let skip_properties_on_preview_refresh = Rc::new(Cell::new(false));
@@ -2420,6 +2451,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let native_property_scroll = native_property_scroll.clone();
         let select_native_element = select_native_element.clone();
         let design_tab_selection = design_tab_selection.clone();
+        let design_viewport_width = design_viewport_width.clone();
+        let preview_width_selector = preview_width_selector.clone();
         let reload_properties = reload_properties.clone();
         let skip_properties_on_preview_refresh = skip_properties_on_preview_refresh.clone();
         let status = status.clone();
@@ -2429,6 +2462,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 return;
             };
             let is_native = layout.native_window;
+            preview_width_selector.set_enabled(is_native);
             let xml = layout.source().ok();
             let document = layout.path.clone();
             drop(doc);
@@ -2451,6 +2485,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         &document,
                         select_native_element.clone(),
                         design_tab_selection.clone(),
+                        design_viewport_width.get(),
                     ) {
                         Ok(view) => {
                             portable_preview.append(&view);
