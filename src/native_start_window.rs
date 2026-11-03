@@ -317,7 +317,7 @@ pub fn show(
         let launch = launch.clone();
         let status = status.clone();
         move || {
-            if let Err(error) = create_project_wizard(&ui, window.clone(), launch.clone(), true) {
+            if let Err(error) = create_project_wizard(&ui, window.clone(), launch.clone(), true, false) {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
@@ -368,8 +368,13 @@ pub(crate) fn create_project_wizard(
     _launcher: Window,
     launch: Launch,
     _close_parent: bool,
+    native_ui_project: bool,
 ) -> naui::Result<()> {
-    let wizard = ui.window("Create a Hydrogen project", 640.0, 450.0)?;
+    let wizard = ui.window(
+        if native_ui_project { "Create a Hydrogen UI app" } else { "Create a Hydrogen project" },
+        640.0,
+        450.0,
+    )?;
     let root = ui.stack(Orientation::Vertical)?;
     root.set_padding(Padding::all(22.0));
     root.set_spacing(10.0);
@@ -394,6 +399,11 @@ pub(crate) fn create_project_wizard(
         "Hydrogen library",
     ]);
     template.set_selected(0);
+    if native_ui_project {
+        // Native UI projects use one portable Hydrogen `exe` target and
+        // let the compiler choose the host OS at build time.
+        template.set_enabled(false);
+    }
 
     root.append(&ui.label("Project name")?);
     root.append(&name);
@@ -408,7 +418,11 @@ pub(crate) fn create_project_wizard(
     actions.append(&submit);
     actions.append(&cancel);
     root.append(&actions);
-    let status = ui.label("Creates a Hydrogen project and a Main.hyui design.")?;
+    let status = ui.label(if native_ui_project {
+        "Creates an interactive native Hydrogen UI project, responsive Main.hyui and event handlers."
+    } else {
+        "Creates a Hydrogen project and a legacy Main.hyui design."
+    })?;
     status.set_color(TextColor::Secondary);
     root.append(&status);
 
@@ -432,14 +446,21 @@ pub(crate) fn create_project_wizard(
                 .get(selected)
                 .copied()
                 .unwrap_or(startup::Template::Linux);
-            match startup::create_project(Path::new(&parent.text()), &name.text(), kind) {
+            let result = if native_ui_project {
+                startup::create_native_ui_project(Path::new(&parent.text()), &name.text())
+            } else {
+                startup::create_project(Path::new(&parent.text()), &name.text(), kind)
+            };
+            match result {
                 Ok(manifest) => {
-                    let design = manifest.parent().unwrap().join("Main.hyui");
-                    if let Ok(bytes) = crate::ui_xml::encode(&Layout::default()).map(String::into_bytes) {
-                        if let Err(error) = crate::storage::atomic_write(&design, &bytes) {
-                            status.set_text(&format!(
-                                "Project created, but the designer file could not be written: {error}"
-                            ));
+                    if !native_ui_project {
+                        let design = manifest.parent().unwrap().join("Main.hyui");
+                        if let Ok(bytes) = crate::ui_xml::encode(&Layout::default()).map(String::into_bytes) {
+                            if let Err(error) = crate::storage::atomic_write(&design, &bytes) {
+                                status.set_text(&format!(
+                                    "Project created, but the designer file could not be written: {error}"
+                                ));
+                            }
                         }
                     }
                     match launch(Action::Project(manifest)) {
