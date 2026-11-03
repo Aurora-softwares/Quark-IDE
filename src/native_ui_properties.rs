@@ -864,6 +864,7 @@ pub fn move_sibling(
 /// Move a visual control to a different responsive container or place it
 /// after another control. The original XML subtree is copied verbatim so
 /// event handlers, IDs, child controls, and existing style attributes survive.
+#[cfg(any(target_os = "linux", test))]
 pub fn move_into(
     source: &str,
     from: &[usize],
