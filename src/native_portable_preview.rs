@@ -233,7 +233,7 @@ fn row_child_widths(node: Node<'_, '_>, available_width: f64, gap: f64) -> Vec<f
     } else {
         (remaining / flexible_count as f64).max(80.0)
     };
-    children
+    let mut assigned = children
         .iter()
         .zip(widths)
         .map(|(child, fixed)| {
@@ -243,7 +243,39 @@ fn row_child_widths(node: Node<'_, '_>, available_width: f64, gap: f64) -> Vec<f
                 fixed.unwrap_or(flexible_width)
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    if flexible_count == 0 {
+        // GTK treats preferredWidth as a *minimum*, not a fixed width. A
+        // FlowBox grants remaining space to its final expanding child.
+        // At 1120px Studio keeps settings at 600 and expands its summary
+        // beyond the 340px requested minimum.
+        if let Some(last) = children.iter().rposition(|child| {
+            child.attribute("visible") != Some("false") && runtime_fills(*child)
+        }) {
+            assigned[last] += remaining;
+        }
+    }
+    assigned
+}
+
+fn row_panel_stacks(node: Node<'_, '_>, available_width: f64, gap: f64) -> bool {
+    let breakpoint = node
+        .attribute("breakpoint")
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(700.0);
+    let children = node
+        .children()
+        .filter(|child| child.is_element() && child.attribute("visible") != Some("false"))
+        .collect::<Vec<_>>();
+    let minimums: f64 = children
+        .iter()
+        .filter_map(|child| child.attribute("preferredWidth"))
+        .filter_map(|width| width.parse::<f64>().ok())
+        .filter(|width| width.is_finite() && *width >= 20.0)
+        .sum();
+    available_width < breakpoint
+        || (minimums > 0.0
+            && minimums + gap * children.len().saturating_sub(1) as f64 > available_width)
 }
 
 #[allow(clippy::too_many_arguments)] // Recursive renderer forwards native UI, selection state and document context.
@@ -310,7 +342,9 @@ fn render_node(
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
-        row.set_sizing(Sizing::new().width(Length::Fixed(width.min(2400.0))));
+        row.set_sizing(Sizing::new().width(Length::Fixed(
+            width.max(available_width).min(2400.0),
+        )));
     } else if runtime_fills(node) {
         // Hydrogen defaults fill=true for ordinary content. A non-filling
         // wrapper lets otherwise correct GTK controls collapse to natural
@@ -529,24 +563,18 @@ fn render_node(
             }
         }
         "RowPanel" | "Menu" => {
-            let direction = if kind == "RowPanel"
-                && available_width
-                    < node
-                        .attribute("breakpoint")
-                        .and_then(|v| v.parse::<f64>().ok())
-                        .unwrap_or(700.0)
-            {
+            let gap = node
+                .attribute("gap")
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(12.0)
+                .clamp(0.0, 48.0);
+            let direction = if kind == "RowPanel" && row_panel_stacks(node, available_width, gap) {
                 Orientation::Vertical
             } else {
                 Orientation::Horizontal
             };
             let children = ui.stack(direction).map_err(|e| e.to_string())?;
             children.set_sizing(Sizing::fill_width());
-            let gap = node
-                .attribute("gap")
-                .and_then(|v| v.parse::<f64>().ok())
-                .unwrap_or(12.0)
-                .clamp(0.0, 48.0);
             children.set_spacing(gap);
             // Preserve the specified widths of individual panels. In the
             // Studio fixture this must remain 600px + 340px, not 50/50.
@@ -1372,6 +1400,27 @@ mod tests {
         assert!(DESIGN_FRAME_CSS.contains("currentColor"));
         assert!(!DESIGN_FRAME_CSS.contains("#"));
         assert!(!DESIGN_FRAME_CSS.contains("background:"));
+    }
+
+    #[test]
+    fn preferred_widths_are_minimums_and_summary_expands_to_fill_remaining_row() {
+        let xml = r#"<RowPanel breakpoint="760" gap="20"><Panel preferredWidth="600"/><Panel preferredWidth="340"/></RowPanel>"#;
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let root = parsed.root_element();
+        let widths = row_child_widths(root, 1072.0, 20.0);
+        assert_eq!(widths, [600.0, 452.0]);
+        assert!(!row_panel_stacks(root, 1072.0, 20.0));
+        assert_eq!(widths.iter().sum::<f64>() + 20.0, 1072.0);
+    }
+
+    #[test]
+    fn preferred_width_overflow_wraps_even_above_explicit_breakpoint() {
+        let xml = r#"<RowPanel breakpoint="760" gap="20"><Panel preferredWidth="600"/><Panel preferredWidth="340"/></RowPanel>"#;
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let root = parsed.root_element();
+        assert!(row_panel_stacks(root, 920.0, 20.0));
+        assert!(row_panel_stacks(root, 700.0, 20.0));
+        assert!(!row_panel_stacks(root, 960.0, 20.0));
     }
 
     #[test]
