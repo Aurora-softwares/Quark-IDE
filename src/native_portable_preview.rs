@@ -24,7 +24,6 @@ const DESIGN_FRAME_CSS: &str = "box.quark-design-frame { border-radius: 12px; \
 /// from currentColor, so no dark-mode colours are baked into the designer.
 #[cfg(target_os = "linux")]
 fn install_gtk_design_shadow() {
-    use gtk4::prelude::*;
     thread_local! {
         static INSTALLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
@@ -1248,14 +1247,13 @@ mod tests {
         let root = root.root_element();
         let width: f64 = root.attribute("width").unwrap().parse().unwrap();
         let height: f64 = root.attribute("height").unwrap().parse().unwrap();
-        assert!(DESIGN_VIEWPORT_INSET >= 12.0);
-        assert!(DESIGN_VIEWPORT_INSET <= 24.0);
         assert_eq!(width, 800.0);
         assert_eq!(height, 600.0);
         let extent = (
             width + DESIGN_VIEWPORT_INSET * 2.0,
             height + DESIGN_VIEWPORT_INSET * 2.0,
         );
+        assert_eq!(extent, (832.0, 632.0));
         assert!(extent.0 > width && extent.1 > height);
         assert!(xml.contains("padding=\"24\""));
     }
@@ -1330,11 +1328,8 @@ mod tests {
             .descendants()
             .filter(|node| node.is_element())
             .collect::<Vec<_>>();
-        for index in 0..6 {
-            assert!(
-                runtime_fills(elements[index]),
-                "element {index} should fill"
-            );
+        for (index, element) in elements.iter().enumerate().take(6) {
+            assert!(runtime_fills(*element), "element {index} should fill");
         }
         assert!(!runtime_fills(elements[6]));
         assert!(!runtime_fills(elements[7]));

@@ -1,8 +1,16 @@
 # Quark IDE — Native Frontend Implementation and Release Checklist
 
-**Updated:** 2026-11-02  
+**Updated:** 2026-11-03
 **Branch:** Development  
+**Current development version:** 0.6.0 (Hydrogen — Development project).
 **Release status:** NOT READY — must verify native builds, GUI behaviour and the Hydrogen debugger.
+
+The latest Linux CI repair removes an unused GTK import and makes the designer
+layout tests Clippy-clean. Local Linux verification: native Clippy with warnings
+denied, 189 native tests passed (3 ignored), and the feature register reports
+217 applicable features with at least two tests each. The next target is a green
+three-platform CI run followed by live GUI acceptance; the release gates below
+remain open until those checks succeed.
 
 This is the source of truth for the current implementation after the native Settings, panel, Hydrogen, terminal, and visual-design work. A checked-in implementation is **not** a successful runtime test. Do not treat this file as a claim that all features are finished.
 
