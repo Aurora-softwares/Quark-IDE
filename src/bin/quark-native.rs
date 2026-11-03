@@ -836,6 +836,20 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
             }
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        // AppKit's NSSplitView supplies its current frame dimensions. Do not
+        // use Quark's initial 1480 x 860 estimates after maximise/restore.
+        let frame = split.native_split_view().frame();
+        let size = if split.orientation() == Orientation::Horizontal {
+            frame.size.width
+        } else {
+            frame.size.height
+        };
+        if size.is_finite() && size > 0.0 {
+            return size;
+        }
+    }
     let _ = split;
     fallback
 }
@@ -1397,12 +1411,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let document_width = Rc::new(Cell::new(620.0_f64));
     type DocumentRelayout = Rc<dyn Fn()>;
     let document_relayout: Rc<RefCell<Option<DocumentRelayout>>> = Rc::new(RefCell::new(None));
+    // The actual editor viewport is drawn again after native window resize.
+    // Defer AppKit splitter correction until the redraw callback returns.
+    #[cfg(target_os = "macos")]
+    let mac_dock_relayout: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
     let width_signal = ui.tasks().channel({
         let width = document_width.clone();
         let relayout = document_relayout.clone();
+        #[cfg(target_os = "macos")]
+        let dock_relayout = mac_dock_relayout.clone();
         move |next_width: f64| {
             if next_width > 0.0 && (width.get() - next_width).abs() > 6.0 {
                 width.set(next_width);
+                #[cfg(target_os = "macos")]
+                if let Some(adjust) = dock_relayout.borrow().as_ref() {
+                    adjust();
+                }
                 if let Some(redraw) = relayout.borrow().as_ref() {
                     redraw();
                 }
@@ -4114,6 +4138,51 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
     #[cfg(target_os = "windows")]
     let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
+    #[cfg(target_os = "macos")]
+    {
+        let main = main_workspace.clone();
+        let document = document_workspace.clone();
+        let inspector = inspector.clone();
+        let sizes = pane_sizes.clone();
+        let dock = dock_model.clone();
+        let active = active_dock.clone();
+        let refresh = refresh_docks.clone();
+        *mac_dock_relayout.borrow_mut() = Some(Rc::new(move || {
+            let saved = sizes.get();
+            let right_open = [native_docking::DockId::Solution,
+                native_docking::DockId::Properties].iter().any(|id| {
+                let layout = dock.borrow();
+                layout.visible(*id, active.get())
+                    && layout.section(*id)
+                        .is_some_and(|entry| entry.zone == native_docking::DockZone::Right)
+            });
+            let right_width = if right_open {
+                saved.inspector.max(220.0)
+            } else {
+                native_shell::SIDE_RAIL_WIDTH
+            };
+            main.set_position(
+                (split_extent(&main, 1480.0) - right_width - 6.0).max(200.0)
+            );
+            document.set_position(
+                (split_extent(&document, 860.0) - saved.output.max(100.0) - 6.0)
+                    .max(160.0)
+            );
+            let both = {
+                let layout = dock.borrow();
+                layout.visible(native_docking::DockId::Solution, active.get())
+                    && layout.visible(native_docking::DockId::Properties, active.get())
+            };
+            if both {
+                inspector.set_position(
+                    (split_extent(&inspector, 795.0) - saved.properties - 6.0)
+                        .max(100.0)
+                );
+            } else {
+                refresh();
+            }
+        }));
+    }
     #[cfg(target_os = "linux")]
     {
         left_split.set_min_sizes(native_shell::SIDE_RAIL_WIDTH, 200.0);
