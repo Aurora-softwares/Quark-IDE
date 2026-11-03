@@ -1,149 +1,149 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Window version="1" id="quark" title="Quark IDE — Hydrogen Edition" width="1450" height="920" theme="system" material="auto">
-  <MenuBar>
-    <Menu text="File">
-      <MenuItem id="welcomeMenu" text="Start window" onClick="ShowWelcome" />
-      <MenuItem id="newFileMenu" text="New Hydrogen file" shortcut="Primary+N" onClick="NewSource" />
-      <MenuItem id="saveMenu" text="Save active document" shortcut="Primary+S" onClick="SaveActive" />
-      <MenuItem id="saveAllMenu" text="Save all" shortcut="Primary+Shift+S" onClick="SaveAll" />
-    </Menu>
-    <Menu text="View">
-      <MenuItem id="viewCode" text="Hydrogen editor" shortcut="Primary+1" onClick="ShowCode" />
-      <MenuItem id="viewUI" text="Hydrogen UI editor" shortcut="Primary+2" onClick="ShowUI" />
-      <MenuItem id="viewOutput" text="Build output" onClick="ShowOutput" />
-    </Menu>
-    <Menu text="Project">
-      <MenuItem id="projectOverview" text="Project properties" onClick="ProjectInfo" />
-    </Menu>
-    <Menu text="Build">
-      <MenuItem id="checkMenu" text="Check project" onClick="Check" />
-      <MenuItem id="buildMenu" text="Build project" shortcut="Primary+Shift+B" onClick="Build" />
-      <MenuItem id="runMenu" text="Start without debugging" onClick="Run" />
-      <MenuItem id="uiMenu" text="Open native UI preview" onClick="Preview" />
-    </Menu>
-    <Menu text="Help">
-      <MenuItem id="aboutMenu" text="About Quark" onClick="About" />
-    </Menu>
-  </MenuBar>
-  <Toolbar id="mainToolbar">
-    <ToolButton id="toolbarHome" text="Start" onClick="ShowWelcome" />
-    <ToolButton id="toolbarSource" text="Code" onClick="ShowCode" />
-    <ToolButton id="toolbarUI" text="HYUI" onClick="ShowUI" />
-    <ToolButton id="toolbarSave" text="Save" onClick="SaveActive" />
-    <ToolButton id="toolbarCheck" text="Check" onClick="Check" />
-    <ToolButton id="toolbarBuild" text="Build" onClick="Build" />
-    <ToolButton id="toolbarRun" text="Run" onClick="Run" />
-  </Toolbar>
-  <Tabs id="screen" value="0">
-    <Tab id="start" title="Start" gap="18">
-      <ColumnPanel gap="6">
-        <Label text="Q  /  QUARK" role="caption" tone="accent" />
-        <Label text="A place to build with Hydrogen." role="title" />
-        <Label text="The native Hydrogen development environment. Open a project, begin with a template, or just write code." tone="muted" />
-      </ColumnPanel>
-      <RowPanel breakpoint="840" gap="20">
-        <Panel title="Open recent / Open project" preferredWidth="500" gap="13">
-          <Label text="YOUR WORKSPACE" role="caption" tone="accent" />
-          <Label text="Choose an existing Hydrogen project or pick up a source file." role="heading" />
-          <FilePicker id="startProjectPicker" mode="open" text="Open a .hyproj project" onPick="ProjectPicked" onCancel="PickerCancelled" />
-          <FilePicker id="startSourcePicker" mode="open" text="Open a .hy source file" onPick="SourcePicked" onCancel="PickerCancelled" />
-          <FilePicker id="startUIPicker" mode="open" text="Open a .hyui layout" onPick="UIPicked" onCancel="PickerCancelled" />
-          <Separator />
-          <Label text="Recent projects and pinned workspaces are planned. Current source is loaded from your local files; Quark does not silently move or delete them." tone="muted" />
-          <Button id="blankWorkspace" text="Continue without code" onClick="Continue" />
-        </Panel>
-        <Panel title="Get started" preferredWidth="540" gap="12">
-          <Label text="NEW HYDROGEN APPLICATION" role="caption" tone="accent" />
-          <Label text="Create a project in an existing folder" role="heading" />
-          <Input id="newName" text="MyHydrogenApp" placeholder="Project name" accessibleName="New project name" />
-          <CheckBox id="newUI" text="Include Hydrogen UI and a working event handler" checked="true" />
-          <FilePicker id="projectFolderPicker" mode="folder" text="Choose folder and create project" onPick="CreateProject" onCancel="PickerCancelled" />
-          <Label text="Quark never overwrites a starter file. Select an existing empty or separate destination folder." tone="muted" />
-          <Separator />
-          <Label text="ONE LANGUAGE · NATIVE DESKTOP" role="caption" tone="accent" />
-          <Label text="Use .hy for logic and .hyui for your interface. Build the result through Hydrogen's native compiler." tone="muted" />
-        </Panel>
-      </RowPanel>
-      <Label id="startStatus" text="Welcome to Quark. Nothing is opened yet." tone="muted" />
-    </Tab>
-    <Tab id="workspace" title="Workspace" gap="8">
-      <RowPanel breakpoint="1080" gap="8">
-        <Panel title="SOLUTION EXPLORER" preferredWidth="250" gap="9">
-          <Label id="projectTitle" text="No project loaded" role="heading" />
-          <Label id="projectPathLabel" text="Open a Hydrogen .hyproj to begin." tone="muted" />
-          <FilePicker id="workspaceProjectPicker" mode="open" text="Open project" onPick="ProjectPicked" onCancel="PickerCancelled" />
-          <Separator />
-          <Label text="FILES" role="caption" tone="accent" />
-          <ListBox id="projectFiles" items="Open a project to see its files" value="0" height="190" onChange="ExploreSelected" accessibleName="Project source files" />
-          <Button id="explorerCode" text="Hydrogen source  ·  .hy" onClick="ShowCode" />
-          <Button id="explorerUI" text="Hydrogen UI  ·  .hyui" onClick="ShowUI" />
-          <FilePicker id="workspaceSourcePicker" mode="open" text="Open source file" onPick="SourcePicked" onCancel="PickerCancelled" />
-          <FilePicker id="workspaceUIPicker" mode="open" text="Open UI document" onPick="UIPicked" onCancel="PickerCancelled" />
-          <Separator />
-          <Button id="projectInfoButton" text="Project / manifest" onClick="ProjectInfo" />
-          <Label text="Project references and multi-project solutions are not yet editable here." role="caption" tone="muted" />
-        </Panel>
-        <ColumnPanel gap="8">
-          <RowPanel breakpoint="650" gap="10">
-            <Label text="Q / QUARK" role="caption" tone="accent" />
-            <Label id="documentTitle" text="No document selected" role="heading" />
-          </RowPanel>
-          <Tabs id="editorTabs" value="0">
-            <Tab id="codeTab" title="Hydrogen  ·  .hy" gap="8">
-              <RowPanel breakpoint="520" gap="9">
-                <Label id="codeName" text="Untitled Hydrogen source" tone="muted" />
-                <Button id="newCodeButton" text="New" onClick="NewSource" />
-                <Button id="saveCodeButton" text="Save" onClick="SaveSource" />
-                <FilePicker id="saveCodeAs" mode="save" text="Save as…" onPick="SourceSaveAsPicked" onCancel="PickerCancelled" />
-              </RowPanel>
-              <TextArea id="codeText" text="" placeholder="using System;&#10;&#10;public class Program {&#10;    public static int Main(string[] args) {&#10;        return 0;&#10;    }&#10;}" height="470" accessibleName="Hydrogen code editor" />
-              <Label text="Plain-text Hydrogen editing. Syntax colours, line-number gutters, completion and undo history await HYUI editor APIs." role="caption" tone="muted" />
-            </Tab>
-            <Tab id="uiTab" title="Hydrogen UI  ·  .hyui" gap="8">
-              <RowPanel breakpoint="520" gap="9">
-                <Label id="uiName" text="No HYUI document selected" tone="muted" />
-                <Button id="saveUIButton" text="Save layout" onClick="SaveUI" />
-                <FilePicker id="saveUIAs" mode="save" text="Save as…" onPick="UISaveAsPicked" onCancel="PickerCancelled" />
-                <Button id="previewButton" text="Open real native UI" onClick="Preview" />
-              </RowPanel>
-              <TextArea id="uiText" text="" placeholder="Open an existing .hyui layout to edit its XML." height="470" accessibleName="Hydrogen UI XML editor" />
-              <Label text="The interactive preview uses Hydrogen's actual native runtime. It is not a fake in-editor picture." role="caption" tone="muted" />
-            </Tab>
-          </Tabs>
-        </ColumnPanel>
-        <Panel title="PROPERTIES / INSPECTOR" preferredWidth="260" gap="9">
-          <Label text="PROJECT" role="caption" tone="accent" />
-          <Label id="propertyName" text="No selection" role="heading" />
-          <Label id="propertyType" text="Select a project or file" tone="muted" />
-          <Separator />
-          <Label text="HYDROGEN COMPILER" role="caption" tone="accent" />
-          <Input id="compiler" text="hy" placeholder="hy or full compiler path" accessibleName="Hydrogen compiler executable" />
-          <Label text="Current host executable is the default target. Native UI runtime dependencies are supplied by Hydrogen." role="caption" tone="muted" />
-          <Separator />
-          <Label text="SEARCH CURRENT DOCUMENT" role="caption" tone="accent" />
-          <Input id="searchQuery" text="" placeholder="Find text" accessibleName="Search current document" />
-          <Button id="findButton" text="Find first match" onClick="Find" />
-          <Label id="searchResult" text="Search runs on the open document." tone="muted" />
-          <Separator />
-          <Label text="DESIGNER" role="caption" tone="accent" />
-          <Label text="XML source + the real application preview are available. Visual element selection and drag/drop tools are not implemented." tone="muted" />
-        </Panel>
-      </RowPanel>
-      <Panel title="OUTPUT / ERROR LIST" gap="7">
-        <RowPanel breakpoint="640" gap="10">
-          <Button id="checkButton" text="Check" onClick="Check" />
-          <Button id="buildButton" text="Build" primary="true" onClick="Build" />
-          <Button id="runButton" text="Run without debugger" onClick="Run" />
-          <Button id="runUI" text="Native UI preview" onClick="Preview" />
-        </RowPanel>
-        <TextArea id="output" text="Compiler results will appear here after Check, Build or Run. Command output is captured in a local .quark-command.log." height="115" enabled="false" accessibleName="Compiler output" />
-        <Label id="status" text="Ready · No project opened" tone="muted" />
-      </Panel>
-    </Tab>
-  </Tabs>
-  <Input id="projectState" text="" visible="false" />
-  <Input id="codePath" text="" visible="false" />
-  <Input id="uiPath" text="" visible="false" />
-  <Input id="manifestState" text="" visible="false" />
-  <Dialog id="aboutDialog" title="Quark IDE / Hydrogen" text="A new native IDE built in Hydrogen with Hydrogen UI. This is an early, functional foundation — not yet at feature parity with Quark's Rust edition." buttons="OK" open="false" />
+	<MenuBar>
+		<Menu text="File">
+			<MenuItem id="welcomeMenu" text="Start window" onClick="ShowWelcome" />
+			<MenuItem id="newFileMenu" text="New Hydrogen file" shortcut="Primary+N" onClick="NewSource" />
+			<MenuItem id="saveMenu" text="Save active document" shortcut="Primary+S" onClick="SaveActive" />
+			<MenuItem id="saveAllMenu" text="Save all" shortcut="Primary+Shift+S" onClick="SaveAll" />
+		</Menu>
+		<Menu text="View">
+			<MenuItem id="viewCode" text="Hydrogen editor" shortcut="Primary+1" onClick="ShowCode" />
+			<MenuItem id="viewUI" text="Hydrogen UI editor" shortcut="Primary+2" onClick="ShowUI" />
+			<MenuItem id="viewOutput" text="Build output" onClick="ShowOutput" />
+		</Menu>
+		<Menu text="Project">
+			<MenuItem id="projectOverview" text="Project properties" onClick="ProjectInfo" />
+		</Menu>
+		<Menu text="Build">
+			<MenuItem id="checkMenu" text="Check project" onClick="Check" />
+			<MenuItem id="buildMenu" text="Build project" shortcut="Primary+Shift+B" onClick="Build" />
+			<MenuItem id="runMenu" text="Start without debugging" onClick="Run" />
+			<MenuItem id="uiMenu" text="Open native UI preview" onClick="Preview" />
+		</Menu>
+		<Menu text="Help">
+			<MenuItem id="aboutMenu" text="About Quark" onClick="About" />
+		</Menu>
+	</MenuBar>
+	<Toolbar id="mainToolbar">
+		<ToolButton id="toolbarHome" text="Start" onClick="ShowWelcome" />
+		<ToolButton id="toolbarSource" text="Code" onClick="ShowCode" />
+		<ToolButton id="toolbarUI" text="HYUI" onClick="ShowUI" />
+		<ToolButton id="toolbarSave" text="Save" onClick="SaveActive" />
+		<ToolButton id="toolbarCheck" text="Check" onClick="Check" />
+		<ToolButton id="toolbarBuild" text="Build" onClick="Build" />
+		<ToolButton id="toolbarRun" text="Run" onClick="Run" />
+	</Toolbar>
+	<Tabs id="screen" value="0">
+		<Tab id="start" title="Start" gap="18">
+			<ColumnPanel gap="6">
+				<Label text="Q  /  QUARK" role="caption" tone="accent" />
+				<Label text="A place to build with Hydrogen." role="title" />
+				<Label text="The native Hydrogen development environment. Open a project, begin with a template, or just write code." tone="muted" />
+			</ColumnPanel>
+			<RowPanel breakpoint="840" gap="20">
+				<Panel title="Open recent / Open project" preferredWidth="500" gap="13">
+				<Label text="YOUR WORKSPACE" role="caption" tone="accent" />
+				<Label text="Choose an existing Hydrogen project or pick up a source file." role="heading" />
+				<FilePicker id="startProjectPicker" mode="open" text="Open a .hyproj project" onPick="ProjectPicked" onCancel="PickerCancelled" />
+				<FilePicker id="startSourcePicker" mode="open" text="Open a .hy source file" onPick="SourcePicked" onCancel="PickerCancelled" />
+				<FilePicker id="startUIPicker" mode="open" text="Open a .hyui layout" onPick="UIPicked" onCancel="PickerCancelled" />
+				<Separator />
+				<Label text="Recent projects and pinned workspaces are planned. Current source is loaded from your local files; Quark does not silently move or delete them." tone="muted" />
+				<Button id="blankWorkspace" text="Continue without code" onClick="Continue" />
+				</Panel>
+				<Panel title="Get started" preferredWidth="540" gap="12">
+				<Label text="NEW HYDROGEN APPLICATION" role="caption" tone="accent" />
+				<Label text="Create a project in an existing folder" role="heading" />
+				<Input id="newName" text="MyHydrogenApp" placeholder="Project name" accessibleName="New project name" />
+				<CheckBox id="newUI" text="Include Hydrogen UI and a working event handler" checked="true" />
+				<FilePicker id="projectFolderPicker" mode="folder" text="Choose folder and create project" onPick="CreateProject" onCancel="PickerCancelled" />
+				<Label text="Quark never overwrites a starter file. Select an existing empty or separate destination folder." tone="muted" />
+				<Separator />
+				<Label text="ONE LANGUAGE · NATIVE DESKTOP" role="caption" tone="accent" />
+				<Label text="Use .hy for logic and .hyui for your interface. Build the result through Hydrogen's native compiler." tone="muted" />
+				</Panel>
+			</RowPanel>
+			<Label id="startStatus" text="Welcome to Quark. Nothing is opened yet." tone="muted" />
+		</Tab>
+		<Tab id="workspace" title="Workspace" gap="8">
+			<RowPanel breakpoint="1080" gap="8">
+				<Panel title="SOLUTION EXPLORER" preferredWidth="250" gap="9">
+					<Label id="projectTitle" text="No project loaded" role="heading" />
+					<Label id="projectPathLabel" text="Open a Hydrogen .hyproj to begin." tone="muted" />
+					<FilePicker id="workspaceProjectPicker" mode="open" text="Open project" onPick="ProjectPicked" onCancel="PickerCancelled" />
+					<Separator />
+					<Label text="FILES" role="caption" tone="accent" />
+					<ListBox id="projectFiles" items="Open a project to see its files" value="0" height="190" onChange="ExploreSelected" accessibleName="Project source files" />
+					<Button id="explorerCode" text="Hydrogen source  ·  .hy" onClick="ShowCode" />
+					<Button id="explorerUI" text="Hydrogen UI  ·  .hyui" onClick="ShowUI" />
+					<FilePicker id="workspaceSourcePicker" mode="open" text="Open source file" onPick="SourcePicked" onCancel="PickerCancelled" />
+					<FilePicker id="workspaceUIPicker" mode="open" text="Open UI document" onPick="UIPicked" onCancel="PickerCancelled" />
+					<Separator />
+					<Button id="projectInfoButton" text="Project / manifest" onClick="ProjectInfo" />
+					<Label text="Project references and multi-project solutions are not yet editable here." role="caption" tone="muted" />
+				</Panel>
+				<ColumnPanel gap="8">
+				<RowPanel breakpoint="650" gap="10">
+					<Label text="Q / QUARK" role="caption" tone="accent" />
+					<Label id="documentTitle" text="No document selected" role="heading" />
+				</RowPanel>
+				<Tabs id="editorTabs" value="0">
+					<Tab id="codeTab" title="Hydrogen  ·  .hy" gap="8">
+						<RowPanel breakpoint="520" gap="9">
+							<Label id="codeName" text="Untitled Hydrogen source" tone="muted" />
+							<Button id="newCodeButton" text="New" onClick="NewSource" />
+							<Button id="saveCodeButton" text="Save" onClick="SaveSource" />
+							<FilePicker id="saveCodeAs" mode="save" text="Save as…" onPick="SourceSaveAsPicked" onCancel="PickerCancelled" />
+						</RowPanel>
+						<TextArea id="codeText" text="" placeholder="using System;&#10;&#10;public class Program {&#10;    public static int Main(string[] args) {&#10;        return 0;&#10;    }&#10;}" height="470" accessibleName="Hydrogen code editor" />
+						<Label text="Plain-text Hydrogen editing. Syntax colours, line-number gutters, completion and undo history await HYUI editor APIs." role="caption" tone="muted" />
+					</Tab>
+					<Tab id="uiTab" title="Hydrogen UI  ·  .hyui" gap="8">
+						<RowPanel breakpoint="520" gap="9">
+							<Label id="uiName" text="No HYUI document selected" tone="muted" />
+							<Button id="saveUIButton" text="Save layout" onClick="SaveUI" />
+							<FilePicker id="saveUIAs" mode="save" text="Save as…" onPick="UISaveAsPicked" onCancel="PickerCancelled" />
+							<Button id="previewButton" text="Open real native UI" onClick="Preview" />
+						</RowPanel>
+						<TextArea id="uiText" text="" placeholder="Open an existing .hyui layout to edit its XML." height="470" accessibleName="Hydrogen UI XML editor" />
+						<Label text="The interactive preview uses Hydrogen's actual native runtime. It is not a fake in-editor picture." role="caption" tone="muted" />
+					</Tab>
+				</Tabs>
+				</ColumnPanel>
+				<Panel title="PROPERTIES / INSPECTOR" preferredWidth="260" gap="9">
+					<Label text="PROJECT" role="caption" tone="accent" />
+					<Label id="propertyName" text="No selection" role="heading" />
+					<Label id="propertyType" text="Select a project or file" tone="muted" />
+					<Separator />
+					<Label text="HYDROGEN COMPILER" role="caption" tone="accent" />
+					<Input id="compiler" text="hy" placeholder="hy or full compiler path" accessibleName="Hydrogen compiler executable" />
+					<Label text="Current host executable is the default target. Native UI runtime dependencies are supplied by Hydrogen." role="caption" tone="muted" />
+					<Separator />
+					<Label text="SEARCH CURRENT DOCUMENT" role="caption" tone="accent" />
+					<Input id="searchQuery" text="" placeholder="Find text" accessibleName="Search current document" />
+					<Button id="findButton" text="Find first match" onClick="Find" />
+					<Label id="searchResult" text="Search runs on the open document." tone="muted" />
+					<Separator />
+					<Label text="DESIGNER" role="caption" tone="accent" />
+					<Label text="XML source + the real application preview are available. Visual element selection and drag/drop tools are not implemented." tone="muted" />
+				</Panel>
+			</RowPanel>
+			<Panel title="OUTPUT / ERROR LIST" gap="7">
+				<RowPanel breakpoint="640" gap="10">
+					<Button id="checkButton" text="Check" onClick="Check" />
+					<Button id="buildButton" text="Build" primary="true" onClick="Build" />
+					<Button id="runButton" text="Run without debugger" onClick="Run" />
+					<Button id="runUI" text="Native UI preview" onClick="Preview" />
+				</RowPanel>
+				<TextArea id="output" text="Compiler results will appear here after Check, Build or Run. Command output is captured in a local .quark-command.log." height="115" enabled="false" accessibleName="Compiler output" />
+				<Label id="status" text="Ready · No project opened" tone="muted" />
+			</Panel>
+		</Tab>
+	</Tabs>
+	<Input id="projectState" text="" visible="false" />
+	<Input id="codePath" text="" visible="false" />
+	<Input id="uiPath" text="" visible="false" />
+	<Input id="manifestState" text="" visible="false" />
+	<Dialog id="aboutDialog" title="Quark IDE / Hydrogen" text="A new native IDE built in Hydrogen with Hydrogen UI. This is an early, functional foundation — not yet at feature parity with Quark's Rust edition." buttons="OK" open="false" />
 </Window>
