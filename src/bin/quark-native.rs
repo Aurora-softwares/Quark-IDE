@@ -1983,7 +1983,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .borrow_mut()
                         .layout
                         .as_mut()
-                        .map(|doc| doc.edit_source(updated.clone()));
+                        .map(|doc| doc.apply_designer_source(updated.clone()));
                     match change {
                         Some(Ok(())) => {
                             sync_xml.set(true);
@@ -2032,7 +2032,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .borrow_mut()
                         .layout
                         .as_mut()
-                        .map(|doc| doc.edit_source(next.clone()));
+                        .map(|doc| doc.apply_designer_source(next.clone()));
                     match changed {
                         Some(Ok(())) => {
                             *selected_xml_path.borrow_mut() = path;
