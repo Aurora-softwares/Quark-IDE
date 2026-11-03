@@ -3381,11 +3381,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 < right
                     .iter()
                     .position(|s| s.id == native_docking::DockId::Solution);
-            inspector.set_position(right_split_position(
-                split_extent(&inspector, 795.0),
-                sizes.properties,
-                first,
-            ));
+            #[cfg(target_os = "macos")]
+            let both_right_pinned = [native_docking::DockId::Solution,
+                native_docking::DockId::Properties]
+                .iter().all(|id| order.visible(*id, None));
+            #[cfg(not(target_os = "macos"))]
+            let both_right_pinned = true;
+            if both_right_pinned {
+                inspector.set_position(right_split_position(
+                    split_extent(&inspector, 795.0),
+                    sizes.properties,
+                    first,
+                ));
+            }
         }
     });
     let active_dock = Rc::new(Cell::new(None::<native_docking::DockId>));
@@ -4041,10 +4049,55 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
         }
     });
-    // GTK auto-hide must not change AppKit or WinUI splitter geometry.
+    // AppKit must react to pin/unpin just as GTK does.  In particular the
+    // right split must stop reserving a second pane for unpinned Properties.
+    // Use the native NSSplitView rather than clearing/rebuilding tool widgets,
+    // which would lose their search, selection and editor state.
     #[cfg(target_os = "macos")]
-    macos_transition_checkpoint("4016: let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});");
-    #[cfg(not(target_os = "linux"))]
+    let refresh_docks: Rc<dyn Fn()> = Rc::new({
+        let model = dock_model.clone();
+        let active = active_dock.clone();
+        let inspector = inspector.clone();
+        let left_split = left_split.clone();
+        let main_workspace = main_workspace.clone();
+        let document_workspace = document_workspace.clone();
+        let sizes = pane_sizes.clone();
+        move || {
+            use native_docking::{DockId, DockZone};
+            let layout = model.borrow();
+            let visible = |id| layout
+                .section(id)
+                .is_some_and(|entry| entry.zone == id.default_zone()
+                    && layout.visible(id, active.get()));
+            let solution_open = visible(DockId::Solution);
+            let properties_open = visible(DockId::Properties);
+            let preferred = sizes.get();
+            // A zero minimum lets the absent panel relinquish *all* space.
+            // A generous position is clamped by NSSplitView's actual bounds,
+            // unlike the fixed 795px position that left an empty panel behind.
+            inspector.set_min_sizes(0.0, 0.0);
+            match (solution_open, properties_open) {
+                (true, true) => inspector.set_position(right_split_position(
+                    795.0, preferred.properties, false,
+                )),
+                (true, false) => inspector.set_position(100_000.0),
+                (false, true) => inspector.set_position(0.0),
+                (false, false) => inspector.set_position(0.0),
+            }
+            let left_open = [DockId::Toolbox, DockId::Symbols, DockId::Search,
+                DockId::Server, DockId::Data].iter().any(|id| visible(*id));
+            left_split.set_min_sizes(0.0, 200.0);
+            left_split.set_position(if left_open {
+                preferred.toolbox.max(155.0)
+            } else {
+                native_shell::SIDE_RAIL_WIDTH
+            });
+            // These start-pane positions are intentionally not recomputed
+            // from a guessed window width: AppKit owns window resize.
+            let _ = (&main_workspace, &document_workspace);
+        }
+    });
+    #[cfg(target_os = "windows")]
     let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
     #[cfg(target_os = "linux")]
     {
