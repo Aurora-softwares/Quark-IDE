@@ -357,7 +357,13 @@ fn render_node(
                 .and_then(|v| v.parse::<f64>().ok())
                 .unwrap_or(20.0)
                 .clamp(0.0, 80.0);
+            #[cfg(not(target_os = "linux"))]
             panel.set_padding(Padding::all(padding));
+            // Linux uses the exact GTK Frame -> padded child construction
+            // from Hydrogen's runtime; padding a bare 'card' GtkBox instead
+            // changed the content's measured dimensions and card borders.
+            #[cfg(target_os = "linux")]
+            panel.set_padding(Padding::all(0.0));
             // The panel's preferredWidth belongs to the outer row. Its native
             // card must occupy the entire row rather than remain centred at
             // a narrow natural width.
@@ -385,12 +391,6 @@ fn render_node(
                 }
                 panel.append(&label);
             }
-            #[cfg(target_os = "linux")]
-            {
-                use gtk4::prelude::*;
-                use naui::Widget as _;
-                panel.native_widget().add_css_class("card");
-            }
             render_children(
                 ui,
                 &panel,
@@ -401,6 +401,29 @@ fn render_node(
                 (available_width - 2.0 * padding).max(80.0),
                 document,
             )?;
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+
+                let frame = gtk4::Frame::new(None);
+                frame.add_css_class("card");
+                frame.set_hexpand(true);
+                frame.set_halign(gtk4::Align::Fill);
+                let content = panel.size_bin();
+                let margin = padding.round() as i32;
+                content.set_margin_start(margin);
+                content.set_margin_end(margin);
+                content.set_margin_top(margin);
+                content.set_margin_bottom(margin);
+                frame.set_child(Some(&content));
+                let host = row
+                    .native_widget()
+                    .downcast::<gtk4::Box>()
+                    .map_err(|_| "Native GTK panel host is not a GtkBox")?;
+                host.append(&frame);
+            }
+            #[cfg(not(target_os = "linux"))]
             row.append(&panel);
         }
         "ColumnPanel" | "Tab" | "Window" => {
