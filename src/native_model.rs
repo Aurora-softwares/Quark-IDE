@@ -881,7 +881,9 @@ mod tests {
         std::fs::write(&path, xml).unwrap();
         let mut layout = LayoutDocument::open(&path).unwrap();
         assert!(!layout.dirty());
-        assert!(layout.apply_designer_source("<Window><Button".into()).is_err());
+        assert!(layout
+            .apply_designer_source("<Window><Button".into())
+            .is_err());
         assert_eq!(layout.source().unwrap(), xml);
         assert!(!layout.dirty());
         let edited = xml.replace(
@@ -891,7 +893,9 @@ mod tests {
         layout.apply_designer_source(edited.clone()).unwrap();
         assert_eq!(layout.source().unwrap(), edited);
         assert!(layout.dirty());
-        assert!(layout.apply_designer_source("<NotAWindow/>".into()).is_err());
+        assert!(layout
+            .apply_designer_source("<NotAWindow/>".into())
+            .is_err());
         assert_eq!(layout.source().unwrap(), edited);
     }
 
@@ -899,7 +903,8 @@ mod tests {
     fn designer_generated_oversized_edits_are_rejected_atomically() {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("Main.hyui");
-        let xml = r#"<Window version="1" title="Demo" width="800" height="600"><ColumnPanel/></Window>"#;
+        let xml =
+            r#"<Window version="1" title="Demo" width="800" height="600"><ColumnPanel/></Window>"#;
         std::fs::write(&path, xml).unwrap();
         let mut layout = LayoutDocument::open(&path).unwrap();
         let huge = format!("{}{}", xml, "x".repeat(MAX_LAYOUT_BYTES as usize));
