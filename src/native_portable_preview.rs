@@ -426,9 +426,10 @@ fn render_node(
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
-        row.set_sizing(Sizing::new().width(Length::Fixed(
-            responsive_control_width(width, available_width),
-        )));
+        row.set_sizing(Sizing::new().width(Length::Fixed(responsive_control_width(
+            width,
+            available_width,
+        ))));
     } else if runtime_fills(node) {
         // Hydrogen defaults fill=true for ordinary content. A non-filling
         // wrapper lets otherwise correct GTK controls collapse to natural
@@ -1840,7 +1841,10 @@ mod tests {
         assert_eq!(responsive_control_width(3000.0, 5000.0), 2400.0);
         let xml = r#"<Window width="1120"><RowPanel breakpoint="760"><Panel preferredWidth="600"/></RowPanel></Window>"#;
         let root = roxmltree::Document::parse(xml).unwrap();
-        let panel = root.descendants().find(|n| n.has_tag_name("Panel")).unwrap();
+        let panel = root
+            .descendants()
+            .find(|n| n.has_tag_name("Panel"))
+            .unwrap();
         assert_eq!(panel.attribute("preferredWidth"), Some("600"));
     }
 
@@ -1848,7 +1852,12 @@ mod tests {
     fn design_viewport_presets_change_only_preview_width_not_saved_window() {
         let xml = r#"<Window version="1" width="1120" height="900"><RowPanel breakpoint="760"/></Window>"#;
         let parsed = roxmltree::Document::parse(xml).unwrap();
-        let original = parsed.root_element().attribute("width").unwrap().parse::<f64>().unwrap();
+        let original = parsed
+            .root_element()
+            .attribute("width")
+            .unwrap()
+            .parse::<f64>()
+            .unwrap();
         assert_eq!(design_viewport_width(original, None), 1120.0);
         assert_eq!(design_viewport_width(original, Some(360.0)), 360.0);
         assert_eq!(design_viewport_width(original, Some(800.0)), 800.0);
