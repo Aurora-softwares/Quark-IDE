@@ -64,11 +64,14 @@ namespace Quark {
                 }
             }
             if (handler == "SaveAll") {
-                if (Application.Value(args, "codePath") == "" || Application.Value(args, "uiPath") == "") {
-                    Status("Save all requires named documents. Use Save as… for new buffers.");
+                string codePath = Application.Value(args, "codePath");
+                string layoutPath = Application.Value(args, "uiPath");
+                if ((codePath == "" && Application.Value(args, "codeText") != "") ||
+                    (layoutPath == "" && Application.Value(args, "uiText") != "")) {
+                    Status("A changed untitled buffer needs Save as… first.");
                 } else {
-                    Save(args, Application.Value(args, "codePath"), false);
-                    Save(args, Application.Value(args, "uiPath"), true);
+                    if (codePath != "") { Save(args, codePath, false); }
+                    if (layoutPath != "") { Save(args, layoutPath, true); }
                 }
             }
             if (handler == "ProjectInfo") {
@@ -122,19 +125,19 @@ namespace Quark {
             string text = Application.Value(args, "codeText");
             if (path == "") {
                 if (text != "") { return true; }
-            } else if (!File.Exists(path) || File.ReadAllText(path) != text) { return true; }
+            } else if (!System.IO.File.Exists(path) || System.IO.File.ReadAllText(path) != text) { return true; }
             path = Application.Value(args, "uiPath");
             text = Application.Value(args, "uiText");
             if (path == "") {
                 if (text != "") { return true; }
-            } else if (!File.Exists(path) || File.ReadAllText(path) != text) { return true; }
+            } else if (!System.IO.File.Exists(path) || System.IO.File.ReadAllText(path) != text) { return true; }
             return false;
         }
 
         private static void LoadProject(string[] args, string path) {
-            if (path == "" || !File.Exists(path)) { Status("Selected project does not exist."); return; }
+            if (path == "" || !System.IO.File.Exists(path)) { Status("Selected project does not exist."); return; }
             if (Dirty(args)) { Status("Save all changed documents before opening another project."); return; }
-            string manifest = File.ReadAllText(path);
+            string manifest = System.IO.File.ReadAllText(path);
             string code = Workspace.Source(path, manifest);
             string layout = Workspace.Layout(path, manifest);
             Application.SetText("projectState", path);
@@ -145,8 +148,8 @@ namespace Quark {
             Application.SetText("propertyType", "Hydrogen project (.hyproj)");
             Application.SetText("codePath", code);
             Application.SetText("uiPath", layout);
-            Application.SetText("codeText", code != "" && File.Exists(code) ? File.ReadAllText(code) : "");
-            Application.SetText("uiText", layout != "" && File.Exists(layout) ? File.ReadAllText(layout) : "");
+            Application.SetText("codeText", code != "" && System.IO.File.Exists(code) ? System.IO.File.ReadAllText(code) : "");
+            Application.SetText("uiText", layout != "" && System.IO.File.Exists(layout) ? System.IO.File.ReadAllText(layout) : "");
             Application.SetText("codeName", code == "" ? "No source in manifest" : Workspace.BaseName(code));
             Application.SetText("uiName", layout == "" ? "No HYUI layout in manifest" : Workspace.BaseName(layout));
             Application.SetText("documentTitle", Workspace.BaseName(path));
@@ -155,16 +158,16 @@ namespace Quark {
         }
 
         private static void LoadDocument(string[] args, string path, bool ui) {
-            if (path == "" || !File.Exists(path)) { Status("Selected file does not exist."); return; }
+            if (path == "" || !System.IO.File.Exists(path)) { Status("Selected file does not exist."); return; }
             if (Dirty(args)) { Status("Save all changed documents before opening another file."); return; }
             if (ui) {
                 Application.SetText("uiPath", path);
-                Application.SetText("uiText", File.ReadAllText(path));
+                Application.SetText("uiText", System.IO.File.ReadAllText(path));
                 Application.SetText("uiName", Workspace.BaseName(path));
                 ShowEditor(1);
             } else {
                 Application.SetText("codePath", path);
-                Application.SetText("codeText", File.ReadAllText(path));
+                Application.SetText("codeText", System.IO.File.ReadAllText(path));
                 Application.SetText("codeName", Workspace.BaseName(path));
                 ShowEditor(0);
             }
@@ -179,7 +182,7 @@ namespace Quark {
             string content = Application.Value(args, ui ? "uiText" : "codeText");
             // The file picker explicitly authorises an existing destination.
             // Normal saves never overwrite a different path silently.
-            File.WriteAllText(path, content);
+            System.IO.File.WriteAllText(path, content);
             if (ui) {
                 Application.SetText("uiPath", path);
                 Application.SetText("uiName", Workspace.BaseName(path));

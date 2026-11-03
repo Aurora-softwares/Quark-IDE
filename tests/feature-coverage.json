@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "note": "Each feature has two independent contract tests; native smoke tests remain required.",
+  "features": {
+    "native Hydrogen UI shell": ["test_native_shell_has_workspace_regions", "test_native_shell_actions_have_hydrogen_handlers"],
+    "Hydrogen project loading": ["test_project_manifest_has_only_hydrogen_sources", "test_project_source_paths_allow_multiline_manifest", "test_project_picker_loads_real_manifest"],
+    "open and save documents": ["test_standalone_pickup_reads_both_file_types", "test_save_is_connected_to_real_io", "test_dirty_checks_both_buffers_before_switching"],
+    "starter project creation": ["test_project_creation_validates_filename", "test_project_creation_does_not_overwrite_starter_files", "test_starter_hyui_has_connected_click_event", "test_starter_creation_generates_manifest_and_backend"],
+    "compiler integration": ["test_compiler_checks_use_real_subprocess", "test_build_persists_stdout_and_stderr", "test_failed_build_cannot_launch_program"],
+    "native HYUI preview": ["test_ui_preview_uses_official_hy_command", "test_no_debugger_or_designer_parity_claim"],
+    "text search": ["test_search_scans_buffer_lines", "test_search_uses_active_document"]
+  }
+}

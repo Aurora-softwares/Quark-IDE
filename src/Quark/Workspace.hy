@@ -97,14 +97,23 @@ namespace Quark {
             return Join(Directory(projectPath), name);
         }
 
+        private static bool IsIn(string needle, string chars) {
+            int i = 0;
+            while (i < chars.Length) {
+                if (chars[i] == needle) { return true; }
+                i = i + 1;
+            }
+            return false;
+        }
+
         public static bool ValidName(string name) {
             if (name.Length == 0 || name.Length > 64) { return false; }
             int i = 0;
             while (i < name.Length) {
                 string ch = name[i];
-                bool letter = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
-                bool number = ch >= "0" && ch <= "9";
-                if (!letter && !number && ch != "_") { return false; }
+                bool letter = IsIn(ch, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_");
+                bool number = IsIn(ch, "0123456789");
+                if (!letter && !number) { return false; }
                 if (i == 0 && number) { return false; }
                 i = i + 1;
             }
@@ -138,8 +147,8 @@ namespace Quark {
             string source = Join(folder, "Program.hy");
             string layout = Join(folder, "Main.hyui");
             string bridge = Join(folder, "Hydrogen.UI.hy");
-            if (File.Exists(project) || File.Exists(source) ||
-                (withUI && (File.Exists(layout) || File.Exists(bridge)))) { return ""; }
+            if (System.IO.File.Exists(project) || System.IO.File.Exists(source) ||
+                (withUI && (System.IO.File.Exists(layout) || System.IO.File.Exists(bridge)))) { return ""; }
 
             string manifest = "format = 2\nname = \"" + name + "\"\nversion = \"0.1.0\"\ntype = \"exe\"\n";
             string program = "";
@@ -155,14 +164,14 @@ namespace Quark {
                 manifest = manifest + "sources = [\"Program.hy\"]\n";
                 program = "using System;\n\npublic class Program {\n" +
                     "    public static int Main(string[] args) {\n" +
-                    "        Console.WriteLine(\"Hello from Hydrogen!\");\n" +
+                    "        System.Console.WriteLine(\"Hello from Hydrogen!\");\n" +
                     "        return 0;\n    }\n}\n";
             }
 
             // File writes are ordered so a failed partial creation cannot leave a valid manifest.
-            File.WriteAllText(source, program);
+            System.IO.File.WriteAllText(source, program);
             if (withUI) {
-                File.WriteAllText(layout,
+                System.IO.File.WriteAllText(layout,
                     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
                     "<Window version=\"1\" title=\"" + name + "\" width=\"800\" height=\"500\" theme=\"system\">\n" +
                     "  <ColumnPanel gap=\"16\">\n" +
@@ -170,7 +179,7 @@ namespace Quark {
                     "    <Label id=\"message\" text=\"Press the button below.\" />\n" +
                     "    <Button id=\"hello\" text=\"Say hello\" primary=\"true\" onClick=\"Hello\" />\n" +
                     "  </ColumnPanel>\n</Window>\n");
-                File.WriteAllText(bridge,
+                System.IO.File.WriteAllText(bridge,
                     "namespace Hydrogen.UI {\n" +
                     "    public class Application {\n" +
                     "        public static void Open(string path) { System.Console.WriteLine(\"HYUI\\tOPEN\\t\" + path); }\n" +
@@ -179,7 +188,7 @@ namespace Quark {
                     "        public static void SetText(string id, string value) { System.Console.WriteLine(\"HYUI\\tSET\\t\" + id + \"\\ttext\\t\" + value); }\n" +
                     "    }\n}\n");
             }
-            File.WriteAllText(project, manifest);
+            System.IO.File.WriteAllText(project, manifest);
             return project;
         }
     }

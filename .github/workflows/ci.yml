@@ -1,0 +1,18 @@
+name: Hydrogen IDE contracts
+on:
+  push:
+    branches: [Development]
+  pull_request:
+    branches: [Development]
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate native UI schema XML and source integration contracts
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify every shipped feature has at least two tests
+        run: python3 scripts/check-feature-coverage.py
