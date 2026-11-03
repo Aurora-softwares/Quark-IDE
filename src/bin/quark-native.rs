@@ -57,6 +57,9 @@ mod native_start_window;
 #[cfg(target_os = "linux")]
 #[path = "../native_syntax.rs"]
 mod native_syntax;
+#[cfg(target_os = "macos")]
+#[path = "../native_syntax_macos.rs"]
+mod native_syntax_macos;
 #[path = "../native_terminal.rs"]
 mod native_terminal;
 #[path = "../native_terminal_screen.rs"]
@@ -1753,12 +1756,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     xml_editor.on_change({
+        #[cfg(target_os = "macos")]
+        let highlighted_editor = xml_editor.clone();
         let state = state.clone();
         let canvas = canvas.clone();
         let status = status.clone();
         let sync_xml = sync_xml.clone();
         let reload_preview = reload_preview.clone();
         move |text| {
+            #[cfg(target_os = "macos")]
+            native_syntax_macos::highlight(&highlighted_editor, text, true);
             if sync_xml.get() {
                 return;
             }
@@ -2044,6 +2051,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         Some(Ok(())) => {
                             sync_xml.set(true);
                             xml_editor.set_text(&updated);
+
+                            #[cfg(target_os = "macos")]
+
+                            native_syntax_macos::highlight(&xml_editor, &updated, true);
                             sync_xml.set(false);
                             status.set_text("Hydrogen UI property updated");
                             if let Some(refresh) = reload_preview.borrow().as_ref() {
@@ -2096,6 +2107,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             *selected_xml_path.borrow_mut() = path;
                             sync_xml.set(true);
                             xml_editor.set_text(&next);
+
+                            #[cfg(target_os = "macos")]
+
+                            native_syntax_macos::highlight(&xml_editor, &next, true);
                             sync_xml.set(false);
                             status.set_text("Hydrogen UI updated — save to persist");
                             if let Some(refresh) = reload_preview.borrow().as_ref() {
@@ -5297,6 +5312,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     if let Ok(xml) = doc.source() {
                         sync_xml.set(true);
                         xml_editor.set_text(&xml);
+
+                        #[cfg(target_os = "macos")]
+
+                        native_syntax_macos::highlight(&xml_editor, &xml, true);
                         sync_xml.set(false);
                     }
                 }
@@ -5416,9 +5435,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
 
     editor.on_change({
+        #[cfg(target_os = "macos")]
+        let highlighted_editor = editor.clone();
         let state = state.clone();
         let symbols_list = symbols_list.clone();
         move |text| {
+            #[cfg(target_os = "macos")]
+            native_syntax_macos::highlight(&highlighted_editor, text, false);
             let mut ide = state.borrow_mut();
             if let Some(document) = ide.document.as_mut() {
                 document.text = text.to_owned();
@@ -5520,6 +5543,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             .min(tabs.len().saturating_sub(capacity)),
                     );
                     editor.set_text(&text);
+
+                    #[cfg(target_os = "macos")]
+
+                    native_syntax_macos::highlight(&editor, &text, false);
                     symbols_list.set_items(&project_symbols(&state.borrow()));
                     show_page(Page::Code);
                     status.set_text(&format!("Editing {}", path.display()));
@@ -6014,6 +6041,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             Ok(xml) => {
                                 sync_xml.set(true);
                                 xml_editor.set_text(&xml);
+
+                                #[cfg(target_os = "macos")]
+
+                                native_syntax_macos::highlight(&xml_editor, &xml, true);
                                 sync_xml.set(false);
                             }
                             Err(error) => status.set_text(&format!(
@@ -6051,6 +6082,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 Some(Ok(xml)) => {
                     sync_xml.set(true);
                     xml_editor.set_text(&xml);
+
+                    #[cfg(target_os = "macos")]
+
+                    native_syntax_macos::highlight(&xml_editor, &xml, true);
                     sync_xml.set(false);
                 }
                 Some(Err(error)) => {
@@ -6544,6 +6579,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     };
     if let Some(text) = initial_document.0 {
         editor.set_text(&text);
+
+        #[cfg(target_os = "macos")]
+
+        native_syntax_macos::highlight(&editor, &text, false);
         show_page(Page::Code);
     } else if initial_document.1 {
         show_page(Page::Design);
