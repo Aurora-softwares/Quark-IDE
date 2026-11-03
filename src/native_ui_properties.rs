@@ -443,19 +443,16 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
     if kind == "Window" && name == "material" && !matches!(value, "auto" | "glass" | "solid") {
         return Err("Window material must be auto, glass or solid".into());
     }
-    if kind == "Label" && name == "role"
+    if kind == "Label"
+        && name == "role"
         && !matches!(value, "title" | "heading" | "body" | "caption")
     {
         return Err("Label role must be title, heading, body or caption".into());
     }
-    if kind == "Label" && name == "tone"
-        && !matches!(value, "normal" | "muted" | "accent")
-    {
+    if kind == "Label" && name == "tone" && !matches!(value, "normal" | "muted" | "accent") {
         return Err("Label tone must be normal, muted or accent".into());
     }
-    if kind == "FilePicker" && name == "mode"
-        && !matches!(value, "open" | "save" | "folder")
-    {
+    if kind == "FilePicker" && name == "mode" && !matches!(value, "open" | "save" | "folder") {
         return Err("FilePicker mode must be open, save or folder".into());
     }
     if matches!(
