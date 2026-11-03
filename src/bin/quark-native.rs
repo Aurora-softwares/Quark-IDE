@@ -6518,14 +6518,20 @@ fn build(ui: &Ui) -> naui::Result<()> {
             #[cfg(target_os = "macos")]
             {
                 let workspace_window = handle
-                    .window("Quark IDE — Hydrogen Development Environment", 1480.0, 940.0)
+                    .window(
+                        "Quark IDE — Hydrogen Development Environment",
+                        1480.0,
+                        940.0,
+                    )
                     .map_err(|error| format!("Cannot create AppKit IDE window: {error}"))?;
                 // No NSView from the launcher is transferred to this window.
                 // Leave the launcher alive if building the IDE fails.
                 build_ide(&handle, launch_state.clone(), workspace_window)
                     .map_err(|error| format!("Cannot construct AppKit IDE: {error}"))?;
                 eprintln!("Quark: AppKit IDE workspace ready");
-                close_launcher_later.send(()).map_err(|error| error.to_string())?;
+                close_launcher_later
+                    .send(())
+                    .map_err(|error| error.to_string())?;
                 Ok(())
             }
             #[cfg(not(target_os = "macos"))]
@@ -6533,8 +6539,7 @@ fn build(ui: &Ui) -> naui::Result<()> {
                 let window = ide_window
                     .upgrade()
                     .ok_or("The Start Window has already closed")?;
-                build_ide(&handle, launch_state.clone(), window)
-                    .map_err(|error| error.to_string())
+                build_ide(&handle, launch_state.clone(), window).map_err(|error| error.to_string())
             }
         });
     native_start_window::show(
