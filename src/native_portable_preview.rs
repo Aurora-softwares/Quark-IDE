@@ -100,6 +100,68 @@ fn design_press_claims_activation(kind: &str) -> bool {
     )
 }
 
+/// The native GTK menu row is a single horizontal box just as in Hydrogen.
+/// Separating construction makes its real widget hierarchy testable under Xvfb.
+#[cfg(target_os = "linux")]
+fn build_gtk_design_menu_bar(
+    node: Node<'_, '_>,
+    path: &[usize],
+    on_select: &SelectElement,
+) -> gtk4::Box {
+    use gtk4::prelude::*;
+
+    let bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    bar.set_halign(gtk4::Align::Start);
+    bar.set_valign(gtk4::Align::Start);
+    bar.set_hexpand(false);
+    for (index, menu) in node
+        .children()
+        .filter(|child| child.is_element() && child.has_tag_name("Menu"))
+        .enumerate()
+    {
+        let button = gtk4::MenuButton::new();
+        button.set_label(menu.attribute("text").unwrap_or("Menu"));
+        button.set_hexpand(false);
+        button.set_halign(gtk4::Align::Start);
+        let popover = gtk4::Popover::new();
+        let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
+        for item in menu
+            .children()
+            .filter(|child| child.is_element() && child.has_tag_name("MenuItem"))
+        {
+            let item_label = gtk4::Label::new(item.attribute("text"));
+            item_label.set_xalign(0.0);
+            item_label.set_margin_start(8);
+            item_label.set_margin_end(8);
+            item_label.set_margin_top(4);
+            item_label.set_margin_bottom(4);
+            contents.append(&item_label);
+        }
+        popover.set_child(Some(&contents));
+        button.set_popover(Some(&popover));
+
+        // This is a selection-only design surface, not an app
+        // whose menus should dispatch user-defined commands.
+        let capture = gtk4::GestureClick::new();
+        capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let selected = on_select.clone();
+        let mut selected_path = path.to_vec();
+        selected_path.push(index);
+        capture.connect_pressed(move |gesture, _, _, _| {
+            selected(selected_path.clone());
+            gesture.set_state(gtk4::EventSequenceState::Claimed);
+        });
+        button.add_controller(capture);
+        let keys = gtk4::EventControllerKey::new();
+        keys.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        keys.connect_key_pressed(|_, _, _, _| gtk4::glib::Propagation::Stop);
+        button.add_controller(keys);
+        bar.append(&button);
+    }
+
+    bar
+}
+
 /// Runtime GTK expansion defaults from Hydrogen's native renderer.
 fn runtime_fills(node: Node<'_, '_>) -> bool {
     match node.attribute("fill") {
@@ -414,54 +476,7 @@ fn render_node(
                     .native_widget()
                     .downcast::<gtk4::Box>()
                     .map_err(|_| "Native GTK menu host is not a GtkBox")?;
-                let bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-                bar.set_halign(gtk4::Align::Start);
-                bar.set_valign(gtk4::Align::Start);
-                bar.set_hexpand(false);
-                for (index, menu) in node
-                    .children()
-                    .filter(|child| child.is_element() && child.has_tag_name("Menu"))
-                    .enumerate()
-                {
-                    let button = gtk4::MenuButton::new();
-                    button.set_label(menu.attribute("text").unwrap_or("Menu"));
-                    button.set_hexpand(false);
-                    button.set_halign(gtk4::Align::Start);
-                    let popover = gtk4::Popover::new();
-                    let contents = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
-                    for item in menu
-                        .children()
-                        .filter(|child| child.is_element() && child.has_tag_name("MenuItem"))
-                    {
-                        let item_label = gtk4::Label::new(item.attribute("text"));
-                        item_label.set_xalign(0.0);
-                        item_label.set_margin_start(8);
-                        item_label.set_margin_end(8);
-                        item_label.set_margin_top(4);
-                        item_label.set_margin_bottom(4);
-                        contents.append(&item_label);
-                    }
-                    popover.set_child(Some(&contents));
-                    button.set_popover(Some(&popover));
-
-                    // This is a selection-only design surface, not an app
-                    // whose menus should dispatch user-defined commands.
-                    let capture = gtk4::GestureClick::new();
-                    capture.set_propagation_phase(gtk4::PropagationPhase::Capture);
-                    let selected = on_select.clone();
-                    let mut selected_path = path.clone();
-                    selected_path.push(index);
-                    capture.connect_pressed(move |gesture, _, _, _| {
-                        selected(selected_path.clone());
-                        gesture.set_state(gtk4::EventSequenceState::Claimed);
-                    });
-                    button.add_controller(capture);
-                    let keys = gtk4::EventControllerKey::new();
-                    keys.set_propagation_phase(gtk4::PropagationPhase::Capture);
-                    keys.connect_key_pressed(|_, _, _, _| gtk4::glib::Propagation::Stop);
-                    button.add_controller(keys);
-                    bar.append(&button);
-                }
+                let bar = build_gtk_design_menu_bar(node, &path, on_select);
                 host.append(&bar);
             }
             #[cfg(not(target_os = "linux"))]
@@ -1373,6 +1388,45 @@ mod tests {
         // breakpoint / vertical stacking behaviour.
         assert_ne!(bar.tag_name().name(), "RowPanel");
         assert!(bar.attribute("breakpoint").is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "Needs a running GTK display; exercised with xvfb-run in CI"]
+    fn gtk_design_menu_bar_is_one_horizontal_row_with_natural_size_buttons() {
+        use gtk4::prelude::*;
+
+        gtk4::init().expect("GTK must initialise inside an Xvfb session");
+        let xml = include_str!("../tests/fixtures/Studio.hyui");
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let menu = parsed
+            .root_element()
+            .children()
+            .find(|node| node.has_tag_name("MenuBar"))
+            .unwrap();
+        let select: SelectElement = Rc::new(|_| {});
+        let bar = build_gtk_design_menu_bar(menu, &[], &select);
+        assert_eq!(bar.orientation(), gtk4::Orientation::Horizontal);
+        assert_eq!(bar.spacing(), 8);
+        assert!(!bar.hexpand());
+        assert_eq!(bar.halign(), gtk4::Align::Start);
+
+        let studio = bar
+            .first_child()
+            .unwrap()
+            .downcast::<gtk4::MenuButton>()
+            .unwrap();
+        let help = studio
+            .next_sibling()
+            .unwrap()
+            .downcast::<gtk4::MenuButton>()
+            .unwrap();
+        assert_eq!(studio.label().as_deref(), Some("Studio"));
+        assert_eq!(help.label().as_deref(), Some("Help"));
+        assert!(!studio.hexpand() && !help.hexpand());
+        assert!(help.next_sibling().is_none());
+        assert!(studio.popover().is_some());
+        assert!(help.popover().is_some());
     }
 
     #[test]
