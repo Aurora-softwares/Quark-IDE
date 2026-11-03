@@ -980,6 +980,7 @@ pub enum StructureEdit {
     MoveLater {
         selected: Vec<usize>,
     },
+    #[cfg(any(target_os = "linux", test))]
     MoveInto {
         selected: Vec<usize>,
         target: Vec<usize>,
@@ -994,6 +995,7 @@ pub fn edit_structure(source: &str, edit: &StructureEdit) -> Result<(String, Vec
         StructureEdit::Insert { selected, kind } => insert_toolbox_control(source, selected, kind),
         StructureEdit::MoveEarlier { selected } => move_sibling(source, selected, true),
         StructureEdit::MoveLater { selected } => move_sibling(source, selected, false),
+        #[cfg(any(target_os = "linux", test))]
         StructureEdit::MoveInto { selected, target } => move_into(source, selected, target),
         StructureEdit::Delete { selected } => {
             let (index, parent) = selected
