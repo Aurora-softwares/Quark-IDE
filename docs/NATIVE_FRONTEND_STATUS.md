@@ -3,7 +3,7 @@
 **Updated:** 2026-11-03
 **Branch:** `Development`
 **Current development version:** `0.6.0`
-**Release status:** 🟡 In Progress — CI passed at the previous verified checkpoint; the latest designer layout changes require a fresh green run and visual acceptance.
+**Release status:** 🟡 In Progress — the HYUI structure editor and native interactive starter are committed; updated CI and native visual/interaction acceptance remain open.
 
 This is the current development record for the Quark frontend. The [Hydrogen — Development project](https://github.com/orgs/Aurora-softwares/projects/4) tracks issue status. A Cargo version or historical tag does not establish a qualified release.
 
@@ -21,7 +21,7 @@ This is the current development record for the Quark frontend. The [Hydrogen —
 | Shell | Start Window, document tabs, native menus/controls through transitional `naui`, OS-specific GTK/libadwaita, AppKit and WinUI presenters | Remove `naui` and legacy egui for the final production architecture; real UI interaction on all hosts ([#100](https://github.com/Aurora-softwares/Quark-IDE/issues/100)) |
 | Editor and project | Hydrogen source editor, Solution Explorer, safe selected-row file actions on Linux, project Build/Run and streamed Output | Native editor option parity, large-workspace behavior, cross-platform file actions and packaged UI execution ([#93](https://github.com/Aurora-softwares/Quark-IDE/issues/93)) |
 | Docking | Shared zone/stack/pin model and GTK drag, overlay, auto-hide and floating work | Direct AppKit/WinUI presenters, resizing, persistence and manual drag/focus acceptance ([#88](https://github.com/Aurora-softwares/Quark-IDE/issues/88)) |
-| Designer | `.hyui` Design/XML views, typed Properties, independent design-time tab choice, GTK layout fixes for Studio widths and runtime fill defaults | Read-only input and visual parity across all OSes; embed Hydrogen's actual renderer ([#98](https://github.com/Aurora-softwares/Quark-IDE/issues/98), [#99](https://github.com/Aurora-softwares/Quark-IDE/issues/99), [#89](https://github.com/Aurora-softwares/Quark-IDE/issues/89)) |
+| Designer | `.hyui` Design/XML views, responsive layout containers, GTK toolbox drag/drop, safe nested insertion/reordering/reparenting/deletion, collapsible Inspector with native supported properties, separate interactive OS Window and layout-only mode, runnable New UI App scaffolding | CI verification, WinUI 3/AppKit gesture parity, direct visual manipulation, runtime anchors/per-state styling in Hydrogen ([#98](https://github.com/Aurora-softwares/Quark-IDE/issues/98), [Hydrogen #185](https://github.com/Aurora-softwares/Hylang-Compiler/issues/185)) and actual renderer parity ([#89](https://github.com/Aurora-softwares/Quark-IDE/issues/89)) |
 | Settings | Versioned shared preferences, atomic writes, compiler/theme controls, GTK live wrap/tab-width and Build save/output choices | Line-number gutter, direct portable presenter behavior, reset and picker acceptance ([#93](https://github.com/Aurora-softwares/Quark-IDE/issues/93)) |
 | Terminal | Persistent PTY/ConPTY session, VT parsing, GTK key forwarding | Direct AppKit/WinUI keyboard/IME and VT grid, lifecycle and full-screen program tests ([#92](https://github.com/Aurora-softwares/Quark-IDE/issues/92)) |
 | Debugging | Debug panel and command placement | Compiler debug metadata/transport, DAP adapter, breakpoints and stepping; Start Debugging remains disabled ([#91](https://github.com/Aurora-softwares/Quark-IDE/issues/91)) |
@@ -40,6 +40,16 @@ Changes committed on `Development` (acceptance still pending):
 **Still outstanding:** visually compare both screenshots again after these changes at 1120px, 800px and 360px; verify native title frame, content layout, keyboard/read-only handling and responsive reflow. Windows/macOS still require their own native AppKit/WinUI presenter acceptance, and the transitional `naui` abstraction must be removed for the final approved architecture (#100). Embedded decoration is an approximation: a separately launched Hydrogen OS window is authoritative.
 
 
+
+## New responsive designer and Inspector — development checkpoint
+
+The nested HYUI structure editor now supports adding actual Label, Button, Input, Select, CheckBox, Slider and other controls to `Window`, `Panel`, `ColumnPanel`, `RowPanel`, `GridPanel`, `ScrollView` and `Tab`. It uses HYUI element-child paths, preserving existing element IDs, event handlers and source text. Dropping onto a container inserts inside it; a selected leaf inserts beside it. The Linux GTK toolbox supports native dragging, and the Inspector exposes Move Earlier/Move Later/Delete and drag-to-reparent. Mutations are deferred until native widget handlers return, preventing widget unparenting within drag/click callbacks. Native New UI App scaffolding produces a Hydrogen `.hyproj`, `Main.hyui`, interactive `Program.hy` and a bundled source library. The Inspector has expandable/collapsible sections that retain state and typed supported Hydrogen style selectors.
+
+New regression tests cover nested insertion, order, parent changing, event-handler retention, invalid drop targets, safe deletion, responsive rows/grids and scroll containers, drag payload isolation, Inspector fold-state independence and no-overwrite starter generation. They are registered in `tests/feature-coverage.json`. These tests do not substitute for real drag/selection/resize acceptance on all three desktops.
+
+**Layout/styling compatibility:** Hydrogen HYUI v1 does **not** support arbitrary x/y/anchor-point positioning, dynamic responsive min/max geometry, or per-state (hover/focus/active/selected/disabled) colours and fonts. Quark must not generate unknown attributes that break compilation. [Hydrogen #185](https://github.com/Aurora-softwares/Hylang-Compiler/issues/185) is the language/parser/native-renderer dependency for those features. Until then, responsive design is expressed using RowPanel/ColumnPanel/GridPanel/ScrollView, `preferredWidth`, `fill`, `breakpoint`, `gap` and other supported properties.
+
+**Current acceptance:** structure editor implementation 🟡 (CI and manual testing outstanding); GTK drag/drop 🟡 (interactive desktop test outstanding); native Inspector 🟡 (platform acceptance outstanding); WinUI 3/AppKit drag/drop 🔴; anchor / full per-state style and font support 🔴 (Hydrogen dependency); no fourth UI framework permitted (Quark #100).
 
 ## Next phase — platform parity and live GUI acceptance
 
