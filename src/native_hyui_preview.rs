@@ -50,11 +50,11 @@ fn compiler_executable(raw: &str, path: Option<&OsStr>) -> Result<PathBuf, Strin
         return fs::canonicalize(input)
             .map_err(|error| format!("Cannot find Hydrogen compiler {value}: {error}"));
     }
-    let mut candidates = vec![value.to_owned()];
-    #[cfg(windows)]
-    if input.extension().is_none() {
-        candidates.push(format!("{value}.exe"));
-    }
+    let candidates = if cfg!(windows) && input.extension().is_none() {
+        vec![value.to_owned(), format!("{value}.exe")]
+    } else {
+        vec![value.to_owned()]
+    };
     for directory in path.into_iter().flat_map(std::env::split_paths) {
         for candidate in &candidates {
             let full = directory.join(candidate);
