@@ -89,10 +89,81 @@ namespace Quark {
             return "";
         }
 
+        // Enumerate the source paths declared in the project manifest without requiring
+        // a native directory enumeration or a file-system service.
+        private static int SourcesArrayStart(string manifest) {
+            int index = 0;
+            while (index < manifest.Length) {
+                int end = index;
+                while (end < manifest.Length && manifest[end] != "\n" && manifest[end] != "\r") { end = end + 1; }
+                int cursor = index;
+                while (cursor < end && (manifest[cursor] == " " || manifest[cursor] == "\t")) { cursor = cursor + 1; }
+                string prefix = "sources";
+                int j = 0;
+                while (j < prefix.Length && cursor + j < end && manifest[cursor + j] == prefix[j]) { j = j + 1; }
+                cursor = cursor + j;
+                if (j == prefix.Length) {
+                    while (cursor < end && (manifest[cursor] == " " || manifest[cursor] == "\t")) { cursor = cursor + 1; }
+                    if (cursor < end && manifest[cursor] == "=") {
+                        cursor = cursor + 1;
+                        while (cursor < end && (manifest[cursor] == " " || manifest[cursor] == "\t")) { cursor = cursor + 1; }
+                        if (cursor < end && manifest[cursor] == "[") { return cursor + 1; }
+                    }
+                }
+                index = end + 1;
+            }
+            return -1;
+        }
+
+        public static string SourceAt(string projectPath, string manifest, int wanted) {
+            if (wanted < 0 || wanted >= 128) { return ""; }
+            int cursor = SourcesArrayStart(manifest);
+            if (cursor < 0) { return ""; }
+            int current = 0;
+            while (cursor < manifest.Length && manifest[cursor] != "]") {
+                if (manifest[cursor] == "\"") {
+                    int first = cursor + 1;
+                    cursor = first;
+                    while (cursor < manifest.Length && manifest[cursor] != "\"") { cursor = cursor + 1; }
+                    string relative = Slice(manifest, first, cursor - first);
+                    if (current == wanted) {
+                        if (!SafeRelative(relative)) { return ""; }
+                        return Join(Directory(projectPath), relative);
+                    }
+                    current = current + 1;
+                }
+                cursor = cursor + 1;
+            }
+            return "";
+        }
+
+        public static int SourceCount(string projectPath, string manifest) {
+            int i = 0;
+            while (i < 128 && SourceAt(projectPath, manifest, i) != "") { i = i + 1; }
+            return i;
+        }
+
+        public static string ExplorerItems(string projectPath, string manifest) {
+            string items = "";
+            int i = 0;
+            int count = SourceCount(projectPath, manifest);
+            while (i < count) {
+                string path = SourceAt(projectPath, manifest, i);
+                if (i > 0) { items = items + "|"; }
+                items = items + BaseName(path);
+                i = i + 1;
+            }
+            string layout = Layout(projectPath, manifest);
+            if (layout != "") {
+                if (items != "") { items = items + "|"; }
+                items = items + BaseName(layout);
+            }
+            if (items != "") { items = items + "|"; }
+            return items + BaseName(projectPath);
+        }
+
         public static string Source(string projectPath, string manifest) {
-            string source = QuotedSetting(manifest, "sources");
-            if (!SafeRelative(source)) { return ""; }
-            return Join(Directory(projectPath), source);
+            return SourceAt(projectPath, manifest, 0);
         }
 
         public static string Layout(string projectPath, string manifest) {

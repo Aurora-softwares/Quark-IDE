@@ -74,6 +74,23 @@ namespace Quark {
                     if (layoutPath != "") { Save(args, layoutPath, true); }
                 }
             }
+            if (handler == "ExploreSelected") {
+                string project = Application.Value(args, "projectState");
+                string manifest = Application.Value(args, "manifestState");
+                if (project != "") {
+                    int chosen = System.Convert.ToInt32(Application.Value(args, "projectFiles"));
+                    int count = Workspace.SourceCount(project, manifest);
+                    if (chosen < count) {
+                        LoadDocument(args, Workspace.SourceAt(project, manifest, chosen), false);
+                    } else if (chosen == count && Workspace.Layout(project, manifest) != "") {
+                        LoadDocument(args, Workspace.Layout(project, manifest), true);
+                    } else {
+                        Application.SetText("output", Workspace.Preview(manifest));
+                        Application.SetText("propertyName", Workspace.BaseName(project));
+                        Application.SetText("propertyType", "Hydrogen project (.hyproj)");
+                    }
+                }
+            }
             if (handler == "ProjectInfo") {
                 string manifest = Application.Value(args, "manifestState");
                 if (manifest == "") { Status("Open a project first."); }
@@ -144,6 +161,7 @@ namespace Quark {
             Application.SetText("manifestState", manifest);
             Application.SetText("projectTitle", Workspace.QuotedSetting(manifest, "name"));
             Application.SetText("projectPathLabel", path);
+            Application.Set("projectFiles", "items", Workspace.ExplorerItems(path, manifest));
             Application.SetText("propertyName", Workspace.BaseName(path));
             Application.SetText("propertyType", "Hydrogen project (.hyproj)");
             Application.SetText("codePath", code);

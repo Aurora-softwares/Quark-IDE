@@ -46,6 +46,16 @@ class QuarkContracts(unittest.TestCase):
         self.assertEqual(by_id("workspaceProjectPicker").attrib["onPick"], "ProjectPicked")
         self.assertIn("System.IO.File.ReadAllText(path)", PROGRAM)
 
+    def test_explorer_is_manifest_driven(self):
+        self.assertEqual(by_id("projectFiles").attrib["onChange"], "ExploreSelected")
+        self.assertIn("Workspace.ExplorerItems(path, manifest)", PROGRAM)
+        self.assertIn('Application.Set("projectFiles", "items"', PROGRAM)
+
+    def test_explorer_selection_resolves_source_and_ui(self):
+        self.assertIn('handler == "ExploreSelected"', PROGRAM)
+        self.assertIn("Workspace.SourceAt(project, manifest, chosen)", PROGRAM)
+        self.assertIn("Workspace.Layout(project, manifest)", PROGRAM)
+
     def test_standalone_pickup_reads_both_file_types(self):
         self.assertEqual(by_id("startSourcePicker").attrib["onPick"], "SourcePicked")
         self.assertEqual(by_id("startUIPicker").attrib["onPick"], "UIPicked")

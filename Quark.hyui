@@ -74,6 +74,7 @@
           <FilePicker id="workspaceProjectPicker" mode="open" text="Open project" onPick="ProjectPicked" onCancel="PickerCancelled" />
           <Separator />
           <Label text="FILES" role="caption" tone="accent" />
+          <ListBox id="projectFiles" items="Open a project to see its files" value="0" height="190" onChange="ExploreSelected" accessibleName="Project source files" />
           <Button id="explorerCode" text="Hydrogen source  ·  .hy" onClick="ShowCode" />
           <Button id="explorerUI" text="Hydrogen UI  ·  .hyui" onClick="ShowUI" />
           <FilePicker id="workspaceSourcePicker" mode="open" text="Open source file" onPick="SourcePicked" onCancel="PickerCancelled" />
