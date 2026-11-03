@@ -2203,6 +2203,18 @@
         "native_commands::tests::macos_ui_launch_reports_missing_bundle_executable",
         "native_commands::tests::macos_ui_launch_rejects_symlinked_bundle_before_open"
       ]
+    },
+    {
+      "id": "native-macos-start-to-ide-transition",
+      "category": "Native Mac Startup",
+      "feature": "The real AppKit Start Window launches a blank workspace or an existing Hydrogen project on a distinct IDE NSWindow, then safely closes the launcher after event dispatch",
+      "platforms": [
+        "darwin"
+      ],
+      "tests": [
+        "native_start_window::macos_transition_tests::smoke_transition_accepts_blank_workspaces",
+        "native_start_window::macos_transition_tests::smoke_transition_only_accepts_explicit_project_paths"
+      ]
     }
   ]
 }
