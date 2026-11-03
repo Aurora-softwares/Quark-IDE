@@ -24,7 +24,10 @@ fn widget_path_name(path: &[usize]) -> String {
     }
     format!(
         "quark-hyui-node:{}",
-        path.iter().map(usize::to_string).collect::<Vec<_>>().join(".")
+        path.iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(".")
     )
 }
 
@@ -36,7 +39,9 @@ fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
     if raw.is_empty() {
         return None;
     }
-    raw.split('.').map(|piece| piece.parse::<usize>().ok()).collect()
+    raw.split('.')
+        .map(|piece| piece.parse::<usize>().ok())
+        .collect()
 }
 
 /// Translate a GTK pointer drop into the nearest known HYUI element. Dropping
@@ -53,8 +58,6 @@ pub fn path_at_drop(surface: &gtk4::Widget, x: f64, y: f64) -> Vec<usize> {
     }
     Vec::new()
 }
-
-
 
 #[cfg(target_os = "linux")]
 const DESIGN_FRAME_CSS: &str = "box.quark-design-frame { border-radius: 12px; \
@@ -399,7 +402,8 @@ fn render_node(
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        row.native_widget().set_widget_name(&widget_path_name(&path));
+        row.native_widget()
+            .set_widget_name(&widget_path_name(&path));
     }
     // Honor the same common layout attributes as the Hydrogen runtime.
     // These are design-time measurements, not changes to the XML source.
@@ -1761,8 +1765,14 @@ mod tests {
 
     #[test]
     fn native_drop_path_marker_rejects_untrusted_or_invalid_identifiers() {
-        for value in ["quark-hyui-node:", "quark-hyui-node:-1", "quark-hyui-node:0.x",
-            "quark-hyui-node:0..2", "not-a-hyui-node:3", "quark-hyui-node:root.1"] {
+        for value in [
+            "quark-hyui-node:",
+            "quark-hyui-node:-1",
+            "quark-hyui-node:0.x",
+            "quark-hyui-node:0..2",
+            "not-a-hyui-node:3",
+            "quark-hyui-node:root.1",
+        ] {
             assert_eq!(parse_widget_path_name(value), None, "{value}");
         }
     }
