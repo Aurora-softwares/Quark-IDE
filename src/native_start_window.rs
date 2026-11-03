@@ -317,7 +317,9 @@ pub fn show(
         let launch = launch.clone();
         let status = status.clone();
         move || {
-            if let Err(error) = create_project_wizard(&ui, window.clone(), launch.clone(), true, false) {
+            if let Err(error) =
+                create_project_wizard(&ui, window.clone(), launch.clone(), true, false)
+            {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
@@ -371,7 +373,11 @@ pub(crate) fn create_project_wizard(
     native_ui_project: bool,
 ) -> naui::Result<()> {
     let wizard = ui.window(
-        if native_ui_project { "Create a Hydrogen UI app" } else { "Create a Hydrogen project" },
+        if native_ui_project {
+            "Create a Hydrogen UI app"
+        } else {
+            "Create a Hydrogen project"
+        },
         640.0,
         450.0,
     )?;
