@@ -1636,6 +1636,40 @@ mod tests {
     }
 
     #[test]
+    fn studio_fixture_title_caption_and_muted_labels_match_hydrogen_css() {
+        let xml = include_str!("../tests/fixtures/Studio.hyui");
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let labels = parsed
+            .descendants()
+            .filter(|node| node.has_tag_name("Label"))
+            .collect::<Vec<_>>();
+        let title = labels.iter().find(|node| node.attribute("role") == Some("title")).unwrap();
+        assert_eq!(
+            hydrogen_gtk_label_classes(
+                title.attribute("role").unwrap_or(""),
+                title.attribute("tone").unwrap_or(""),
+            ),
+            ["title-1"]
+        );
+        let accent = labels.iter().find(|node| {
+            node.attribute("role") == Some("caption")
+                && node.attribute("tone") == Some("accent")
+        }).unwrap();
+        assert_eq!(
+            hydrogen_gtk_label_classes(
+                accent.attribute("role").unwrap_or(""),
+                accent.attribute("tone").unwrap_or(""),
+            ),
+            ["caption", "accent"]
+        );
+        let muted = labels.iter().find(|node| node.attribute("tone") == Some("muted")).unwrap();
+        assert!(hydrogen_gtk_label_classes(
+            muted.attribute("role").unwrap_or(""),
+            muted.attribute("tone").unwrap_or(""),
+        ).contains(&"dim-label"));
+    }
+
+    #[test]
     fn hydrogen_studio_primary_button_uses_exact_runtime_attribute() {
         let xml = include_str!("../tests/fixtures/Studio.hyui");
         let parsed = roxmltree::Document::parse(xml).unwrap();
