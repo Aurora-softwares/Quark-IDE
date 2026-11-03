@@ -32,9 +32,10 @@ Set the compiler executable (default: `hy`) in the Properties pane, then Save, C
 ```sh
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 scripts/check-feature-coverage.py
+bash tests/native-smoke.sh
 ```
 
-These are **structural and contract tests**; passing them does not prove native UI behaviour. Native gates still require the Hydrogen compiler, GTK4/WinUI/AppKit runtime, interactive file picking and text editing, a real build, and a starter UI button event on each host. The compiler's own HYUI preflight test should also be run.
+The Python tests are **structural and contract tests**. The native smoke script (requiring a bootstrapped `hy` compiler and HYUI SDK) builds and executes a real Hydrogen backend test before packaging Quark itself; it does not launch an interactive desktop window. Passing any of these tests does not prove native UI behaviour. Native gates still require the Hydrogen compiler, GTK4/WinUI/AppKit runtime, interactive file picking and text editing, a real build, and a starter UI button event on each host. The compiler's own HYUI preflight test should also be run.
 
 ### Follow-up / release gates
 

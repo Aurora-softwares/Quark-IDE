@@ -1,0 +1,5 @@
+format = 2
+name = "QuarkWorkspaceSmoke"
+version = "0.1.0"
+type = "exe"
+sources = ["tests/WorkspaceSmoke.hy", "src/Quark/Workspace.hy"]
