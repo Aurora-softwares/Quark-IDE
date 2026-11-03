@@ -92,7 +92,6 @@ pub fn create_project(parent: &Path, name: &str, template: Template) -> Result<P
     result
 }
 
-
 /// Create a genuinely runnable native Hydrogen UI app rather than a legacy
 /// flat design document. The Hydrogen.UI library is vendored as Hydrogen
 /// source inside the new project, so a fresh user's project can build
@@ -191,9 +190,9 @@ mod tests {
         let ui = fs::read_to_string(folder.join("Main.hyui")).unwrap();
         let parsed = roxmltree::Document::parse(&ui).unwrap();
         assert!(parsed.root_element().has_tag_name("Window"));
-        assert!(parsed.descendants().any(|node| {
-            node.attribute("onClick") == Some("ShowGreeting")
-        }));
+        assert!(parsed
+            .descendants()
+            .any(|node| { node.attribute("onClick") == Some("ShowGreeting") }));
         assert!(folder.join("Hydrogen.UI/Application.hy").exists());
         assert!(folder.join("Program.hy").exists());
     }
