@@ -96,6 +96,7 @@ pub fn create_project(parent: &Path, name: &str, template: Template) -> Result<P
 /// flat design document. The Hydrogen.UI library is vendored as Hydrogen
 /// source inside the new project, so a fresh user's project can build
 /// without a hard-coded path back into Hydrogen's repository.
+#[cfg(any(feature = "native-ui", test))]
 pub fn create_native_ui_project(parent: &Path, name: &str) -> Result<PathBuf, String> {
     let manifest = create_project(parent, name, Template::Linux)?;
     let folder = manifest
