@@ -39,7 +39,8 @@ class QuarkContracts(unittest.TestCase):
     def test_project_source_paths_allow_multiline_manifest(self):
         self.assertIn('text[cursor] != "]"', WORKSPACE)
         self.assertIn('cursor < text.Length', WORKSPACE)
-        self.assertIn('QuotedSetting(manifest, "sources")', WORKSPACE)
+        self.assertIn("return SourceAt(projectPath, manifest, 0);", WORKSPACE)
+        self.assertIn('manifest[cursor] != "]"', WORKSPACE)
 
     def test_project_picker_loads_real_manifest(self):
         self.assertEqual(by_id("startProjectPicker").attrib["onPick"], "ProjectPicked")
