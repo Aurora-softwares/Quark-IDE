@@ -1525,7 +1525,10 @@ mod tests {
         assert!(frame.has_css_class("card"));
         assert!(frame.property::<bool>("hexpand"));
         assert_eq!(frame.halign(), gtk4::Align::Fill);
-        assert_eq!(frame.child().unwrap(), box_widget.upcast::<gtk4::Widget>());
+        assert_eq!(
+            frame.child().unwrap(),
+            box_widget.clone().upcast::<gtk4::Widget>()
+        );
         assert_eq!(box_widget.margin_start(), 18);
         assert_eq!(box_widget.margin_end(), 18);
         assert_eq!(box_widget.margin_top(), 18);
