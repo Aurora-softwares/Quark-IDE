@@ -1653,15 +1653,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
     open_true_preview.on_click({
         let launch = launch_hydrogen_preview.clone();
-        move || launch(native_hyui_preview::kind_for_button(
-            native_hyui_preview::PreviewButton::OsWindow,
-        ))
+        move || {
+            launch(native_hyui_preview::kind_for_button(
+                native_hyui_preview::PreviewButton::OsWindow,
+            ))
+        }
     });
     open_backend_preview.on_click({
         let launch = launch_hydrogen_preview.clone();
-        move || launch(native_hyui_preview::kind_for_button(
-            native_hyui_preview::PreviewButton::LayoutOnly,
-        ))
+        move || {
+            launch(native_hyui_preview::kind_for_button(
+                native_hyui_preview::PreviewButton::LayoutOnly,
+            ))
+        }
     });
     xml_editor.on_change({
         let state = state.clone();
