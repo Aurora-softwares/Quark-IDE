@@ -2054,7 +2054,9 @@
       "feature": "RowPanel treats preferredWidth as a minimum, expands the trailing card into available width and wraps panels when they cannot fit even above the breakpoint",
       "tests": [
         "native_portable_preview::tests::preferred_widths_are_minimums_and_summary_expands_to_fill_remaining_row",
-        "native_portable_preview::tests::preferred_width_overflow_wraps_even_above_explicit_breakpoint"
+        "native_portable_preview::tests::preferred_width_overflow_wraps_even_above_explicit_breakpoint",
+        "native_portable_preview::tests::stacked_responsive_panel_shrinks_even_when_preferred_width_is_larger",
+        "native_portable_preview::tests::responsive_panel_widths_stay_bounded_across_viewports"
       ]
     },
     {
