@@ -57,6 +57,9 @@ mod native_start_window;
 #[cfg(target_os = "linux")]
 #[path = "../native_syntax.rs"]
 mod native_syntax;
+#[cfg(target_os = "macos")]
+#[path = "../native_syntax_macos.rs"]
+mod native_syntax_macos;
 #[path = "../native_terminal.rs"]
 mod native_terminal;
 #[path = "../native_terminal_screen.rs"]
@@ -833,6 +836,20 @@ fn split_extent(split: &naui::SplitView, fallback: f64) -> f64 {
             }
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        // AppKit's NSSplitView supplies its current frame dimensions. Do not
+        // use Quark's initial 1480 x 860 estimates after maximise/restore.
+        let frame = split.native_split_view().frame();
+        let size = if split.orientation() == Orientation::Horizontal {
+            frame.size.width
+        } else {
+            frame.size.height
+        };
+        if size.is_finite() && size > 0.0 {
+            return size;
+        }
+    }
     let _ = split;
     fallback
 }
@@ -1394,12 +1411,22 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let document_width = Rc::new(Cell::new(620.0_f64));
     type DocumentRelayout = Rc<dyn Fn()>;
     let document_relayout: Rc<RefCell<Option<DocumentRelayout>>> = Rc::new(RefCell::new(None));
+    // The actual editor viewport is drawn again after native window resize.
+    // Defer AppKit splitter correction until the redraw callback returns.
+    #[cfg(target_os = "macos")]
+    let mac_dock_relayout: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
     let width_signal = ui.tasks().channel({
         let width = document_width.clone();
         let relayout = document_relayout.clone();
+        #[cfg(target_os = "macos")]
+        let dock_relayout = mac_dock_relayout.clone();
         move |next_width: f64| {
             if next_width > 0.0 && (width.get() - next_width).abs() > 6.0 {
                 width.set(next_width);
+                #[cfg(target_os = "macos")]
+                if let Some(adjust) = dock_relayout.borrow().as_ref() {
+                    adjust();
+                }
                 if let Some(redraw) = relayout.borrow().as_ref() {
                     redraw();
                 }
@@ -1753,12 +1780,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     xml_editor.on_change({
+        #[cfg(target_os = "macos")]
+        let highlighted_editor = xml_editor.clone();
         let state = state.clone();
         let canvas = canvas.clone();
         let status = status.clone();
         let sync_xml = sync_xml.clone();
         let reload_preview = reload_preview.clone();
         move |text| {
+            #[cfg(target_os = "macos")]
+            native_syntax_macos::highlight(&highlighted_editor, text, true);
             if sync_xml.get() {
                 return;
             }
@@ -2044,6 +2075,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         Some(Ok(())) => {
                             sync_xml.set(true);
                             xml_editor.set_text(&updated);
+
+                            #[cfg(target_os = "macos")]
+
+                            native_syntax_macos::highlight(&xml_editor, &updated, true);
                             sync_xml.set(false);
                             status.set_text("Hydrogen UI property updated");
                             if let Some(refresh) = reload_preview.borrow().as_ref() {
@@ -2096,6 +2131,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             *selected_xml_path.borrow_mut() = path;
                             sync_xml.set(true);
                             xml_editor.set_text(&next);
+
+                            #[cfg(target_os = "macos")]
+
+                            native_syntax_macos::highlight(&xml_editor, &next, true);
                             sync_xml.set(false);
                             status.set_text("Hydrogen UI updated — save to persist");
                             if let Some(refresh) = reload_preview.borrow().as_ref() {
@@ -3381,11 +3420,19 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 < right
                     .iter()
                     .position(|s| s.id == native_docking::DockId::Solution);
-            inspector.set_position(right_split_position(
-                split_extent(&inspector, 795.0),
-                sizes.properties,
-                first,
-            ));
+            #[cfg(target_os = "macos")]
+            let both_right_pinned = [native_docking::DockId::Solution,
+                native_docking::DockId::Properties]
+                .iter().all(|id| order.visible(*id, None));
+            #[cfg(not(target_os = "macos"))]
+            let both_right_pinned = true;
+            if both_right_pinned {
+                inspector.set_position(right_split_position(
+                    split_extent(&inspector, 795.0),
+                    sizes.properties,
+                    first,
+                ));
+            }
         }
     });
     let active_dock = Rc::new(Cell::new(None::<native_docking::DockId>));
@@ -4041,11 +4088,101 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             );
         }
     });
-    // GTK auto-hide must not change AppKit or WinUI splitter geometry.
+    // AppKit must react to pin/unpin just as GTK does.  In particular the
+    // right split must stop reserving a second pane for unpinned Properties.
+    // Use the native NSSplitView rather than clearing/rebuilding tool widgets,
+    // which would lose their search, selection and editor state.
     #[cfg(target_os = "macos")]
-    macos_transition_checkpoint("4016: let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});");
-    #[cfg(not(target_os = "linux"))]
+    let refresh_docks: Rc<dyn Fn()> = Rc::new({
+        let model = dock_model.clone();
+        let active = active_dock.clone();
+        let inspector = inspector.clone();
+        let left_split = left_split.clone();
+        let main_workspace = main_workspace.clone();
+        let document_workspace = document_workspace.clone();
+        let sizes = pane_sizes.clone();
+        move || {
+            use native_docking::{DockId, DockZone};
+            let layout = model.borrow();
+            let visible = |id| layout
+                .section(id)
+                .is_some_and(|entry| entry.zone == id.default_zone()
+                    && layout.visible(id, active.get()));
+            let solution_open = visible(DockId::Solution);
+            let properties_open = visible(DockId::Properties);
+            let preferred = sizes.get();
+            // A zero minimum lets the absent panel relinquish *all* space.
+            // A generous position is clamped by NSSplitView's actual bounds,
+            // unlike the fixed 795px position that left an empty panel behind.
+            inspector.set_min_sizes(0.0, 0.0);
+            match (solution_open, properties_open) {
+                (true, true) => inspector.set_position(right_split_position(
+                    795.0, preferred.properties, false,
+                )),
+                (true, false) => inspector.set_position(100_000.0),
+                (false, true) => inspector.set_position(0.0),
+                (false, false) => inspector.set_position(0.0),
+            }
+            let left_open = [DockId::Toolbox, DockId::Symbols, DockId::Search,
+                DockId::Server, DockId::Data].iter().any(|id| visible(*id));
+            left_split.set_min_sizes(0.0, 200.0);
+            left_split.set_position(if left_open {
+                preferred.toolbox.max(155.0)
+            } else {
+                native_shell::SIDE_RAIL_WIDTH
+            });
+            // These start-pane positions are intentionally not recomputed
+            // from a guessed window width: AppKit owns window resize.
+            let _ = (&main_workspace, &document_workspace);
+        }
+    });
+    #[cfg(target_os = "windows")]
     let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
+    #[cfg(target_os = "macos")]
+    {
+        let main = main_workspace.clone();
+        let document = document_workspace.clone();
+        let inspector = inspector.clone();
+        let sizes = pane_sizes.clone();
+        let dock = dock_model.clone();
+        let active = active_dock.clone();
+        let refresh = refresh_docks.clone();
+        *mac_dock_relayout.borrow_mut() = Some(Rc::new(move || {
+            let saved = sizes.get();
+            let right_open = [native_docking::DockId::Solution,
+                native_docking::DockId::Properties].iter().any(|id| {
+                let layout = dock.borrow();
+                layout.visible(*id, active.get())
+                    && layout.section(*id)
+                        .is_some_and(|entry| entry.zone == native_docking::DockZone::Right)
+            });
+            let right_width = if right_open {
+                saved.inspector.max(220.0)
+            } else {
+                native_shell::SIDE_RAIL_WIDTH
+            };
+            main.set_position(
+                (split_extent(&main, 1480.0) - right_width - 6.0).max(200.0)
+            );
+            document.set_position(
+                (split_extent(&document, 860.0) - saved.output.max(100.0) - 6.0)
+                    .max(160.0)
+            );
+            let both = {
+                let layout = dock.borrow();
+                layout.visible(native_docking::DockId::Solution, active.get())
+                    && layout.visible(native_docking::DockId::Properties, active.get())
+            };
+            if both {
+                inspector.set_position(
+                    (split_extent(&inspector, 795.0) - saved.properties - 6.0)
+                        .max(100.0)
+                );
+            } else {
+                refresh();
+            }
+        }));
+    }
     #[cfg(target_os = "linux")]
     {
         left_split.set_min_sizes(native_shell::SIDE_RAIL_WIDTH, 200.0);
@@ -5244,6 +5381,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     if let Ok(xml) = doc.source() {
                         sync_xml.set(true);
                         xml_editor.set_text(&xml);
+
+                        #[cfg(target_os = "macos")]
+
+                        native_syntax_macos::highlight(&xml_editor, &xml, true);
                         sync_xml.set(false);
                     }
                 }
@@ -5363,9 +5504,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
 
     editor.on_change({
+        #[cfg(target_os = "macos")]
+        let highlighted_editor = editor.clone();
         let state = state.clone();
         let symbols_list = symbols_list.clone();
         move |text| {
+            #[cfg(target_os = "macos")]
+            native_syntax_macos::highlight(&highlighted_editor, text, false);
             let mut ide = state.borrow_mut();
             if let Some(document) = ide.document.as_mut() {
                 document.text = text.to_owned();
@@ -5467,6 +5612,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             .min(tabs.len().saturating_sub(capacity)),
                     );
                     editor.set_text(&text);
+
+                    #[cfg(target_os = "macos")]
+
+                    native_syntax_macos::highlight(&editor, &text, false);
                     symbols_list.set_items(&project_symbols(&state.borrow()));
                     show_page(Page::Code);
                     status.set_text(&format!("Editing {}", path.display()));
@@ -5961,6 +6110,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                             Ok(xml) => {
                                 sync_xml.set(true);
                                 xml_editor.set_text(&xml);
+
+                                #[cfg(target_os = "macos")]
+
+                                native_syntax_macos::highlight(&xml_editor, &xml, true);
                                 sync_xml.set(false);
                             }
                             Err(error) => status.set_text(&format!(
@@ -5998,6 +6151,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 Some(Ok(xml)) => {
                     sync_xml.set(true);
                     xml_editor.set_text(&xml);
+
+                    #[cfg(target_os = "macos")]
+
+                    native_syntax_macos::highlight(&xml_editor, &xml, true);
                     sync_xml.set(false);
                 }
                 Some(Err(error)) => {
@@ -6491,6 +6648,10 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     };
     if let Some(text) = initial_document.0 {
         editor.set_text(&text);
+
+        #[cfg(target_os = "macos")]
+
+        native_syntax_macos::highlight(&editor, &text, false);
         show_page(Page::Code);
     } else if initial_document.1 {
         show_page(Page::Design);
