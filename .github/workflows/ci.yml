@@ -66,7 +66,13 @@ jobs:
         run: cargo build --release --no-default-features --features native-ui --bin quark-native
       - name: AppKit startup lifetime on macOS
         if: runner.os == 'macOS'
-        run: python3 scripts/macos-startup-smoke.py target/release/quark-native
+        run: python3 scripts/macos-startup-smoke.py target/release/quark-native start
+      - name: AppKit blank workspace transition on macOS
+        if: runner.os == 'macOS'
+        run: python3 scripts/macos-startup-smoke.py target/release/quark-native empty
+      - name: AppKit existing project transition on macOS
+        if: runner.os == 'macOS'
+        run: python3 scripts/macos-startup-smoke.py target/release/quark-native project
       - name: Package macOS AppKit application
         if: runner.os == 'macOS'
         run: bash scripts/package-macos-app.sh target/release/quark-native dist
