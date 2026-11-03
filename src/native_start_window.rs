@@ -338,7 +338,57 @@ pub fn show(
 
     window.set_child(&root);
     window.show();
+
+    // Opt-in macOS CI hook. Schedule the exact same start transition as a
+    // real button click so CI can catch NSWindow lifetime crashes on both
+    // blank and existing projects. Never silently auto-open anything in
+    // ordinary sessions.
+    #[cfg(target_os = "macos")]
+    if let Ok(mode) = std::env::var("QUARK_CI_MACOS_TRANSITION") {
+        match macos_smoke_action(&mode) {
+            Some(action) => {
+                eprintln!("Quark: AppKit transition smoke requested");
+                if let Err(error) = launch(action) {
+                    eprintln!("Quark: cannot schedule AppKit transition: {error}");
+                }
+            }
+            None => eprintln!("Quark: ignoring invalid AppKit smoke transition request"),
+        }
+    }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_smoke_action(mode: &str) -> Option<Action> {
+    match mode {
+        "empty" => Some(Action::Empty),
+        value => value
+            .strip_prefix("project:")
+            .filter(|path| !path.trim().is_empty())
+            .map(|path| Action::Project(PathBuf::from(path))),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_transition_tests {
+    use super::*;
+
+    #[test]
+    fn smoke_transition_accepts_blank_workspaces() {
+        assert_eq!(macos_smoke_action("empty"), Some(Action::Empty));
+    }
+
+    #[test]
+    fn smoke_transition_only_accepts_explicit_project_paths() {
+        let project = PathBuf::from("/tmp/quark smoke/Test.hyproj");
+        assert_eq!(
+            macos_smoke_action("project:/tmp/quark smoke/Test.hyproj"),
+            Some(Action::Project(project))
+        );
+        assert_eq!(macos_smoke_action("project:"), None);
+        assert_eq!(macos_smoke_action("folder:/tmp"), None);
+        assert_eq!(macos_smoke_action("anything"), None);
+    }
 }
 
 fn start_card(
