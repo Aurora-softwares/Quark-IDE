@@ -44,6 +44,16 @@ fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
         .collect()
 }
 
+/// Dragging an existing control uses stable hierarchy indices in the
+/// drag payload. The receiving widget verifies the source path still exists.
+pub fn native_move_drag_payload(path: &[usize]) -> String {
+    format!("quark-move:{}", widget_path_name(path))
+}
+
+pub fn native_move_drag_path(payload: &str) -> Option<Vec<usize>> {
+    parse_widget_path_name(payload.strip_prefix("quark-move:")?)
+}
+
 /// Translate a GTK pointer drop into the nearest known HYUI element. Dropping
 /// on whitespace selects the Window as the destination.
 #[cfg(target_os = "linux")]
@@ -1761,6 +1771,20 @@ mod tests {
         for path in [vec![], vec![0], vec![1, 3, 4], vec![10, 2, 0, 7]] {
             assert_eq!(parse_widget_path_name(&widget_path_name(&path)), Some(path));
         }
+    }
+
+    #[test]
+    fn native_move_payload_round_trips_selected_nested_controls() {
+        for path in [vec![0], vec![0, 2, 1], vec![5, 1]] {
+            let serialized = native_move_drag_payload(&path);
+            assert_eq!(native_move_drag_path(&serialized), Some(path));
+        }
+    }
+
+    #[test]
+    fn native_move_payload_cannot_treat_toolbox_names_as_paths() {
+        assert!(native_move_drag_path("quark-toolbox:Button").is_none());
+        assert!(native_move_drag_path("quark-move:bad").is_none());
     }
 
     #[test]
