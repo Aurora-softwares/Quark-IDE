@@ -3,7 +3,7 @@
 **Updated:** 2026-11-03
 **Branch:** `Development`
 **Current development version:** `0.6.0`
-**Release status:** 🟡 In Progress — development CI is green; native interaction and release acceptance remain open.
+**Release status:** 🟡 In Progress — CI passed at the previous verified checkpoint; the latest designer layout changes require a fresh green run and visual acceptance.
 
 This is the current development record for the Quark frontend. The [Hydrogen — Development project](https://github.com/orgs/Aurora-softwares/projects/4) tracks issue status. A Cargo version or historical tag does not establish a qualified release.
 
@@ -26,7 +26,20 @@ This is the current development record for the Quark frontend. The [Hydrogen —
 | Terminal | Persistent PTY/ConPTY session, VT parsing, GTK key forwarding | Direct AppKit/WinUI keyboard/IME and VT grid, lifecycle and full-screen program tests ([#92](https://github.com/Aurora-softwares/Quark-IDE/issues/92)) |
 | Debugging | Debug panel and command placement | Compiler debug metadata/transport, DAP adapter, breakpoints and stepping; Start Debugging remains disabled ([#91](https://github.com/Aurora-softwares/Quark-IDE/issues/91)) |
 
-The Studio designer currently honors explicit `RowPanel.preferredWidth` values of 600px and 340px, propagates container width, follows native horizontal fill defaults and renders GTK menu groups as menu buttons. Its embedded title frame remains a design-time approximation; the separately launched Hydrogen window is the visual authority. The GTK layout changes have unit coverage but still need matched screenshots at 1120, 800 and 360 pixels on all supported platforms.
+## Studio HYUI side-by-side screenshot review — 2026-11-03
+
+The user compared Quark's embedded Studio designer to the **same built Hydrogen GTK application**. The reported differences were at the container level: Studio/Help appeared as two full-width, vertically stacked dropdowns instead of a compact horizontal menu; card headings and checkboxes were centred; settings and summary cards had the wrong spacing and width; card borders/padding and primary button colour differed; and labels were styled with Quark's palette rather than Hydrogen's GTK role classes.
+
+Changes committed on `Development` (acceptance still pending):
+- 🟡 **Menus:** a dedicated horizontal GTK box containing non-expanding `GtkMenuButton` siblings, selected in design mode without dispatching Hydrogen actions.
+- 🟡 **Cards:** real native `GtkFrame` with the `card` style class and in-frame margins matching Hydrogen's `Panel.padding`; panel titles and checkboxes/switches are left-aligned.
+- 🟡 **Proportions:** preferred widths are minimums rather than exact fixed sizes. The Studio settings panel requests 600px, the workspace panel at least 340px and grows into remaining space; when both cannot fit, RowPanel stacks even if the configured breakpoint has not yet been reached.
+- 🟡 **Theme fidelity:** the Linux designer applies Hydrogen's `title-1`, `title-3`, `caption`, `dim-label`, `accent`, `heading` and `suggested-action` GTK classes directly rather than painting or guessing equivalent text/button styles.
+- 🟢 **Regression coverage added:** pure unit tests for preferred widths, overflow/wrap, menu grouping, style class mappings and primary button semantics. Linux CI now includes display-backed Xvfb tests that inspect actual GTK menu orientation and card/child padding. Those jobs must pass on the *current* commit before any new green-dot verification claims.
+
+**Still outstanding:** visually compare both screenshots again after these changes at 1120px, 800px and 360px; verify native title frame, content layout, keyboard/read-only handling and responsive reflow. Windows/macOS still require their own native AppKit/WinUI presenter acceptance, and the transitional `naui` abstraction must be removed for the final approved architecture (#100). Embedded decoration is an approximation: a separately launched Hydrogen OS window is authoritative.
+
+
 
 ## Next phase — platform parity and live GUI acceptance
 
