@@ -2068,6 +2068,26 @@
       "platforms": [
         "linux"
       ]
+    },
+    {
+      "id": "native-hyui-os-window-interactive",
+      "category": "Native Interface Designer",
+      "feature": "The default OS Window launches the actual Hydrogen backend while an explicitly labelled layout-only preview avoids event handlers",
+      "tests": [
+        "native_hyui_preview::tests::os_window_is_interactive_and_layout_preview_is_explicitly_read_only",
+        "native_hyui_preview::tests::application_preview_compiles_project_using_native_runtime_not_a_shell",
+        "native_hyui_preview::tests::native_window_mode_never_silently_builds_a_backend"
+      ]
+    },
+    {
+      "id": "native-hyui-compiler-path-runtime",
+      "category": "Native Interface Designer",
+      "feature": "Hydrogen UI backend launches resolve PATH compiler names to absolute executables before the native runtime changes working directory",
+      "tests": [
+        "native_hyui_preview::tests::compiler_name_on_path_resolves_to_absolute_path_before_runtime_changes_cwd",
+        "native_hyui_preview::tests::missing_compiler_is_an_error_not_an_unresponsive_window",
+        "native_hyui_preview::tests::application_preview_compiles_project_using_native_runtime_not_a_shell"
+      ]
     }
   ]
 }
