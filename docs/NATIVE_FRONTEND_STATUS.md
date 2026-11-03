@@ -5,12 +5,15 @@
 **Current development version:** 0.6.0 (Hydrogen — Development project).
 **Release status:** NOT READY — must verify native builds, GUI behaviour and the Hydrogen debugger.
 
-The latest Linux CI repair removes an unused GTK import and makes the designer
-layout tests Clippy-clean. Local Linux verification: native Clippy with warnings
-denied, 189 native tests passed (3 ignored), and the feature register reports
-217 applicable features with at least two tests each. The next target is a green
-three-platform CI run followed by live GUI acceptance; the release gates below
-remain open until those checks succeed.
+The latest Linux CI repair removes an unused GTK import, makes the designer
+layout tests Clippy-clean, and installs GTK4/libadwaita headers in the Ubuntu
+quality job so its native test inventory can compile. A failed inventory now
+prints Cargo's diagnostic. Local Linux verification: native and legacy Clippy
+with warnings denied, 189 native tests passed (3 ignored), 450 legacy tests
+passed, 11 feature-gate tests passed, the optimized native binary built, and
+the feature register reports 217 applicable features with at least two tests
+each. The next target is a green three-platform CI run followed by live GUI
+acceptance; the release gates below remain open until those checks succeed.
 
 This is the source of truth for the current implementation after the native Settings, panel, Hydrogen, terminal, and visual-design work. A checked-in implementation is **not** a successful runtime test. Do not treat this file as a claim that all features are finished.
 

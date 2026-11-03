@@ -65,7 +65,13 @@ def listing(ignored=False):
         ]
         if ignored:
             command.append("--ignored")
-        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
+        try:
+            result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=True)
+        except subprocess.CalledProcessError as error:
+            raise SystemExit(
+                f"Cannot enumerate {frontend} tests (exit {error.returncode}):\n"
+                f"{error.stderr.strip()}"
+            ) from error
         names.update(test_names(result.stdout))
     return names
 

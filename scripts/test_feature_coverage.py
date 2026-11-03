@@ -1,6 +1,7 @@
 """Regressions for the coverage gate itself; no third-party Python packages."""
 import importlib.util
 from pathlib import Path
+import subprocess
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -75,6 +76,14 @@ class CoverageGateTests(unittest.TestCase):
             )
         for call in run.call_args_list:
             self.assertIn("--ignored", call.args[0])
+
+    def test_test_listing_failure_reports_cargo_diagnostics(self):
+        failure = subprocess.CalledProcessError(
+            101, ["cargo", "test"], stderr="GTK4 development files missing"
+        )
+        with patch.object(gate.subprocess, "run", side_effect=failure):
+            with self.assertRaisesRegex(SystemExit, "GTK4 development files missing"):
+                gate.listing()
 
     def test_empty_and_invalid_registers_fail(self):
         self.assertTrue(gate.validate({}, set()))
