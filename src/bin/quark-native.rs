@@ -1596,12 +1596,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             }
             let runtime = std::env::var("QUARK_HYUI_RUNTIME").unwrap_or_else(|_| "hyui".to_owned());
-            let compiler = match native_compiler::resolve() {
-                Ok(executable) => executable,
-                Err(error) => {
-                    status.set_text(&error);
-                    return;
+            let compiler = if kind == native_hyui_preview::PreviewKind::Application {
+                match native_compiler::resolve() {
+                    Ok(executable) => executable,
+                    Err(error) => {
+                        status.set_text(&error);
+                        return;
+                    }
                 }
+            } else {
+                // The deliberately noninteractive layout-only preview does
+                // not need a working compiler or any Hydrogen backend.
+                String::new()
             };
             let process =
                 native_hyui_preview::command(&runtime, &path, project.as_deref(), &compiler, kind);
