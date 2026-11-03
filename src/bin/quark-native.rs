@@ -2162,6 +2162,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             // The Inspector groups fields into collapsible native sections.
             // Each section is a real widget container (not an HTML/webview
             // imitation) and stays folded while the selection changes.
+            // Drag the selected element from this GTK Inspector handle into
+            // another responsive container. The native controls in the
+            // preview stay selection-only and cannot dispatch app events.
+            #[cfg(target_os = "linux")]
+            if !path.is_empty() {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                if let Ok(grip) = ui.button("⠿ Drag selected into layout") {
+                    let source = gtk4::DragSource::new();
+                    source.set_actions(gtk4::gdk::DragAction::MOVE);
+                    let payload = native_portable_preview::native_move_drag_payload(&path);
+                    source.connect_prepare(move |_, _, _| {
+                        Some(gtk4::gdk::ContentProvider::for_value(&payload.to_value()))
+                    });
+                    grip.native_widget().add_controller(source);
+                    native_property_content.append(&grip);
+                }
+            }
             // Reorder the selected component within its responsive parent.
             // These actions work on every OS, even before platform-specific
             // pointer drag/drop parity has been completed.
@@ -2342,15 +2360,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // determines the nested HYUI insertion location. This is not a
         // painted/fake drag-and-drop surface.
         let surface: gtk4::Widget = portable_preview.native_widget().upcast();
-        let target = gtk4::DropTarget::new(String::static_type(), gtk4::gdk::DragAction::COPY);
+        let target = gtk4::DropTarget::new(
+            String::static_type(),
+            gtk4::gdk::DragAction::COPY | gtk4::gdk::DragAction::MOVE,
+        );
         let surface_at_drop = surface.clone();
         let sender = structural_edit_later.clone();
         let state_for_drop = state.clone();
         target.connect_drop(move |_, value, x, y| {
             let Ok(payload) = value.get::<String>() else {
-                return false;
-            };
-            let Some(kind) = payload.strip_prefix("quark-toolbox:") else {
                 return false;
             };
             if !state_for_drop
@@ -2361,13 +2379,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             {
                 return false;
             }
-            let selected = native_portable_preview::path_at_drop(&surface_at_drop, x, y);
-            sender
-                .send(native_ui_properties::StructureEdit::Insert {
-                    selected,
+            let destination = native_portable_preview::path_at_drop(&surface_at_drop, x, y);
+            let edit = if let Some(kind) = payload.strip_prefix("quark-toolbox:") {
+                native_ui_properties::StructureEdit::Insert {
+                    selected: destination,
                     kind: kind.to_owned(),
-                })
-                .is_ok()
+                }
+            } else if let Some(selected) = native_portable_preview::native_move_drag_path(&payload) {
+                native_ui_properties::StructureEdit::MoveInto {
+                    selected,
+                    target: destination,
+                }
+            } else {
+                return false;
+            };
+            sender.send(edit).is_ok()
         });
         surface.add_controller(target);
     }
