@@ -919,7 +919,7 @@ mod tests {
         let linked = temp.path().join("Link.app");
         symlink(&app, &linked).unwrap();
         let error = launch_built(&linked, temp.path(), true).unwrap_err();
-        assert!(error.contains("symbolic link"), "{error}");
+        assert!(error.contains("linked build artifact"), "{error}");
     }
 
     fn sample_plan(dir: &Path) -> BuildPlan {
