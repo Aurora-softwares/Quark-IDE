@@ -1926,6 +1926,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let properties_toolbar = properties_controls.row.clone();
     let flat_properties = ui.stack(Orientation::Vertical)?;
     flat_properties.set_spacing(7.0);
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: properties flat stack created");
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
@@ -1952,6 +1954,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Build the complete Properties editor before inserting it. Reparenting
     // an already mounted NSView (or removing the section header and inserting
     // it again) can raise an Objective-C AppKit exception during Start -> IDE.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Properties flat control fields created");
     let native_property_content = ui.stack(Orientation::Vertical)?;
     native_property_content.set_spacing(4.0);
     let native_property_scroll = ui.scroll()?;
@@ -1966,6 +1970,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // parent and add only the content. Do not clear/re-add the header.
     properties_pane.append(&property_editor);
     properties_pane.set_sizing(Sizing::fill());
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Properties header retained; content mounted");
 
     type PropertyRefresh = Rc<dyn Fn()>;
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
@@ -1986,6 +1992,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
     // Deliver selection after native click callbacks return, avoiding removal
     // of the active AppKit/WinUI/GTK control from within its own handler.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Inspector fold task channel created");
     let select_element_later = ui.tasks().channel({
         let selected_xml_path = selected_xml_path.clone();
         let reload_properties = reload_properties.clone();
@@ -2057,6 +2065,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Native structure edits from the toolbox, drop surface and Inspector
     // must run AFTER GTK/AppKit/WinUI input callbacks return. Destroying the
     // selected widget from its own drag event would cause use-after-unparent.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Inspector XML callbacks created");
     let structural_edit_later = ui.tasks().channel({
         let state = state.clone();
         let selected_xml_path = selected_xml_path.clone();
@@ -2450,6 +2460,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     #[cfg(target_os = "macos")]
     macos_transition_checkpoint("2441: let select_native_element: native_portable_preview::Select");
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Inspector native properties and callbacks ready");
     let select_native_element: native_portable_preview::SelectElement = Rc::new({
         let select_element_later = select_element_later.clone();
         move |path| {
