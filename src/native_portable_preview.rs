@@ -16,6 +16,46 @@ pub type SelectElement = Rc<dyn Fn(Vec<usize>)>;
 /// and the available editor viewport. Deliberately not part of Window.padding.
 pub const DESIGN_VIEWPORT_INSET: f64 = 16.0;
 
+/// Stable, non-rendered identifier for mapping GTK drop coordinates back to
+/// nested HYUI element paths without adding selection chrome to the app UI.
+fn widget_path_name(path: &[usize]) -> String {
+    if path.is_empty() {
+        return "quark-hyui-node:root".to_owned();
+    }
+    format!(
+        "quark-hyui-node:{}",
+        path.iter().map(usize::to_string).collect::<Vec<_>>().join(".")
+    )
+}
+
+fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
+    let raw = name.strip_prefix("quark-hyui-node:")?;
+    if raw == "root" {
+        return Some(Vec::new());
+    }
+    if raw.is_empty() {
+        return None;
+    }
+    raw.split('.').map(|piece| piece.parse::<usize>().ok()).collect()
+}
+
+/// Translate a GTK pointer drop into the nearest known HYUI element. Dropping
+/// on whitespace selects the Window as the destination.
+#[cfg(target_os = "linux")]
+pub fn path_at_drop(surface: &gtk4::Widget, x: f64, y: f64) -> Vec<usize> {
+    use gtk4::prelude::*;
+    let mut current = surface.pick(x, y, gtk4::PickFlags::DEFAULT);
+    while let Some(widget) = current {
+        if let Some(path) = parse_widget_path_name(&widget.widget_name()) {
+            return path;
+        }
+        current = widget.parent();
+    }
+    Vec::new()
+}
+
+
+
 #[cfg(target_os = "linux")]
 const DESIGN_FRAME_CSS: &str = "box.quark-design-frame { border-radius: 12px; \
       box-shadow: 0 6px 18px alpha(currentColor, 0.18); }";
@@ -355,6 +395,12 @@ fn render_node(
     }
     let row = ui.stack(Orientation::Vertical).map_err(|e| e.to_string())?;
     row.set_spacing(0.0);
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+        row.native_widget().set_widget_name(&widget_path_name(&path));
+    }
     // Honor the same common layout attributes as the Hydrogen runtime.
     // These are design-time measurements, not changes to the XML source.
     if let Some(width) = node
@@ -1704,6 +1750,21 @@ mod tests {
             .unwrap();
         assert_ne!(cancel.attribute("primary"), Some("true"));
         assert!(runtime_fills(cancel));
+    }
+
+    #[test]
+    fn native_drop_path_marker_round_trips_nested_hyui_selection() {
+        for path in [vec![], vec![0], vec![1, 3, 4], vec![10, 2, 0, 7]] {
+            assert_eq!(parse_widget_path_name(&widget_path_name(&path)), Some(path));
+        }
+    }
+
+    #[test]
+    fn native_drop_path_marker_rejects_untrusted_or_invalid_identifiers() {
+        for value in ["quark-hyui-node:", "quark-hyui-node:-1", "quark-hyui-node:0.x",
+            "quark-hyui-node:0..2", "not-a-hyui-node:3", "quark-hyui-node:root.1"] {
+            assert_eq!(parse_widget_path_name(value), None, "{value}");
+        }
     }
 
     #[test]
