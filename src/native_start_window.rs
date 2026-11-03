@@ -141,7 +141,11 @@ pub fn show(
         let status = status.clone();
         let pending = pending.clone();
         move |action: Action| {
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: UI task received launcher action");
             if let Err(error) = launch(action) {
+                #[cfg(target_os = "macos")]
+                eprintln!("Quark AppKit transition: launch returned an error");
                 pending.set(false);
                 status.set_text(&format!("Cannot open workspace: {error}"));
             }
@@ -151,10 +155,16 @@ pub fn show(
         let pending = pending.clone();
         let status = status.clone();
         move |action| {
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: scheduling launcher action");
             if pending.replace(true) {
                 return Ok(());
             }
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: updating launcher status");
             status.set_text("Opening workspace…");
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: posting UI channel");
             if let Err(error) = sender.send(action) {
                 pending.set(false);
                 return Err(error.to_string());
