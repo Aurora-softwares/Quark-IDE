@@ -426,7 +426,9 @@ fn render_node(
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
-        row.set_sizing(Sizing::new().width(Length::Fixed(width.max(available_width).min(2400.0))));
+        row.set_sizing(Sizing::new().width(Length::Fixed(
+            responsive_control_width(width, available_width),
+        )));
     } else if runtime_fills(node) {
         // Hydrogen defaults fill=true for ordinary content. A non-filling
         // wrapper lets otherwise correct GTK controls collapse to natural
@@ -1207,6 +1209,13 @@ pub fn missing_native_controls(xml: &str) -> Result<Vec<String>, String> {
     Ok(missing.into_iter().collect())
 }
 
+/// A preferred width is a maximum request for an individual element's
+/// design canvas allocation, not a mandate to overflow a narrower stacked
+/// responsive layout. The parent row gives each item its current allocation.
+fn responsive_control_width(preferred: f64, available: f64) -> f64 {
+    preferred.min(available).clamp(20.0, 2400.0)
+}
+
 /// A responsive viewport is a design-only measurement. It changes layout
 /// decisions in the preview without overwriting the application's startup
 /// Window.width or its stored XML.
@@ -1815,6 +1824,24 @@ mod tests {
         ] {
             assert_eq!(parse_widget_path_name(value), None, "{value}");
         }
+    }
+
+    #[test]
+    fn stacked_responsive_panel_shrinks_even_when_preferred_width_is_larger() {
+        assert_eq!(responsive_control_width(600.0, 312.0), 312.0);
+        assert_eq!(responsive_control_width(340.0, 312.0), 312.0);
+        assert_eq!(responsive_control_width(600.0, 600.0), 600.0);
+        assert_eq!(responsive_control_width(600.0, 800.0), 600.0);
+    }
+
+    #[test]
+    fn responsive_panel_widths_stay_bounded_across_viewports() {
+        assert_eq!(responsive_control_width(600.0, 10.0), 20.0);
+        assert_eq!(responsive_control_width(3000.0, 5000.0), 2400.0);
+        let xml = r#"<Window width="1120"><RowPanel breakpoint="760"><Panel preferredWidth="600"/></RowPanel></Window>"#;
+        let root = roxmltree::Document::parse(xml).unwrap();
+        let panel = root.descendants().find(|n| n.has_tag_name("Panel")).unwrap();
+        assert_eq!(panel.attribute("preferredWidth"), Some("600"));
     }
 
     #[test]
