@@ -1,4 +1,6 @@
 build/
+target/
+Cargo.lock
 *.quark-build
 *.quark-build.runtime/
 *.quark-command.log
