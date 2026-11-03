@@ -868,7 +868,10 @@ pub fn move_into(
     let fragment = source[moving.range()].to_owned();
     let removed_parent = &from[..from.len() - 1];
     let removed_index = *from.last().unwrap();
-    let removed = remove_control(source, from)?;
+    // Moving preserves IDs and external references, unlike deleting a
+    // control. Do not apply remove_control's target-reference rejection.
+    let mut removed = source.to_owned();
+    removed.replace_range(moving.range(), "");
     let mut destination = target.to_vec();
     if destination.starts_with(removed_parent) && destination.len() > removed_parent.len() {
         let slot = &mut destination[removed_parent.len()];
@@ -1083,6 +1086,15 @@ mod tests {
         assert!(updated.contains(r#"onClick="Build""#));
         assert_eq!(properties(&updated, &[0, 0]).unwrap().0, "Panel");
         assert!(!updated.contains("title=\"A\"><Button"));
+    }
+
+    #[test]
+    fn moving_popover_target_keeps_its_stable_id_and_reference() {
+        let xml = r#"<Window version="1"><RowPanel><Panel><Button id="action" text="Go"/></Panel><Panel/></RowPanel><Popover id="tip" target="action" text="Details"/></Window>"#;
+        let (moved, destination) = move_into(xml, &[0, 0, 0], &[0, 1]).unwrap();
+        assert_eq!(destination, [0, 1, 0]);
+        assert!(moved.contains("target=\"action\""));
+        assert_eq!(properties(&moved, &destination).unwrap().0, "Button");
     }
 
     #[test]
