@@ -12,8 +12,10 @@ prints Cargo's diagnostic. Local Linux verification: native and legacy Clippy
 with warnings denied, 189 native tests passed (3 ignored), 450 legacy tests
 passed, 11 feature-gate tests passed, the optimized native binary built, and
 the feature register reports 217 applicable features with at least two tests
-each. The next target is a green three-platform CI run followed by live GUI
-acceptance; the release gates below remain open until those checks succeed.
+each. [CI run 41604369251](https://github.com/Aurora-softwares/Quark-IDE/actions/runs/41604369251)
+passed all six quality/native jobs on Ubuntu, macOS and Windows for code commit
+`be38e4d`. The next target is live GUI acceptance and platform interaction
+parity; the manual release gates below remain open.
 
 This is the source of truth for the current implementation after the native Settings, panel, Hydrogen, terminal, and visual-design work. A checked-in implementation is **not** a successful runtime test. Do not treat this file as a claim that all features are finished.
 
