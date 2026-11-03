@@ -179,7 +179,9 @@ mod tests {
     #[test]
     fn compiler_name_on_path_resolves_to_absolute_path_before_runtime_changes_cwd() {
         let directory = tempfile::tempdir().unwrap();
-        let executable = directory.path().join(if cfg!(windows) { "hy.exe" } else { "hy" });
+        let executable = directory
+            .path()
+            .join(if cfg!(windows) { "hy.exe" } else { "hy" });
         std::fs::write(&executable, "test compiler").unwrap();
         let resolved = compiler_executable("hy", Some(directory.path().as_os_str())).unwrap();
         assert_eq!(resolved, executable.canonicalize().unwrap());
