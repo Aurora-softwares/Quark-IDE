@@ -149,17 +149,15 @@ namespace Quark {
             int count = SourceCount(projectPath, manifest);
             while (i < count) {
                 string path = SourceAt(projectPath, manifest, i);
-                if (i > 0) { items = items + "|"; }
-                items = items + BaseName(path);
+                items = items + (i + 1) + ". " + BaseName(path) + "\n";
                 i = i + 1;
             }
             string layout = Layout(projectPath, manifest);
             if (layout != "") {
-                if (items != "") { items = items + "|"; }
-                items = items + BaseName(layout);
+                items = items + (i + 1) + ". " + BaseName(layout) + "\n";
+                i = i + 1;
             }
-            if (items != "") { items = items + "|"; }
-            return items + BaseName(projectPath);
+            return items + (i + 1) + ". " + BaseName(projectPath);
         }
 
         public static string Source(string projectPath, string manifest) {

@@ -78,7 +78,8 @@ namespace Quark {
                 string project = Application.Value(args, "projectState");
                 string manifest = Application.Value(args, "manifestState");
                 if (project != "") {
-                    int chosen = System.Convert.ToInt32(Application.Value(args, "projectFiles"));
+                    int chosen = System.Convert.ToInt32(Application.Value(args, "projectFileNumber")) - 1;
+                    if (chosen < 0) { Status("Choose file number 1 or higher."); return 0; }
                     int count = Workspace.SourceCount(project, manifest);
                     if (chosen < count) {
                         LoadDocument(args, Workspace.SourceAt(project, manifest, chosen), false);
@@ -161,7 +162,8 @@ namespace Quark {
             Application.SetText("manifestState", manifest);
             Application.SetText("projectTitle", Workspace.QuotedSetting(manifest, "name"));
             Application.SetText("projectPathLabel", path);
-            Application.Set("projectFiles", "items", Workspace.ExplorerItems(path, manifest));
+            Application.SetText("projectFileList", Workspace.ExplorerItems(path, manifest));
+            Application.SetValue("projectFileNumber", 1);
             Application.SetText("propertyName", Workspace.BaseName(path));
             Application.SetText("propertyType", "Hydrogen project (.hyproj)");
             Application.SetText("codePath", code);

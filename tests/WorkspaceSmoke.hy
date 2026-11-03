@@ -19,7 +19,7 @@ public class Program {
         if (Workspace.SourceAt("/repo/Example.hyproj", project, 2) != "") { return 10; }
         if (Workspace.SourceCount("/repo/Example.hyproj", project) != 2) { return 11; }
         if (Workspace.Layout("/repo/Example.hyproj", project) != "/repo/Main.hyui") { return 12; }
-        if (Workspace.ExplorerItems("/repo/Example.hyproj", project) != "Main.hy|Extra.hy|Main.hyui|Example.hyproj") { return 13; }
+        if (Workspace.ExplorerItems("/repo/Example.hyproj", project) != "1. Main.hy\n2. Extra.hy\n3. Main.hyui\n4. Example.hyproj") { return 13; }
         if (Workspace.FindLine("one\ntwo\nthree", "three") != 3 ||
             Workspace.FindLine("one\ntwo", "missing") != 0) { return 14; }
         if (Workspace.Preview("short") != "short") { return 15; }

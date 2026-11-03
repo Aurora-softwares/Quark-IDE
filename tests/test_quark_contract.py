@@ -48,12 +48,15 @@ class QuarkContracts(unittest.TestCase):
         self.assertIn("System.IO.File.ReadAllText(path)", PROGRAM)
 
     def test_explorer_is_manifest_driven(self):
-        self.assertEqual(by_id("projectFiles").attrib["onChange"], "ExploreSelected")
+        self.assertEqual(by_id("openIndexedFile").attrib["onClick"], "ExploreSelected")
+        self.assertIsNotNone(by_id("projectFileNumber"))
+        self.assertIsNotNone(by_id("projectFileList"))
         self.assertIn("Workspace.ExplorerItems(path, manifest)", PROGRAM)
-        self.assertIn('Application.Set("projectFiles", "items"', PROGRAM)
+        self.assertIn('Application.SetText("projectFileList"', PROGRAM)
 
     def test_explorer_selection_resolves_source_and_ui(self):
         self.assertIn('handler == "ExploreSelected"', PROGRAM)
+        self.assertIn('Application.Value(args, "projectFileNumber")', PROGRAM)
         self.assertIn("Workspace.SourceAt(project, manifest, chosen)", PROGRAM)
         self.assertIn("Workspace.Layout(project, manifest)", PROGRAM)
 
