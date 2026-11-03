@@ -2160,6 +2160,15 @@
         "native_ui_properties::tests::inspector_exposes_valid_theme_font_role_and_tone_selectors",
         "native_ui_properties::tests::inspector_does_not_write_unsupported_font_anchor_or_hover_colours"
       ]
+    },
+    {
+      "id": "native-new-ui-app-template",
+      "category": "Native Interface Designer",
+      "feature": "New UI App creates a safe self-contained interactive Hydrogen .hyui project with valid nested native controls, event backend and vendored Hydrogen.UI library",
+      "tests": [
+        "startup::tests::native_ui_project_creates_runnable_hydrogen_manifest_and_valid_hyui",
+        "startup::tests::native_ui_project_has_functional_backend_handlers_and_is_not_overwritten"
+      ]
     }
   ]
 }
