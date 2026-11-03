@@ -2180,6 +2180,15 @@
         "native_model::tests::designer_generated_invalid_xml_never_poison_saved_or_unsaved_source",
         "native_model::tests::designer_generated_oversized_edits_are_rejected_atomically"
       ]
+    },
+    {
+      "id": "native-designer-responsive-viewport-presets",
+      "category": "Native Interface Designer",
+      "feature": "Responsive Design preview offers Phone 360, Tablet 800, Desktop 1120 and document-width presets without changing the compiled Window XML",
+      "tests": [
+        "native_portable_preview::tests::design_viewport_presets_change_only_preview_width_not_saved_window",
+        "native_portable_preview::tests::design_viewport_rejects_nonfinite_and_unreasonably_small_overrides"
+      ]
     }
   ]
 }
