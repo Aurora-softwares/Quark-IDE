@@ -20,6 +20,10 @@ portable-pty = "0.9"
 vt100 = "0.18"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSTextView", "NSTextStorage", "NSColor", "NSFont", "NSAttributedString"] }
+objc2-foundation = { version = "0.3", features = ["NSRange", "NSString"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
