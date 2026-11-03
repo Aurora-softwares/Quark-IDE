@@ -285,8 +285,16 @@ pub fn property_choices(kind: &str, name: &str, fields: &[PropertyField]) -> Vec
             .map(|value| (value.to_string(), value.to_string()))
             .collect();
     }
-    if kind == "Window" && name == "theme" {
-        return ["system", "light", "dark"]
+    let named_choices: &[&str] = match (kind, name) {
+        ("Window", "theme") => &["system", "light", "dark"],
+        ("Window", "material") => &["auto", "glass", "solid"],
+        ("Label", "role") => &["title", "heading", "body", "caption"],
+        ("Label", "tone") => &["normal", "muted", "accent"],
+        ("FilePicker", "mode") => &["open", "save", "folder"],
+        _ => &[],
+    };
+    if !named_choices.is_empty() {
+        return named_choices
             .iter()
             .map(|value| (value.to_string(), value.to_string()))
             .collect();
@@ -520,6 +528,15 @@ pub fn set_attribute(
         return Err("Expected a Hydrogen <Window> document".into());
     }
     let node = element_at(&parsed, path)?;
+    if !supported_fields(node.tag_name().name()).contains(&name)
+        && !COMMON_FIELDS.contains(&name)
+        && node.attribute(name).is_none()
+    {
+        return Err(format!(
+            "Hydrogen does not support '{name}' on {}.              Position anchors, state colours and custom fonts require a Hydrogen runtime schema update.",
+            node.tag_name().name()
+        ));
+    }
     validate_known_property(node, name, value)?;
     let start = node.range().start;
     let bytes = source.as_bytes();
@@ -1043,6 +1060,37 @@ mod tests {
             .iter()
             .any(|(path, label)| path == &[0, 1, 0] && label.contains("hidden")));
         assert!(entries.iter().any(|(_, label)| label.contains("Second")));
+    }
+
+    #[test]
+    fn inspector_exposes_valid_theme_font_role_and_tone_selectors() {
+        let source = r#"<Window version="1"><Label role="heading" tone="accent"/></Window>"#;
+        let (_, fields) = available_properties(source, &[0]).unwrap();
+        assert_eq!(
+            property_choices("Label", "role", &fields)
+                .iter()
+                .map(|(_, value)| value.as_str())
+                .collect::<Vec<_>>(),
+            ["title", "heading", "body", "caption"]
+        );
+        assert_eq!(
+            property_choices("Label", "tone", &fields).len(),
+            3
+        );
+        assert!(set_attribute(source, &[0], "role", "caption").is_ok());
+    }
+
+    #[test]
+    fn inspector_does_not_write_unsupported_font_anchor_or_hover_colours() {
+        let original = r#"<Window version="1"><Button text="Run"/></Window>"#;
+        for field in ["anchorLeft", "x", "y", "fontSize", "hoverColor", "activeBackground"] {
+            assert!(set_attribute(original, &[0], field, "12").is_err(), "{field}");
+        }
+        // Unknown metadata imported from a future Hydrogen version stays
+        // editable without changing unrelated existing attributes.
+        let future = r#"<Window version="1"><Button text="Run" newRuntimeValue="old"/></Window>"#;
+        assert!(set_attribute(future, &[0], "newRuntimeValue", "new").unwrap()
+            .contains("newRuntimeValue=\"new\""));
     }
 
     #[test]
