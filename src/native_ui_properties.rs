@@ -604,9 +604,313 @@ pub fn set_attribute(
     Ok(result)
 }
 
+
+/// A native control can be inserted only where Hydrogen's document parser
+/// allows visual children. Canvas coordinates do not exist in HYUI v1:
+/// order and containment determine responsive placement.
+fn visual_container(kind: &str) -> bool {
+    matches!(
+        kind,
+        "Window" | "Panel" | "ColumnPanel" | "RowPanel" | "GridPanel" | "ScrollView" | "Tab"
+    )
+}
+
+fn tag_for_toolbox(kind: &str) -> Option<&'static str> {
+    Some(match kind {
+        "Label" => "Label",
+        "Button" => "Button",
+        "TextField" => "Input",
+        "Checkbox" => "CheckBox",
+        "TextArea" => "TextArea",
+        "RadioButton" => "RadioGroup",
+        "ComboBox" => "Select",
+        "ListBox" => "ListBox",
+        "Slider" => "Slider",
+        "ProgressBar" => "ProgressBar",
+        "Image" => "Image",
+        "Panel" => "Panel",
+        "TabControl" => "Tabs",
+        _ => return None,
+    })
+}
+
+fn toolbox_markup(tag: &str, id: &str) -> String {
+    let prefix = format!(r#"<{tag} id="{id}""#);
+    match tag {
+        "Label" => format!(r#"{prefix} text="Label"/>"#),
+        "Button" => format!(r#"{prefix} text="Button"/>"#),
+        "Input" => format!(r#"{prefix} placeholder="Enter text"/>"#),
+        "CheckBox" => format!(r#"{prefix} text="Check Box" checked="false"/>"#),
+        "TextArea" => format!(r#"{prefix} height="100" placeholder="Enter text"/>"#),
+        "RadioGroup" | "Select" | "ListBox" => {
+            format!(r#"{prefix} items="Option 1|Option 2" value="0"/>"#)
+        }
+        "Slider" => format!(r#"{prefix} minimum="0" maximum="100" value="50"/>"#),
+        "ProgressBar" => format!(r#"{prefix} minimum="0" maximum="100" value="0"/>"#),
+        // A real asset path must be supplied before a newly added Image can
+        // be used at runtime; leave that choice explicit rather than save
+        // a non-existent asset and cause a build failure.
+        "Image" => format!(r#"{prefix} source="assets/image.png" height="120"/>"#),
+        "Panel" => format!(r#"{prefix} title="Panel" padding="20"></Panel>"#),
+        "Tabs" => format!(r#"{prefix} value="0"><Tab title="Page 1"/></Tabs>"#),
+        _ => unreachable!("tag_for_toolbox controls the permitted set"),
+    }
+}
+
+fn tag_end(source: &str, start: usize) -> Result<usize, String> {
+    let mut quote = None;
+    for (offset, ch) in source[start..].bytes().enumerate() {
+        match (quote, ch) {
+            (None, b'\'' | b'"') => quote = Some(ch),
+            (Some(q), ch) if q == ch => quote = None,
+            (None, b'>') => return Ok(start + offset),
+            _ => {}
+        }
+    }
+    Err("Unterminated Hydrogen UI start tag".into())
+}
+
+fn child_indent(source: &str, start: usize) -> String {
+    let line = source[..start].rsplit('\n').next().unwrap_or("");
+    let parent_indent = if line.bytes().all(|b| b == b' ' || b == b'\t') {
+        line
+    } else {
+        ""
+    };
+    format!("{parent_indent}  ")
+}
+
+fn resolve_insert_parent(
+    doc: &Document<'_>,
+    selected: &[usize],
+) -> Result<(Vec<usize>, Option<usize>), String> {
+    let node = element_at(doc, selected)?;
+    if node.tag_name().name() == "Tabs" {
+        let first_tab = node
+            .children()
+            .filter(|child| child.is_element())
+            .position(|child| child.has_tag_name("Tab"))
+            .ok_or("Tabs requires a Tab page before adding controls")?;
+        let mut parent = selected.to_vec();
+        parent.push(first_tab);
+        return Ok((parent, None));
+    }
+    if visual_container(node.tag_name().name()) {
+        return Ok((selected.to_vec(), None));
+    }
+    if selected.is_empty() {
+        return Err("Choose a Window or layout container to add a control".into());
+    }
+    let parent = selected[..selected.len() - 1].to_vec();
+    if !visual_container(element_at(doc, &parent)?.tag_name().name()) {
+        return Err("Select a visual layout container or one of its children".into());
+    }
+    Ok((parent, Some(*selected.last().unwrap())))
+}
+
+/// Insert a toolbox control into Hydrogen's real nested XML, returning the
+/// modified document and its new selection. Dropping onto a leaf places the
+/// widget after it; dropping onto a container appends inside it.
+/// Existing source bytes, event handlers and sibling formatting are retained.
+pub fn insert_toolbox_control(
+    source: &str,
+    selected: &[usize],
+    kind: &str,
+) -> Result<(String, Vec<usize>), String> {
+    let tag = tag_for_toolbox(kind).ok_or("Unsupported native Hydrogen toolbox control")?;
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    if !doc.root_element().has_tag_name("Window") {
+        return Err("Expected a Hydrogen <Window> document".into());
+    }
+    let (parent_path, after) = resolve_insert_parent(&doc, selected)?;
+    let parent = element_at(&doc, &parent_path)?;
+    if !visual_container(parent.tag_name().name()) {
+        return Err("The selected element cannot contain native UI controls".into());
+    }
+    let taken = doc
+        .descendants()
+        .filter_map(|node| node.attribute("id"))
+        .collect::<std::collections::HashSet<_>>();
+    let id = (1..=10_000)
+        .map(|index| format!("{}{}", tag.to_ascii_lowercase(), index))
+        .find(|candidate| !taken.contains(candidate.as_str()))
+        .ok_or("No unique control ID could be allocated")?;
+    let markup = toolbox_markup(tag, &id);
+    let open_end = tag_end(source, parent.range().start)?;
+    let open = &source[parent.range().start..=open_end];
+    let is_empty = open.trim_end_matches('>').trim_end().ends_with('/');
+    let indentation = child_indent(source, parent.range().start);
+    let mut result = source.to_owned();
+    let mut new_path = parent_path;
+    if let Some(index) = after {
+        let existing = parent
+            .children()
+            .filter(|child| child.is_element())
+            .nth(index)
+            .ok_or("Selected sibling disappeared")?;
+        let indent = child_indent(source, existing.range().start);
+        result.insert_str(existing.range().end, &format!("\n{indent}{markup}"));
+        new_path.push(index + 1);
+    } else if is_empty {
+        let prefix = open.trim_end_matches('>').trim_end_matches('/').trim_end();
+        result.replace_range(
+            parent.range().start..=open_end,
+            &format!("{prefix}>\n{indentation}{markup}\n</{}>", parent.tag_name().name()),
+        );
+        new_path.push(0);
+    } else {
+        let children_count = parent.children().filter(|child| child.is_element()).count();
+        let closing = source[parent.range()]
+            .rfind("</")
+            .ok_or("Cannot locate Hydrogen container closing tag")?
+            + parent.range().start;
+        result.insert_str(closing, &format!("\n{indentation}{markup}\n"));
+        new_path.push(children_count);
+    }
+    Document::parse(&result).map_err(|e| e.to_string())?;
+    Ok((result, new_path))
+}
+
+/// Rearrange controls within the current responsive layout without losing
+/// their IDs or events. Reordering changes layout position, never pixel
+/// coordinates that HYUI v1 does not support.
+pub fn move_sibling(
+    source: &str,
+    selected: &[usize],
+    up: bool,
+) -> Result<(String, Vec<usize>), String> {
+    let (&index, parent_path) = selected
+        .split_last()
+        .ok_or("The root Window cannot be moved")?;
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    let parent = element_at(&doc, parent_path)?;
+    let children = parent.children().filter(|child| child.is_element()).collect::<Vec<_>>();
+    let target = if up {
+        index.checked_sub(1).ok_or("Already at the start of this container")?
+    } else {
+        index.checked_add(1).filter(|i| *i < children.len())
+            .ok_or("Already at the end of this container")?
+    };
+    let first = children[index.min(target)].range();
+    let second = children[index.max(target)].range();
+    let mut result = String::with_capacity(source.len());
+    result.push_str(&source[..first.start]);
+    result.push_str(&source[second.clone()]);
+    result.push_str(&source[first.end..second.start]);
+    result.push_str(&source[first]);
+    result.push_str(&source[second.end..]);
+    Document::parse(&result).map_err(|e| e.to_string())?;
+    let mut path = parent_path.to_vec();
+    path.push(target);
+    Ok((result, path))
+}
+
+/// Remove a visual node, guarding root, required tab pages and any
+/// ContextMenu/Popover target references before the XML can be persisted.
+pub fn remove_control(source: &str, selected: &[usize]) -> Result<String, String> {
+    let (&index, parent_path) = selected
+        .split_last()
+        .ok_or("Cannot delete the root Hydrogen Window")?;
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    let parent = element_at(&doc, parent_path)?;
+    let node = element_at(&doc, selected)?;
+    let remaining = parent.children().filter(|child| child.is_element()).count();
+    if remaining <= 1 && matches!(parent.tag_name().name(), "Tabs" | "Toolbar" | "ContextMenu") {
+        return Err("Cannot remove the final required item from this container".into());
+    }
+    if parent.children().filter(|child| child.is_element()).nth(index).is_none() {
+        return Err("Invalid selected control".into());
+    }
+    let removed_ids = node.descendants()
+        .filter_map(|descendant| descendant.attribute("id"))
+        .collect::<std::collections::HashSet<_>>();
+    if doc.descendants().any(|other| {
+        !node.range().contains(&other.range().start)
+            && other.attribute("target").is_some_and(|target| removed_ids.contains(target))
+    }) {
+        return Err("Cannot delete a control used by a ContextMenu or Popover".into());
+    }
+    let mut result = source.to_owned();
+    result.replace_range(node.range(), "");
+    Document::parse(&result).map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn insert_into_nested_panel_keeps_handlers_and_surrounding_xml() {
+        let xml = r#"<Window version="1"><ColumnPanel><Panel title="Settings"><Button id="run" text="Run" onClick="Build"/></Panel></ColumnPanel></Window>"#;
+        let (updated, path) = insert_toolbox_control(xml, &[0, 0], "TextField").unwrap();
+        assert_eq!(path, [0, 0, 1]);
+        assert!(updated.contains(r#"id="run" text="Run" onClick="Build""#));
+        assert!(updated.contains(r#"<Input id="input1" placeholder="Enter text"/>"#));
+        assert_eq!(properties(&updated, &path).unwrap().0, "Input");
+        assert_eq!(element_paths(&updated).unwrap().len(), 5);
+    }
+
+    #[test]
+    fn insert_after_leaf_and_into_self_closing_containers_preserves_paths() {
+        let xml = r#"<Window version="1"><RowPanel gap="16"><Label text="A"/><Label text="B"/></RowPanel><Panel/></Window>"#;
+        let (changed, inserted) = insert_toolbox_control(xml, &[0, 0], "Button").unwrap();
+        assert_eq!(inserted, [0, 1]);
+        assert_eq!(properties(&changed, &[0, 2]).unwrap().0, "Label");
+        let (expanded, inner) = insert_toolbox_control(&changed, &[1], "Slider").unwrap();
+        assert_eq!(inner, [1, 0]);
+        assert_eq!(properties(&expanded, &inner).unwrap().0, "Slider");
+        assert!(expanded.contains("<Panel>"));
+        assert!(expanded.contains("</Panel>"));
+    }
+
+    #[test]
+    fn special_controls_generate_valid_responsive_templates() {
+        let xml = r#"<Window version="1"><ColumnPanel/></Window>"#;
+        let (with_tabs, path) = insert_toolbox_control(xml, &[0], "TabControl").unwrap();
+        assert_eq!(path, [0, 0]);
+        assert!(with_tabs.contains(r#"<Tab title="Page 1"/>"#));
+        let (with_check, nested) = insert_toolbox_control(&with_tabs, &path, "Checkbox").unwrap();
+        assert_eq!(nested, [0, 0, 0, 0]);
+        assert!(with_check.contains("checked=\"false\""));
+        assert_eq!(properties(&with_check, &nested).unwrap().0, "CheckBox");
+    }
+
+    #[test]
+    fn reorder_nodes_preserves_event_handlers_and_nested_children() {
+        let xml = r#"<Window version="1"><ColumnPanel><Button id="a" onClick="Run"/><Panel><Input id="name" onChange="Edit"/></Panel><Label text="End"/></ColumnPanel></Window>"#;
+        let (changed, path) = move_sibling(xml, &[0, 1], true).unwrap();
+        assert_eq!(path, [0, 0]);
+        assert_eq!(properties(&changed, &[0, 1]).unwrap().0, "Button");
+        assert_eq!(properties(&changed, &[0, 0, 0]).unwrap().0, "Input");
+        assert!(changed.contains("onChange=\"Edit\""));
+        assert!(move_sibling(&changed, &[], true).is_err());
+        assert!(move_sibling(&changed, &[0, 0], true).is_err());
+    }
+
+    #[test]
+    fn removal_protects_last_tabs_and_linked_popover_targets() {
+        let xml = r#"<Window version="1"><Button id="open"/><Popover id="tip" target="open" text="Tips"/><Tabs value="0"><Tab title="Home"/></Tabs></Window>"#;
+        assert!(remove_control(xml, &[0]).is_err());
+        assert!(remove_control(xml, &[2, 0]).is_err());
+        let changed = remove_control(xml, &[1]).unwrap();
+        let changed = remove_control(&changed, &[0]).unwrap();
+        assert!(!changed.contains("id=\"open\""));
+        assert!(changed.contains("<Tabs"));
+        assert!(remove_control(xml, &[]).is_err());
+    }
+
+    #[test]
+    fn invalid_drop_locations_and_duplicate_ids_cannot_corrupt_document() {
+        let xml = r#"<Window version="1"><ColumnPanel><Button id="button1"/><Button id="button2"/></ColumnPanel></Window>"#;
+        let (changed, path) = insert_toolbox_control(xml, &[0], "Button").unwrap();
+        assert_eq!(path, [0, 2]);
+        assert!(changed.contains("id=\"button3\""));
+        assert!(insert_toolbox_control(xml, &[20], "Label").is_err());
+        assert!(insert_toolbox_control(xml, &[0], "Window").is_err());
+        assert!(move_sibling(xml, &[0, 7], false).is_err());
+    }
+
     #[test]
     fn updates_nested_control_without_rewriting_siblings_or_events() {
         let original = r#"<Window title="Studio" width="800"><ColumnPanel gap="6"><Button id="go" text="Old" onClick="Build"/><Input id="name" placeholder="Name"/></ColumnPanel></Window>"#;
