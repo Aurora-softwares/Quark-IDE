@@ -3502,9 +3502,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // keeps its established two-panel behaviour; moving a tool to a different
     // zone uses the native sidecar host. Unsupported compound bottom tabs are
     // rejected rather than silently persisting a move that cannot be shown.
-    #[cfg(target_os = "linux")]
     #[cfg(target_os = "macos")]
     macos_transition_checkpoint("3492: let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::");
+    #[cfg(target_os = "linux")]
     let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
     let route_dock: Rc<dyn Fn(native_docking::DockId, native_docking::DockZone) -> bool> = {
@@ -4028,9 +4028,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     // GTK auto-hide must not change AppKit or WinUI splitter geometry.
-    #[cfg(not(target_os = "linux"))]
     #[cfg(target_os = "macos")]
     macos_transition_checkpoint("4016: let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});");
+    #[cfg(not(target_os = "linux"))]
     let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
     #[cfg(target_os = "linux")]
     {
