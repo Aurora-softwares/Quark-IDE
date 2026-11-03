@@ -5509,15 +5509,42 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 }
             });
             if let Err(error) =
-                native_start_window::create_project_wizard(&ui, window.clone(), launch, false)
+                native_start_window::create_project_wizard(&ui, window.clone(), launch, false, false)
             {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
     });
 
+    let show_new_ui_project: Rc<dyn Fn()> = Rc::new({
+        let ui = ui.clone();
+        let window = window.clone();
+        let open_project = open_project.clone();
+        let open_layout = open_layout.clone();
+        let status = status.clone();
+        move || {
+            let launch: native_start_window::Launch = Rc::new({
+                let open_project = open_project.clone();
+                let open_layout = open_layout.clone();
+                move |action| match action {
+                    native_start_window::Action::Project(manifest) => {
+                        let design = manifest.parent().unwrap().join("Main.hyui");
+                        open_project(manifest);
+                        open_layout(design);
+                        Ok(())
+                    }
+                    _ => Err("Create a native Hydrogen UI project".into()),
+                }
+            });
+            if let Err(error) =
+                native_start_window::create_project_wizard(&ui, window.clone(), launch, false, true)
+            {
+                status.set_text(&format!("Cannot create Hydrogen UI app: {error}"));
+            }
+        }
+    });
     new_ui_project_button.on_click({
-        let create = show_new_project.clone();
+        let create = show_new_ui_project.clone();
         move || create()
     });
 
