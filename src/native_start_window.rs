@@ -440,12 +440,24 @@ pub(crate) fn create_project_wizard(
             }
         }
     });
+    // A new project must never replace Quark's AppKit window or close the
+    // wizard synchronously within NSButton's action dispatch. The Windows
+    // and GTK versions use the same deferred path for consistent lifetime.
+    let project_created = ui.tasks().channel({
+        let launch = launch.clone();
+        let status = status.clone();
+        let wizard = wizard.clone();
+        move |manifest: PathBuf| match launch(Action::Project(manifest)) {
+            Ok(()) => wizard.close(),
+            Err(error) => status.set_text(&format!("Cannot open created project: {error}")),
+        }
+    });
     submit.on_click({
         let name = name.clone();
         let parent = parent.clone();
         let template = template.clone();
         let status = status.clone();
-        let wizard = wizard.clone();
+        let project_created = project_created.clone();
         move || {
             let selected = template.selected().unwrap_or(0);
             let kind = startup::Template::ALL
@@ -469,12 +481,8 @@ pub(crate) fn create_project_wizard(
                             }
                         }
                     }
-                    match launch(Action::Project(manifest)) {
-                        Ok(()) => {
-                            // The parent is now the IDE window; never close it.
-                            wizard.close();
-                        }
-                        Err(error) => status.set_text(&error),
+                    if let Err(error) = project_created.send(manifest) {
+                        status.set_text(&format!("Cannot open created project: {error}"));
                     }
                 }
                 Err(error) => status.set_text(&error),
