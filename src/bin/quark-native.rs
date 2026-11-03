@@ -1979,7 +1979,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Unity-style Inspector sections retain their fold state when selecting
     // controls or receiving live Properties updates.
     let collapsed_property_sections =
-        Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
+        Rc::new(RefCell::new(native_ui_properties::InspectorSections::default()));
     let toggle_property_section_later = ui.tasks().channel({
         let collapsed = collapsed_property_sections.clone();
         let refresh = reload_properties.clone();
