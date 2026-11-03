@@ -621,7 +621,6 @@ pub fn set_attribute(
     Ok(result)
 }
 
-
 /// A native control can be inserted only where Hydrogen's document parser
 /// allows visual children. Canvas coordinates do not exist in HYUI v1:
 /// order and containment determine responsive placement.
@@ -772,7 +771,10 @@ pub fn insert_toolbox_control(
         let prefix = open.trim_end_matches('>').trim_end_matches('/').trim_end();
         result.replace_range(
             parent.range().start..=open_end,
-            &format!("{prefix}>\n{indentation}{markup}\n</{}>", parent.tag_name().name()),
+            &format!(
+                "{prefix}>\n{indentation}{markup}\n</{}>",
+                parent.tag_name().name()
+            ),
         );
         new_path.push(0);
     } else {
@@ -801,11 +803,18 @@ pub fn move_sibling(
         .ok_or("The root Window cannot be moved")?;
     let doc = Document::parse(source).map_err(|e| e.to_string())?;
     let parent = element_at(&doc, parent_path)?;
-    let children = parent.children().filter(|child| child.is_element()).collect::<Vec<_>>();
+    let children = parent
+        .children()
+        .filter(|child| child.is_element())
+        .collect::<Vec<_>>();
     let target = if up {
-        index.checked_sub(1).ok_or("Already at the start of this container")?
+        index
+            .checked_sub(1)
+            .ok_or("Already at the start of this container")?
     } else {
-        index.checked_add(1).filter(|i| *i < children.len())
+        index
+            .checked_add(1)
+            .filter(|i| *i < children.len())
             .ok_or("Already at the end of this container")?
     };
     if index >= children.len() {
@@ -825,7 +834,6 @@ pub fn move_sibling(
     Ok((result, path))
 }
 
-
 /// A structure edit is applied only after native drag/click callbacks finish;
 /// this prevents GTK/AppKit/WinUI widgets being unparented during dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -836,10 +844,7 @@ pub enum StructureEdit {
     Delete { selected: Vec<usize> },
 }
 
-pub fn edit_structure(
-    source: &str,
-    edit: &StructureEdit,
-) -> Result<(String, Vec<usize>), String> {
+pub fn edit_structure(source: &str, edit: &StructureEdit) -> Result<(String, Vec<usize>), String> {
     match edit {
         StructureEdit::Insert { selected, kind } => insert_toolbox_control(source, selected, kind),
         StructureEdit::MoveEarlier { selected } => move_sibling(source, selected, true),
@@ -871,15 +876,23 @@ pub fn remove_control(source: &str, selected: &[usize]) -> Result<String, String
     if remaining <= 1 && matches!(parent.tag_name().name(), "Tabs" | "Toolbar" | "ContextMenu") {
         return Err("Cannot remove the final required item from this container".into());
     }
-    if parent.children().filter(|child| child.is_element()).nth(index).is_none() {
+    if parent
+        .children()
+        .filter(|child| child.is_element())
+        .nth(index)
+        .is_none()
+    {
         return Err("Invalid selected control".into());
     }
-    let removed_ids = node.descendants()
+    let removed_ids = node
+        .descendants()
         .filter_map(|descendant| descendant.attribute("id"))
         .collect::<std::collections::HashSet<_>>();
     if doc.descendants().any(|other| {
         !node.range().contains(&other.range().start)
-            && other.attribute("target").is_some_and(|target| removed_ids.contains(target))
+            && other
+                .attribute("target")
+                .is_some_and(|target| removed_ids.contains(target))
     }) {
         return Err("Cannot delete a control used by a ContextMenu or Popover".into());
     }
@@ -958,13 +971,19 @@ mod tests {
         let xml = r#"<Window version="1"><ColumnPanel><Button text="A"/><Button text="B"/></ColumnPanel></Window>"#;
         let (added, path) = edit_structure(
             xml,
-            &StructureEdit::Insert { selected: vec![0], kind: "Slider".into() },
-        ).unwrap();
+            &StructureEdit::Insert {
+                selected: vec![0],
+                kind: "Slider".into(),
+            },
+        )
+        .unwrap();
         assert_eq!(path, [0, 2]);
-        let (earlier, path) = edit_structure(&added, &StructureEdit::MoveEarlier { selected: path }).unwrap();
+        let (earlier, path) =
+            edit_structure(&added, &StructureEdit::MoveEarlier { selected: path }).unwrap();
         assert_eq!(path, [0, 1]);
         assert_eq!(properties(&earlier, &path).unwrap().0, "Slider");
-        let (deleted, selected) = edit_structure(&earlier, &StructureEdit::Delete { selected: path }).unwrap();
+        let (deleted, selected) =
+            edit_structure(&earlier, &StructureEdit::Delete { selected: path }).unwrap();
         assert_eq!(selected, [0, 0]);
         assert!(!deleted.contains("<Slider"));
         assert!(deleted.contains("text=\"B\""));
@@ -973,10 +992,29 @@ mod tests {
     #[test]
     fn invalid_structure_edits_return_errors_instead_of_crashing() {
         let xml = r#"<Window version="1"><ColumnPanel><Label text="Only"/></ColumnPanel></Window>"#;
-        assert!(edit_structure(xml, &StructureEdit::MoveEarlier { selected: vec![0, 30] }).is_err());
-        assert!(edit_structure(xml, &StructureEdit::MoveLater { selected: vec![0, 30] }).is_err());
+        assert!(edit_structure(
+            xml,
+            &StructureEdit::MoveEarlier {
+                selected: vec![0, 30]
+            }
+        )
+        .is_err());
+        assert!(edit_structure(
+            xml,
+            &StructureEdit::MoveLater {
+                selected: vec![0, 30]
+            }
+        )
+        .is_err());
         assert!(edit_structure(xml, &StructureEdit::Delete { selected: vec![] }).is_err());
-        assert!(edit_structure(xml, &StructureEdit::Insert { selected: vec![], kind: "Unknown".into() }).is_err());
+        assert!(edit_structure(
+            xml,
+            &StructureEdit::Insert {
+                selected: vec![],
+                kind: "Unknown".into()
+            }
+        )
+        .is_err());
     }
 
     #[test]
@@ -1073,23 +1111,31 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["title", "heading", "body", "caption"]
         );
-        assert_eq!(
-            property_choices("Label", "tone", &fields).len(),
-            3
-        );
+        assert_eq!(property_choices("Label", "tone", &fields).len(), 3);
         assert!(set_attribute(source, &[0], "role", "caption").is_ok());
     }
 
     #[test]
     fn inspector_does_not_write_unsupported_font_anchor_or_hover_colours() {
         let original = r#"<Window version="1"><Button text="Run"/></Window>"#;
-        for field in ["anchorLeft", "x", "y", "fontSize", "hoverColor", "activeBackground"] {
-            assert!(set_attribute(original, &[0], field, "12").is_err(), "{field}");
+        for field in [
+            "anchorLeft",
+            "x",
+            "y",
+            "fontSize",
+            "hoverColor",
+            "activeBackground",
+        ] {
+            assert!(
+                set_attribute(original, &[0], field, "12").is_err(),
+                "{field}"
+            );
         }
         // Unknown metadata imported from a future Hydrogen version stays
         // editable without changing unrelated existing attributes.
         let future = r#"<Window version="1"><Button text="Run" newRuntimeValue="old"/></Window>"#;
-        assert!(set_attribute(future, &[0], "newRuntimeValue", "new").unwrap()
+        assert!(set_attribute(future, &[0], "newRuntimeValue", "new")
+            .unwrap()
             .contains("newRuntimeValue=\"new\""));
     }
 
