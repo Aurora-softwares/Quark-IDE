@@ -1966,6 +1966,46 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    // Native structure edits from the toolbox, drop surface and Inspector
+    // must run AFTER GTK/AppKit/WinUI input callbacks return. Destroying the
+    // selected widget from its own drag event would cause use-after-unparent.
+    let structural_edit_later = ui.tasks().channel({
+        let state = state.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let xml_editor = xml_editor.clone();
+        let sync_xml = sync_xml.clone();
+        let reload_preview = reload_preview.clone();
+        let status = status.clone();
+        move |edit: native_ui_properties::StructureEdit| {
+            let source = state.borrow().layout.as_ref().and_then(|doc| doc.source().ok());
+            let Some(source) = source else {
+                status.set_text("Open or create a .hyui design before adding controls");
+                return;
+            };
+            match native_ui_properties::edit_structure(&source, &edit) {
+                Ok((next, path)) => {
+                    let changed = state.borrow_mut().layout.as_mut()
+                        .map(|doc| doc.edit_source(next.clone()));
+                    match changed {
+                        Some(Ok(())) => {
+                            *selected_xml_path.borrow_mut() = path;
+                            sync_xml.set(true);
+                            xml_editor.set_text(&next);
+                            sync_xml.set(false);
+                            status.set_text("Hydrogen UI updated — save to persist");
+                            if let Some(refresh) = reload_preview.borrow().as_ref() {
+                                refresh();
+                            }
+                        }
+                        Some(Err(error)) => status.set_text(&format!("Invalid Hydrogen UI: {error}")),
+                        None => {}
+                    }
+                }
+                Err(error) => status.set_text(&format!("Cannot change UI layout: {error}")),
+            }
+        }
+    });
+
     // A native text/change callback only queues its edit. Applying the XML
     // and rebuilding the preview happens after the widget's callback returns.
     let live_property_later = ui.tasks().channel({
@@ -1991,6 +2031,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let selected_xml_path = selected_xml_path.clone();
         let apply_xml_property = apply_xml_property.clone();
         let live_property_later = live_property_later.clone();
+        let structural_edit_later = structural_edit_later.clone();
         let select_element_later = select_element_later.clone();
         let design_tab_selection = design_tab_selection.clone();
         let change_design_page_later = change_design_page_later.clone();
@@ -2071,6 +2112,28 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             // The Inspector groups fields into collapsible native sections.
             // Each section is a real widget container (not an HTML/webview
             // imitation) and stays folded while the selection changes.
+            // Reorder the selected component within its responsive parent.
+            // These actions work on every OS, even before platform-specific
+            // pointer drag/drop parity has been completed.
+            if !path.is_empty() {
+                if let Ok(action_row) = ui.stack(Orientation::Horizontal) {
+                    action_row.set_spacing(4.0);
+                    for (label, edit) in [
+                        ("↑ Earlier", native_ui_properties::StructureEdit::MoveEarlier { selected: path.clone() }),
+                        ("↓ Later", native_ui_properties::StructureEdit::MoveLater { selected: path.clone() }),
+                        ("Delete", native_ui_properties::StructureEdit::Delete { selected: path.clone() }),
+                    ] {
+                        if let Ok(button) = ui.button(label) {
+                            let send = structural_edit_later.clone();
+                            button.on_click(move || {
+                                let _ = send.send(edit.clone());
+                            });
+                            action_row.append(&button);
+                        }
+                    }
+                    native_property_content.append(&action_row);
+                }
+            }
             let all_fields = fields.clone();
             let mut last_group = "";
             let mut current_section: Option<naui::Stack> = None;
@@ -2204,6 +2267,41 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     }));
+
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+
+        // Real GTK drag target: the native widget hit under the pointer
+        // determines the nested HYUI insertion location. This is not a
+        // painted/fake drag-and-drop surface.
+        let surface: gtk4::Widget = portable_preview.native_widget().upcast();
+        let target = gtk4::DropTarget::new(
+            String::static_type(),
+            gtk4::gdk::DragAction::COPY,
+        );
+        let surface_at_drop = surface.clone();
+        let sender = structural_edit_later.clone();
+        let state_for_drop = state.clone();
+        target.connect_drop(move |_, value, x, y| {
+            let Ok(payload) = value.get::<String>() else {
+                return false;
+            };
+            let Some(kind) = payload.strip_prefix("quark-toolbox:") else {
+                return false;
+            };
+            if !state_for_drop.borrow().layout.as_ref().is_some_and(|doc| doc.native_window) {
+                return false;
+            }
+            let selected = native_portable_preview::path_at_drop(&surface_at_drop, x, y);
+            sender.send(native_ui_properties::StructureEdit::Insert {
+                selected,
+                kind: kind.to_owned(),
+            }).is_ok()
+        });
+        surface.add_controller(target);
+    }
 
     let select_native_element: native_portable_preview::SelectElement = Rc::new({
         let select_element_later = select_element_later.clone();
@@ -5016,9 +5114,32 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     for (kind, button) in toolbox_buttons {
         let show_page = show_page.clone();
         let state = state.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let structural_edit_later = structural_edit_later.clone();
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let source = gtk4::DragSource::new();
+            source.set_actions(gtk4::gdk::DragAction::COPY);
+            let payload = format!("quark-toolbox:{kind:?}");
+            source.connect_prepare(move |_, _, _| {
+                Some(gtk4::gdk::ContentProvider::for_value(&payload.to_value()))
+            });
+            button.native_widget().add_controller(source);
+        }
         button.on_click(move || {
-            state.borrow_mut().armed = Some(kind);
-            show_page(Page::Design);
+            let is_native = state.borrow().layout.as_ref().is_some_and(|doc| doc.native_window);
+            if is_native {
+                let _ = structural_edit_later.send(native_ui_properties::StructureEdit::Insert {
+                    selected: selected_xml_path.borrow().clone(),
+                    kind: format!("{kind:?}"),
+                });
+                show_page(Page::Design);
+            } else {
+                state.borrow_mut().armed = Some(kind);
+                show_page(Page::Design);
+            }
         });
     }
 
