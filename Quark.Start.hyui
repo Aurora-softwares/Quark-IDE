@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Window version="1" id="quarkStart" title="Quark IDE — Start Window" width="1100" height="680" theme="system" material="auto" onLoad="StartReady">
+  <MenuBar>
+    <Menu text="File">
+      <MenuItem id="menuOpen" text="Open project…" onClick="OpenProjectHelp" />
+      <MenuItem id="menuAbout" text="About Quark" onClick="About" />
+    </Menu>
+    <Menu text="Edit" />
+    <Menu text="View" />
+    <Menu text="Git" />
+    <Menu text="Project" />
+    <Menu text="Build" />
+    <Menu text="Debug" />
+    <Menu text="Test" />
+    <Menu text="Analyze" />
+    <Menu text="Tools" />
+    <Menu text="Extensions" />
+    <Menu text="Window" />
+    <Menu text="Help"><MenuItem id="aboutHelp" text="About Quark IDE" onClick="About" /></Menu>
+  </MenuBar>
+  <ColumnPanel gap="7">
+    <Label text="Quark IDE" role="title" />
+    <Label text="Hydrogen Development Environment" tone="muted" />
+    <Label text="Start with a project, or continue without code." tone="muted" />
+  </ColumnPanel>
+  <RowPanel breakpoint="750" gap="22">
+    <Panel title="Open recent" preferredWidth="500" gap="11">
+      <SearchInput id="recentSearch" text="" placeholder="Search recent projects…" onChange="SearchRecent" accessibleName="Search recent projects" />
+      <TextArea id="recentList" text="Loading recent projects…" height="260" enabled="false" accessibleName="Recent projects" />
+      <RowPanel breakpoint="0" gap="8">
+        <NumberInput id="recentNumber" value="1" minimum="1" maximum="10" accessibleName="Recent project number" />
+        <Button id="openRecent" text="Open selected" primary="true" onClick="OpenRecent" />
+      </RowPanel>
+      <Button id="forgetRecent" text="Remove selected from recent" onClick="ForgetRecent" />
+      <Label text="Removing a recent entry does not remove any project files." role="caption" tone="muted" />
+    </Panel>
+    <Panel title="Get started" preferredWidth="500" gap="11">
+      <Label text="OPEN AN EXISTING PROJECT" role="caption" tone="accent" />
+      <FilePicker id="startProjectPicker" mode="open" text="▣  Open a project or solution" onPick="ProjectPicked" onCancel="PickerCancelled" />
+      <FilePicker id="startFolderPicker" mode="folder" text="▤  Open a local folder" onPick="FolderPicked" onCancel="PickerCancelled" />
+      <FilePicker id="startSourcePicker" mode="open" text="✎  Open a Hydrogen source file" onPick="SourcePicked" onCancel="PickerCancelled" />
+      <FilePicker id="startUIPicker" mode="open" text="◇  Open a Hydrogen UI layout" onPick="UIPicked" onCancel="PickerCancelled" />
+      <Separator />
+      <Label text="CREATE A NEW PROJECT" role="caption" tone="accent" />
+      <Input id="newName" text="MyHydrogenApp" placeholder="New project name" accessibleName="New project name" />
+      <CheckBox id="newUI" text="Create with native Hydrogen UI" checked="true" />
+      <FilePicker id="projectFolderPicker" mode="folder" text="✧  Choose folder and create project" onPick="CreateProject" onCancel="PickerCancelled" />
+      <Separator />
+      <Label text="CLONE A REPOSITORY" role="caption" tone="accent" />
+      <Input id="cloneURL" text="" placeholder="https://github.com/owner/repository" accessibleName="Git repository URL" />
+      <FilePicker id="cloneFolderPicker" mode="folder" text="↓  Clone into selected folder" onPick="ClonePicked" onCancel="PickerCancelled" />
+      <Button id="continueButton" text="Continue without code  →" onClick="Continue" />
+    </Panel>
+  </RowPanel>
+  <Label id="startStatus" text="Ready to open a Hydrogen project." tone="muted" />
+  <Dialog id="aboutDialog" title="Quark IDE" text="Quark is being rebuilt in Hydrogen and native Hydrogen UI. Select a project to open its separate IDE window." buttons="OK" open="false" />
+</Window>

@@ -47,6 +47,10 @@ namespace Hydrogen.UI {
             System.Console.WriteLine("HYUI\tSET\t" + Escape(id) + "\t" + Escape(property) + "\t" + Escape(value));
         }
 
+        // Ask the native host to close its main window after an event finishes.
+        // Useful for launcher-to-workspace transitions; not a process kill.
+        public static void Exit() { System.Console.WriteLine("HYUI\tEXIT"); }
+
         public static void SetText(string id, string text) { Set(id, "text", text); }
         public static void SetPath(string id, string path) { Set(id, "path", path); }
         public static void SetValue(string id, int value) { Set(id, "value", "" + value); }

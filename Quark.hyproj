@@ -1,11 +1,11 @@
 format = 2
-name = "Quark"
-version = "0.1.0"
+name = "QuarkLauncher"
+version = "0.2.0"
 type = "exe"
-ui = "Quark.hyui"
+ui = "Quark.Start.hyui"
 sources = [
-    "src/Program.hy",
+    "src/Quark/StartProgram.hy",
+    "src/Quark/Session.hy",
     "src/Quark/Workspace.hy",
-    "src/Quark/BuildService.hy",
     "src/Hydrogen/UI/Application.hy"
 ]
