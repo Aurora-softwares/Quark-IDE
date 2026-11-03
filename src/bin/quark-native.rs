@@ -960,6 +960,13 @@ fn replace_tool_stack(host: &naui::Stack, selected: Option<&dyn naui::Widget>) -
     }
 }
 
+#[cfg(target_os = "macos")]
+fn macos_transition_checkpoint(stage: &str) {
+    if std::env::var_os("QUARK_CI_MACOS_TRANSITION").is_some() {
+        eprintln!("Quark AppKit checkpoint: {stage}");
+    }
+}
+
 fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Result<()> {
     #[cfg(not(target_os = "linux"))]
     native_preferences_portable::apply_saved_theme(
@@ -971,6 +978,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Replacing the content also makes this transition atomic on every OS.
     // A proper native system title bar, native application menus and a native
     // toolbar. No frameless window, drawn caption buttons or simulated OS controls.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("980: let menu = ui.menu_bar()?;");
     let menu = ui.menu_bar()?;
     menu.set_menus(
         &native_shell::MENUS
@@ -1122,6 +1131,32 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     }
+    // Hydrogen-native responsive layout primitives. Unlike flat designer
+    // controls, these are real parent containers in the saved HYUI tree.
+    let responsive_heading = ui.label("Responsive Layouts")?;
+    responsive_heading.set_style(naui::TextStyle::Heading);
+    responsive_heading.set_color(naui::TextColor::Accent);
+    toolbox_items.append(&responsive_heading);
+    let mut responsive_buttons = Vec::new();
+    for (kind, title) in [
+        ("RowPanel", "Responsive Row"),
+        ("ColumnPanel", "Vertical Column"),
+        ("GridPanel", "Responsive Grid"),
+        ("ScrollView", "Scroll View"),
+    ] {
+        let button = ui.button(title)?;
+        button.set_sizing(Sizing::fill_width());
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            button.native_widget().set_tooltip_text(Some(
+                "Drag into a Hydrogen .hyui document, or click to insert into the selected container",
+            ));
+        }
+        toolbox_items.append(&button);
+        responsive_buttons.push((kind, title, button));
+    }
     let toolbox_scroll = ui.scroll()?;
     toolbox_scroll.set_child(&toolbox_items);
     toolbox_scroll.set_sizing(Sizing::fill());
@@ -1130,6 +1165,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     toolbox_search.on_change({
         let entries = toolbox_items.clone();
         let controls = toolbox_buttons.clone();
+        let responsive_controls = responsive_buttons.clone();
+        let responsive_heading = responsive_heading.clone();
         move |search| {
             let query = search.trim().to_lowercase();
             entries.clear();
@@ -1146,6 +1183,16 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     for (_, button) in visible {
                         entries.append(button);
                     }
+                }
+            }
+            let responsive_visible = responsive_controls
+                .iter()
+                .filter(|(_, title, _)| query.is_empty() || title.to_lowercase().contains(&query))
+                .collect::<Vec<_>>();
+            if !responsive_visible.is_empty() {
+                entries.append(&responsive_heading);
+                for (_, _, button) in responsive_visible {
+                    entries.append(button);
                 }
             }
         }
@@ -1298,6 +1345,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let (data_view, data_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Data)?;
     data_view.append(&ui.label("Data sources are ready for integration.")?);
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("1345: let symbols_view = ui.grid()?;");
     let symbols_view = ui.grid()?;
     symbols_view.set_sizing(Sizing::fill());
     symbols_view.set_column_track(0, Track::FILL);
@@ -1457,6 +1506,18 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let design_heading = ui.label("DESIGN")?;
     design_heading.set_color(naui::TextColor::Accent);
     design_header.append(&design_heading);
+    let preview_width_selector = ui.combo_box()?;
+    preview_width_selector.set_items(&[
+        "Document width",
+        "Phone · 360",
+        "Tablet · 800",
+        "Desktop · 1120",
+    ]);
+    preview_width_selector.set_selected(0);
+    design_header.append(&ui.label("Viewport:")?);
+    design_header.append(&preview_width_selector);
+    let new_ui_project_button = ui.button("＋ New UI App")?;
+    design_header.append(&new_ui_project_button);
     let open_true_preview = ui.button("↗ OS Window (interactive)")?;
     let open_backend_preview = ui.button("◻ Layout only (no backend)")?;
     design_header.append(&open_true_preview);
@@ -1504,6 +1565,27 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         Rc::new(RefCell::new(std::collections::HashMap::new()));
     type PreviewRefresh = Rc<dyn Fn()>;
     let reload_preview: Rc<RefCell<Option<PreviewRefresh>>> = Rc::new(RefCell::new(None));
+    let design_viewport_width = Rc::new(Cell::new(None::<f64>));
+    // Defer changing the viewport until the native combo event completes:
+    // preview rebuilding must never unparent a control inside its callback.
+    let apply_viewport_later = ui.tasks().channel({
+        let selection = design_viewport_width.clone();
+        let reload = reload_preview.clone();
+        move |preset: usize| {
+            selection.set(match preset {
+                1 => Some(360.0),
+                2 => Some(800.0),
+                3 => Some(1120.0),
+                _ => None,
+            });
+            if let Some(refresh) = reload.borrow().as_ref() {
+                refresh();
+            }
+        }
+    });
+    preview_width_selector.on_select(move |index| {
+        let _ = apply_viewport_later.send(index);
+    });
     // Preview rerenders must never destroy the active Properties input on
     // each keystroke, otherwise editing even a short string loses focus.
     let skip_properties_on_preview_refresh = Rc::new(Cell::new(false));
@@ -1551,6 +1633,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("1631: let status = ui.label(&format!('Ready  |  {}  |  Hydrogen ");
     let status = ui.label(&format!("Ready  |  {}  |  Hydrogen  |  UTF-8", backend()))?;
     // The Hydrogen runtime itself is the reference implementation for
     // exact OS chrome, control spacing and responsive layout. It runs in
@@ -1838,9 +1922,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     let (properties_pane, properties_controls) =
         native_dock_widgets::section_panel(ui, native_docking::DockId::Properties)?;
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("1918: let properties_toolbar = properties_controls.row.clone();");
     let properties_toolbar = properties_controls.row.clone();
     let flat_properties = ui.stack(Orientation::Vertical)?;
     flat_properties.set_spacing(7.0);
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: properties flat stack created");
     let selected_name = ui.text_input("")?;
     selected_name.set_placeholder("Name");
     let selected_text = ui.text_input("")?;
@@ -1864,7 +1952,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
     let delete_control = ui.button("Delete Selected Control")?;
     flat_properties.append(&delete_control);
-    properties_pane.append(&flat_properties);
+    // Build the complete Properties editor before inserting it. Reparenting
+    // an already mounted NSView (or removing the section header and inserting
+    // it again) can raise an Objective-C AppKit exception during Start -> IDE.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Properties flat control fields created");
     let native_property_content = ui.stack(Orientation::Vertical)?;
     native_property_content.set_spacing(4.0);
     let native_property_scroll = ui.scroll()?;
@@ -1875,10 +1967,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let property_editor = ui.stack(Orientation::Vertical)?;
     property_editor.set_sizing(Sizing::fill());
     property_editor.append(&flat_properties);
-    properties_pane.clear();
-    properties_pane.append(&properties_toolbar);
+    // section_panel already inserted properties_toolbar; retain its original
+    // parent and add only the content. Do not clear/re-add the header.
     properties_pane.append(&property_editor);
     properties_pane.set_sizing(Sizing::fill());
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Properties header retained; content mounted");
 
     type PropertyRefresh = Rc<dyn Fn()>;
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
@@ -1890,9 +1984,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let collapsed = collapsed_property_sections.clone();
         let refresh = reload_properties.clone();
         move |section: String| {
-            if !collapsed.borrow_mut().insert(section.clone()) {
-                collapsed.borrow_mut().remove(&section);
-            }
+            collapsed.borrow_mut().toggle(&section);
             if let Some(reload) = refresh.borrow().as_ref() {
                 reload();
             }
@@ -1900,6 +1992,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     });
     // Deliver selection after native click callbacks return, avoiding removal
     // of the active AppKit/WinUI/GTK control from within its own handler.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Inspector fold task channel created");
     let select_element_later = ui.tasks().channel({
         let selected_xml_path = selected_xml_path.clone();
         let reload_properties = reload_properties.clone();
@@ -1945,7 +2039,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         .borrow_mut()
                         .layout
                         .as_mut()
-                        .map(|doc| doc.edit_source(updated.clone()));
+                        .map(|doc| doc.apply_designer_source(updated.clone()));
                     match change {
                         Some(Ok(())) => {
                             sync_xml.set(true);
@@ -1964,6 +2058,57 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
                 Err(error) => status.set_text(&format!("Cannot edit XML property: {error}")),
+            }
+        }
+    });
+
+    // Native structure edits from the toolbox, drop surface and Inspector
+    // must run AFTER GTK/AppKit/WinUI input callbacks return. Destroying the
+    // selected widget from its own drag event would cause use-after-unparent.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Inspector XML callbacks created");
+    let structural_edit_later = ui.tasks().channel({
+        let state = state.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let xml_editor = xml_editor.clone();
+        let sync_xml = sync_xml.clone();
+        let reload_preview = reload_preview.clone();
+        let status = status.clone();
+        move |edit: native_ui_properties::StructureEdit| {
+            let source = state
+                .borrow()
+                .layout
+                .as_ref()
+                .and_then(|doc| doc.source().ok());
+            let Some(source) = source else {
+                status.set_text("Open or create a .hyui design before adding controls");
+                return;
+            };
+            match native_ui_properties::edit_structure(&source, &edit) {
+                Ok((next, path)) => {
+                    let changed = state
+                        .borrow_mut()
+                        .layout
+                        .as_mut()
+                        .map(|doc| doc.apply_designer_source(next.clone()));
+                    match changed {
+                        Some(Ok(())) => {
+                            *selected_xml_path.borrow_mut() = path;
+                            sync_xml.set(true);
+                            xml_editor.set_text(&next);
+                            sync_xml.set(false);
+                            status.set_text("Hydrogen UI updated — save to persist");
+                            if let Some(refresh) = reload_preview.borrow().as_ref() {
+                                refresh();
+                            }
+                        }
+                        Some(Err(error)) => {
+                            status.set_text(&format!("Invalid Hydrogen UI: {error}"))
+                        }
+                        None => {}
+                    }
+                }
+                Err(error) => status.set_text(&format!("Cannot change UI layout: {error}")),
             }
         }
     });
@@ -1993,6 +2138,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let selected_xml_path = selected_xml_path.clone();
         let apply_xml_property = apply_xml_property.clone();
         let live_property_later = live_property_later.clone();
+        let structural_edit_later = structural_edit_later.clone();
         let select_element_later = select_element_later.clone();
         let design_tab_selection = design_tab_selection.clone();
         let change_design_page_later = change_design_page_later.clone();
@@ -2073,13 +2219,70 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             // The Inspector groups fields into collapsible native sections.
             // Each section is a real widget container (not an HTML/webview
             // imitation) and stays folded while the selection changes.
+            // Drag the selected element from this GTK Inspector handle into
+            // another responsive container. The native controls in the
+            // preview stay selection-only and cannot dispatch app events.
+            #[cfg(target_os = "linux")]
+            if !path.is_empty() {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                if let Ok(grip) = ui.button("⠿ Drag selected into layout") {
+                    let source = gtk4::DragSource::new();
+                    source.set_actions(gtk4::gdk::DragAction::MOVE);
+                    let payload = native_portable_preview::native_move_drag_payload(&path);
+                    source.connect_prepare(move |_, _, _| {
+                        Some(gtk4::gdk::ContentProvider::for_value(&payload.to_value()))
+                    });
+                    grip.native_widget().add_controller(source);
+                    native_property_content.append(&grip);
+                }
+            }
+            // Reorder the selected component within its responsive parent.
+            // These actions work on every OS, even before platform-specific
+            // pointer drag/drop parity has been completed.
+            if !path.is_empty() {
+                if let Ok(action_row) = ui.stack(Orientation::Horizontal) {
+                    action_row.set_spacing(4.0);
+                    for (label, edit) in [
+                        (
+                            "↑ Earlier",
+                            native_ui_properties::StructureEdit::MoveEarlier {
+                                selected: path.clone(),
+                            },
+                        ),
+                        (
+                            "↓ Later",
+                            native_ui_properties::StructureEdit::MoveLater {
+                                selected: path.clone(),
+                            },
+                        ),
+                        (
+                            "Delete",
+                            native_ui_properties::StructureEdit::Delete {
+                                selected: path.clone(),
+                            },
+                        ),
+                    ] {
+                        if let Ok(button) = ui.button(label) {
+                            let send = structural_edit_later.clone();
+                            button.on_click(move || {
+                                let _ = send.send(edit.clone());
+                            });
+                            action_row.append(&button);
+                        }
+                    }
+                    native_property_content.append(&action_row);
+                }
+            }
             let all_fields = fields.clone();
             let mut last_group = "";
             let mut current_section: Option<naui::Stack> = None;
             for field in fields {
                 if field.group != last_group {
                     last_group = field.group;
-                    let folded = collapsed_property_sections.borrow().contains(last_group);
+                    let folded = collapsed_property_sections
+                        .borrow()
+                        .is_collapsed(last_group);
                     if let Ok(group_heading) = ui.button(&format!(
                         "{}  {}",
                         if folded { "▸" } else { "▾" },
@@ -2207,6 +2410,58 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     }));
 
+    #[cfg(target_os = "linux")]
+    {
+        use gtk4::prelude::*;
+        use naui::Widget as _;
+
+        // Real GTK drag target: the native widget hit under the pointer
+        // determines the nested HYUI insertion location. This is not a
+        // painted/fake drag-and-drop surface.
+        let surface: gtk4::Widget = portable_preview.native_widget().upcast();
+        let target = gtk4::DropTarget::new(
+            String::static_type(),
+            gtk4::gdk::DragAction::COPY | gtk4::gdk::DragAction::MOVE,
+        );
+        let surface_at_drop = surface.clone();
+        let sender = structural_edit_later.clone();
+        let state_for_drop = state.clone();
+        target.connect_drop(move |_, value, x, y| {
+            let Ok(payload) = value.get::<String>() else {
+                return false;
+            };
+            if !state_for_drop
+                .borrow()
+                .layout
+                .as_ref()
+                .is_some_and(|doc| doc.native_window)
+            {
+                return false;
+            }
+            let destination = native_portable_preview::path_at_drop(&surface_at_drop, x, y);
+            let edit = if let Some(kind) = payload.strip_prefix("quark-toolbox:") {
+                native_ui_properties::StructureEdit::Insert {
+                    selected: destination,
+                    kind: kind.to_owned(),
+                }
+            } else if let Some(selected) = native_portable_preview::native_move_drag_path(&payload)
+            {
+                native_ui_properties::StructureEdit::MoveInto {
+                    selected,
+                    target: destination,
+                }
+            } else {
+                return false;
+            };
+            sender.send(edit).is_ok()
+        });
+        surface.add_controller(target);
+    }
+
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("2441: let select_native_element: native_portable_preview::Select");
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("AppKit: Inspector native properties and callbacks ready");
     let select_native_element: native_portable_preview::SelectElement = Rc::new({
         let select_element_later = select_element_later.clone();
         move |path| {
@@ -2227,6 +2482,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let native_property_scroll = native_property_scroll.clone();
         let select_native_element = select_native_element.clone();
         let design_tab_selection = design_tab_selection.clone();
+        let design_viewport_width = design_viewport_width.clone();
+        let preview_width_selector = preview_width_selector.clone();
         let reload_properties = reload_properties.clone();
         let skip_properties_on_preview_refresh = skip_properties_on_preview_refresh.clone();
         let status = status.clone();
@@ -2236,6 +2493,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 return;
             };
             let is_native = layout.native_window;
+            preview_width_selector.set_enabled(is_native);
             let xml = layout.source().ok();
             let document = layout.path.clone();
             drop(doc);
@@ -2258,6 +2516,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                         &document,
                         select_native_element.clone(),
                         design_tab_selection.clone(),
+                        design_viewport_width.get(),
                     ) {
                         Ok(view) => {
                             portable_preview.append(&view);
@@ -2480,6 +2739,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     terminal_input_row.append(&terminal_send);
     #[cfg(not(target_os = "linux"))]
     terminal_section.append(&terminal_input_row);
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("2719: let terminal_keys = ui.stack(Orientation::Horizontal)?;");
     #[cfg(not(target_os = "linux"))]
     let terminal_keys = ui.stack(Orientation::Horizontal)?;
     #[cfg(not(target_os = "linux"))]
@@ -2886,6 +3147,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         });
     }
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("3124: let workspace_name = ui.label(&display_project_name(&state");
     let workspace_name = ui.label(&display_project_name(&state.borrow()))?;
 
     // True native splitters provide pointer capture and keyboard resizing.
@@ -3253,6 +3516,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // keeps its established two-panel behaviour; moving a tool to a different
     // zone uses the native sidecar host. Unsupported compound bottom tabs are
     // rejected rather than silently persisting a move that cannot be shown.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("3492: let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::");
     #[cfg(target_os = "linux")]
     let dock_refresh_hook: DockRefreshHook = Rc::new(RefCell::new(None));
     #[cfg(target_os = "linux")]
@@ -3777,6 +4042,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
     // GTK auto-hide must not change AppKit or WinUI splitter geometry.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("4016: let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});");
     #[cfg(not(target_os = "linux"))]
     let refresh_docks: Rc<dyn Fn()> = Rc::new(|| {});
     #[cfg(target_os = "linux")]
@@ -4295,6 +4562,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             control.set_text(if collapsed { "▸" } else { "▾" });
         }
     });
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("4533: let status_bar = ui.stack(Orientation::Horizontal)?;");
     let status_bar = ui.stack(Orientation::Horizontal)?;
     let status_brand = ui.label("● Quark · Hydrogen")?;
     status_brand.set_color(naui::TextColor::Accent);
@@ -4593,6 +4862,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         });
     }
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("4831: let left_panel: Rc<dyn Fn(usize)> = Rc::new({");
     let left_panel: Rc<dyn Fn(usize)> = Rc::new({
         let dock_model = dock_model.clone();
         let left_content = left_content.clone();
@@ -5006,6 +5277,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
         }
     });
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("5244: *show_page_redraw.borrow_mut() = Some(show_page.clone());");
     *show_page_redraw.borrow_mut() = Some(show_page.clone());
     *document_relayout.borrow_mut() = Some(Rc::new({
         let show_page = show_page.clone();
@@ -5015,12 +5288,77 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             show_page(page);
         }
     }));
+    for (kind, title, button) in responsive_buttons {
+        let show_page = show_page.clone();
+        let state = state.clone();
+        let status = status.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let structural_edit_later = structural_edit_later.clone();
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let source = gtk4::DragSource::new();
+            source.set_actions(gtk4::gdk::DragAction::COPY);
+            let payload = format!("quark-toolbox:{kind}");
+            source.connect_prepare(move |_, _, _| {
+                Some(gtk4::gdk::ContentProvider::for_value(&payload.to_value()))
+            });
+            button.native_widget().add_controller(source);
+        }
+        button.on_click(move || {
+            if !state
+                .borrow()
+                .layout
+                .as_ref()
+                .is_some_and(|doc| doc.native_window)
+            {
+                status.set_text(
+                    "Create or open a Hydrogen .hyui project before adding responsive layouts",
+                );
+                return;
+            }
+            let _ = structural_edit_later.send(native_ui_properties::StructureEdit::Insert {
+                selected: selected_xml_path.borrow().clone(),
+                kind: kind.to_owned(),
+            });
+            status.set_text(&format!("Adding {title} to Hydrogen UI"));
+            show_page(Page::Design);
+        });
+    }
     for (kind, button) in toolbox_buttons {
         let show_page = show_page.clone();
         let state = state.clone();
+        let selected_xml_path = selected_xml_path.clone();
+        let structural_edit_later = structural_edit_later.clone();
+        #[cfg(target_os = "linux")]
+        {
+            use gtk4::prelude::*;
+            use naui::Widget as _;
+            let source = gtk4::DragSource::new();
+            source.set_actions(gtk4::gdk::DragAction::COPY);
+            let payload = format!("quark-toolbox:{kind:?}");
+            source.connect_prepare(move |_, _, _| {
+                Some(gtk4::gdk::ContentProvider::for_value(&payload.to_value()))
+            });
+            button.native_widget().add_controller(source);
+        }
         button.on_click(move || {
-            state.borrow_mut().armed = Some(kind);
-            show_page(Page::Design);
+            let is_native = state
+                .borrow()
+                .layout
+                .as_ref()
+                .is_some_and(|doc| doc.native_window);
+            if is_native {
+                let _ = structural_edit_later.send(native_ui_properties::StructureEdit::Insert {
+                    selected: selected_xml_path.borrow().clone(),
+                    kind: format!("{kind:?}"),
+                });
+                show_page(Page::Design);
+            } else {
+                state.borrow_mut().armed = Some(kind);
+                show_page(Page::Design);
+            }
         });
     }
 
@@ -5234,6 +5572,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // File > New Project reuses the native launcher wizard as a separate
     // window, without reopening the IDE's removed Start document or closing
     // the IDE when creation completes.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("5537: let show_new_project: Rc<dyn Fn()> = Rc::new({");
     let show_new_project: Rc<dyn Fn()> = Rc::new({
         let ui = ui.clone();
         let window = window.clone();
@@ -5250,12 +5590,48 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     _ => Err("Choose a new Hydrogen project".into()),
                 }
             });
-            if let Err(error) =
-                native_start_window::create_project_wizard(&ui, window.clone(), launch, false)
-            {
+            if let Err(error) = native_start_window::create_project_wizard(
+                &ui,
+                window.clone(),
+                launch,
+                false,
+                false,
+            ) {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
+    });
+
+    let show_new_ui_project: Rc<dyn Fn()> = Rc::new({
+        let ui = ui.clone();
+        let window = window.clone();
+        let open_project = open_project.clone();
+        let open_layout = open_layout.clone();
+        let status = status.clone();
+        move || {
+            let launch: native_start_window::Launch = Rc::new({
+                let open_project = open_project.clone();
+                let open_layout = open_layout.clone();
+                move |action| match action {
+                    native_start_window::Action::Project(manifest) => {
+                        let design = manifest.parent().unwrap().join("Main.hyui");
+                        open_project(manifest);
+                        open_layout(design);
+                        Ok(())
+                    }
+                    _ => Err("Create a native Hydrogen UI project".into()),
+                }
+            });
+            if let Err(error) =
+                native_start_window::create_project_wizard(&ui, window.clone(), launch, false, true)
+            {
+                status.set_text(&format!("Cannot create Hydrogen UI app: {error}"));
+            }
+        }
+    });
+    new_ui_project_button.on_click({
+        let create = show_new_ui_project.clone();
+        move || create()
     });
 
     tree.on_select({
@@ -5605,6 +5981,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         }
     });
 
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("5944: let sync_design_source: Rc<dyn Fn()> = Rc::new({");
     let sync_design_source: Rc<dyn Fn()> = Rc::new({
         let state = state.clone();
         let xml_editor = xml_editor.clone();
@@ -6102,6 +6480,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     // Projects selected in the small launcher open directly in an editor tab.
     // "Continue without code" enters the full IDE with no selected project.
+    #[cfg(target_os = "macos")]
+    macos_transition_checkpoint("6441: let initial_document = {");
     let initial_document = {
         let ide = state.borrow();
         (
@@ -6140,6 +6520,20 @@ fn build(ui: &Ui) -> naui::Result<()> {
     // The launcher buttons retain the launch closure. Avoid a strong
     // Window -> button -> closure -> Window cycle across all backends.
     let ide_window = window.downgrade();
+    // Reparenting the complete Start Window tree into an IDE NSWindow can
+    // invalidate AppKit views while its native responder chain is active.
+    // On macOS construct the IDE in a *new* NSWindow, show it first, then
+    // close the launcher on a subsequent UI task. The task owns only a weak
+    // reference so it does not retain the old window indefinitely.
+    #[cfg(target_os = "macos")]
+    let close_launcher_later = ui.tasks().channel({
+        let start = ide_window.clone();
+        move |()| {
+            if let Some(old_window) = start.upgrade() {
+                old_window.close();
+            }
+        }
+    });
     let launch: Rc<dyn Fn(native_start_window::Action) -> Result<(), String>> =
         Rc::new(move |action| {
             {
@@ -6172,10 +6566,34 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     }
                 }
             }
-            let window = ide_window
-                .upgrade()
-                .ok_or("The Start Window has already closed")?;
-            build_ide(&handle, launch_state.clone(), window).map_err(|error| error.to_string())
+            #[cfg(target_os = "macos")]
+            {
+                macos_transition_checkpoint("launch: create separate AppKit IDE window");
+                let workspace_window = handle
+                    .window(
+                        "Quark IDE — Hydrogen Development Environment",
+                        1480.0,
+                        940.0,
+                    )
+                    .map_err(|error| format!("Cannot create AppKit IDE window: {error}"))?;
+                macos_transition_checkpoint("launch: AppKit IDE window created");
+                // No NSView from the launcher is transferred to this window.
+                // Leave the launcher alive if building the IDE fails.
+                build_ide(&handle, launch_state.clone(), workspace_window)
+                    .map_err(|error| format!("Cannot construct AppKit IDE: {error}"))?;
+                eprintln!("Quark: AppKit IDE workspace ready");
+                close_launcher_later
+                    .send(())
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let window = ide_window
+                    .upgrade()
+                    .ok_or("The Start Window has already closed")?;
+                build_ide(&handle, launch_state.clone(), window).map_err(|error| error.to_string())
+            }
         });
     native_start_window::show(
         ui,

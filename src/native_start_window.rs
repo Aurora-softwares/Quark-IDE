@@ -141,7 +141,11 @@ pub fn show(
         let status = status.clone();
         let pending = pending.clone();
         move |action: Action| {
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: UI task received launcher action");
             if let Err(error) = launch(action) {
+                #[cfg(target_os = "macos")]
+                eprintln!("Quark AppKit transition: launch returned an error");
                 pending.set(false);
                 status.set_text(&format!("Cannot open workspace: {error}"));
             }
@@ -151,10 +155,16 @@ pub fn show(
         let pending = pending.clone();
         let status = status.clone();
         move |action| {
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: scheduling launcher action");
             if pending.replace(true) {
                 return Ok(());
             }
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: updating launcher status");
             status.set_text("Opening workspace…");
+            #[cfg(target_os = "macos")]
+            eprintln!("Quark AppKit transition: posting UI channel");
             if let Err(error) = sender.send(action) {
                 pending.set(false);
                 return Err(error.to_string());
@@ -317,7 +327,9 @@ pub fn show(
         let launch = launch.clone();
         let status = status.clone();
         move || {
-            if let Err(error) = create_project_wizard(&ui, window.clone(), launch.clone(), true) {
+            if let Err(error) =
+                create_project_wizard(&ui, window.clone(), launch.clone(), true, false)
+            {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
@@ -336,7 +348,57 @@ pub fn show(
 
     window.set_child(&root);
     window.show();
+
+    // Opt-in macOS CI hook. Schedule the exact same start transition as a
+    // real button click so CI can catch NSWindow lifetime crashes on both
+    // blank and existing projects. Never silently auto-open anything in
+    // ordinary sessions.
+    #[cfg(target_os = "macos")]
+    if let Ok(mode) = std::env::var("QUARK_CI_MACOS_TRANSITION") {
+        match macos_smoke_action(&mode) {
+            Some(action) => {
+                eprintln!("Quark: AppKit transition smoke requested");
+                if let Err(error) = launch(action) {
+                    eprintln!("Quark: cannot schedule AppKit transition: {error}");
+                }
+            }
+            None => eprintln!("Quark: ignoring invalid AppKit smoke transition request"),
+        }
+    }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_smoke_action(mode: &str) -> Option<Action> {
+    match mode {
+        "empty" => Some(Action::Empty),
+        value => value
+            .strip_prefix("project:")
+            .filter(|path| !path.trim().is_empty())
+            .map(|path| Action::Project(PathBuf::from(path))),
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_transition_tests {
+    use super::*;
+
+    #[test]
+    fn smoke_transition_accepts_blank_workspaces() {
+        assert_eq!(macos_smoke_action("empty"), Some(Action::Empty));
+    }
+
+    #[test]
+    fn smoke_transition_only_accepts_explicit_project_paths() {
+        let project = PathBuf::from("/tmp/quark smoke/Test.hyproj");
+        assert_eq!(
+            macos_smoke_action("project:/tmp/quark smoke/Test.hyproj"),
+            Some(Action::Project(project))
+        );
+        assert_eq!(macos_smoke_action("project:"), None);
+        assert_eq!(macos_smoke_action("folder:/tmp"), None);
+        assert_eq!(macos_smoke_action("anything"), None);
+    }
 }
 
 fn start_card(
@@ -368,8 +430,17 @@ pub(crate) fn create_project_wizard(
     _launcher: Window,
     launch: Launch,
     _close_parent: bool,
+    native_ui_project: bool,
 ) -> naui::Result<()> {
-    let wizard = ui.window("Create a Hydrogen project", 640.0, 450.0)?;
+    let wizard = ui.window(
+        if native_ui_project {
+            "Create a Hydrogen UI app"
+        } else {
+            "Create a Hydrogen project"
+        },
+        640.0,
+        450.0,
+    )?;
     let root = ui.stack(Orientation::Vertical)?;
     root.set_padding(Padding::all(22.0));
     root.set_spacing(10.0);
@@ -394,6 +465,11 @@ pub(crate) fn create_project_wizard(
         "Hydrogen library",
     ]);
     template.set_selected(0);
+    if native_ui_project {
+        // Native UI projects use one portable Hydrogen `exe` target and
+        // let the compiler choose the host OS at build time.
+        template.set_enabled(false);
+    }
 
     root.append(&ui.label("Project name")?);
     root.append(&name);
@@ -408,7 +484,11 @@ pub(crate) fn create_project_wizard(
     actions.append(&submit);
     actions.append(&cancel);
     root.append(&actions);
-    let status = ui.label("Creates a Hydrogen project and a Main.hyui design.")?;
+    let status = ui.label(if native_ui_project {
+        "Creates an interactive native Hydrogen UI project, responsive Main.hyui and event handlers."
+    } else {
+        "Creates a Hydrogen project and a legacy Main.hyui design."
+    })?;
     status.set_color(TextColor::Secondary);
     root.append(&status);
 
@@ -420,34 +500,49 @@ pub(crate) fn create_project_wizard(
             }
         }
     });
+    // A new project must never replace Quark's AppKit window or close the
+    // wizard synchronously within NSButton's action dispatch. The Windows
+    // and GTK versions use the same deferred path for consistent lifetime.
+    let project_created = ui.tasks().channel({
+        let launch = launch.clone();
+        let status = status.clone();
+        let wizard = wizard.clone();
+        move |manifest: PathBuf| match launch(Action::Project(manifest)) {
+            Ok(()) => wizard.close(),
+            Err(error) => status.set_text(&format!("Cannot open created project: {error}")),
+        }
+    });
     submit.on_click({
         let name = name.clone();
         let parent = parent.clone();
         let template = template.clone();
         let status = status.clone();
-        let wizard = wizard.clone();
+        let project_created = project_created.clone();
         move || {
             let selected = template.selected().unwrap_or(0);
             let kind = startup::Template::ALL
                 .get(selected)
                 .copied()
                 .unwrap_or(startup::Template::Linux);
-            match startup::create_project(Path::new(&parent.text()), &name.text(), kind) {
+            let result = if native_ui_project {
+                startup::create_native_ui_project(Path::new(&parent.text()), &name.text())
+            } else {
+                startup::create_project(Path::new(&parent.text()), &name.text(), kind)
+            };
+            match result {
                 Ok(manifest) => {
-                    let design = manifest.parent().unwrap().join("Main.hyui");
-                    if let Ok(bytes) = crate::ui_xml::encode(&Layout::default()).map(String::into_bytes) {
-                        if let Err(error) = crate::storage::atomic_write(&design, &bytes) {
-                            status.set_text(&format!(
-                                "Project created, but the designer file could not be written: {error}"
-                            ));
+                    if !native_ui_project {
+                        let design = manifest.parent().unwrap().join("Main.hyui");
+                        if let Ok(bytes) = crate::ui_xml::encode(&Layout::default()).map(String::into_bytes) {
+                            if let Err(error) = crate::storage::atomic_write(&design, &bytes) {
+                                status.set_text(&format!(
+                                    "Project created, but the designer file could not be written: {error}"
+                                ));
+                            }
                         }
                     }
-                    match launch(Action::Project(manifest)) {
-                        Ok(()) => {
-                            // The parent is now the IDE window; never close it.
-                            wizard.close();
-                        }
-                        Err(error) => status.set_text(&error),
+                    if let Err(error) = project_created.send(manifest) {
+                        status.set_text(&format!("Cannot open created project: {error}"));
                     }
                 }
                 Err(error) => status.set_text(&error),

@@ -899,6 +899,29 @@ mod tests {
         assert!(result.contains(&executable.to_string_lossy().to_string()));
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_ui_launch_reports_missing_bundle_executable() {
+        let temp = tempfile::tempdir().unwrap();
+        let bundle = temp.path().join("Missing.app");
+        fs::create_dir_all(bundle.join("Contents/MacOS")).unwrap();
+        let error = launch_built(&bundle, temp.path(), true).unwrap_err();
+        assert!(error.contains("incomplete"), "{error}");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_ui_launch_rejects_symlinked_bundle_before_open() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let app = temp.path().join("Real.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        let linked = temp.path().join("Link.app");
+        symlink(&app, &linked).unwrap();
+        let error = launch_built(&linked, temp.path(), true).unwrap_err();
+        assert!(error.contains("linked build artifact"), "{error}");
+    }
+
     fn sample_plan(dir: &Path) -> BuildPlan {
         BuildPlan {
             program: "hy".into(),

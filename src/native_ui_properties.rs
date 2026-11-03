@@ -128,6 +128,25 @@ fn default_value(kind: &str, name: &str) -> &'static str {
     }
 }
 
+/// Collapsible Inspector sections are design-session state, never
+/// attributes written to the Hydrogen application XML.
+#[derive(Debug, Default, Clone)]
+pub struct InspectorSections {
+    collapsed: std::collections::HashSet<String>,
+}
+
+impl InspectorSections {
+    pub fn toggle(&mut self, section: &str) {
+        if !self.collapsed.insert(section.to_owned()) {
+            self.collapsed.remove(section);
+        }
+    }
+
+    pub fn is_collapsed(&self, section: &str) -> bool {
+        self.collapsed.contains(section)
+    }
+}
+
 /// Keep design-time presentation separate from the application's runtime
 /// defaults. Every supported XML attribute is editable even if it is absent.
 fn property_group(kind: &str, name: &str) -> &'static str {
@@ -415,8 +434,26 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
     {
         return Err(format!("{name} must be true or false"));
     }
-    if name == "theme" && kind == "Window" && !matches!(value, "system" | "light" | "dark") {
+    if kind == "Window" && name == "version" && value != "1" {
+        return Err("Hydrogen v1 requires Window version=1".into());
+    }
+    if kind == "Window" && name == "theme" && !matches!(value, "system" | "light" | "dark") {
         return Err("Window theme must be system, light or dark".into());
+    }
+    if kind == "Window" && name == "material" && !matches!(value, "auto" | "glass" | "solid") {
+        return Err("Window material must be auto, glass or solid".into());
+    }
+    if kind == "Label"
+        && name == "role"
+        && !matches!(value, "title" | "heading" | "body" | "caption")
+    {
+        return Err("Label role must be title, heading, body or caption".into());
+    }
+    if kind == "Label" && name == "tone" && !matches!(value, "normal" | "muted" | "accent") {
+        return Err("Label tone must be normal, muted or accent".into());
+    }
+    if kind == "FilePicker" && name == "mode" && !matches!(value, "open" | "save" | "folder") {
+        return Err("FilePicker mode must be open, save or folder".into());
     }
     if matches!(
         name,
@@ -430,14 +467,19 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
             | "minimum"
             | "maximum"
             | "interval"
-    ) || (name == "value" && matches!(kind, "Slider" | "NumberInput" | "ProgressBar"))
+    ) || (name == "columns" && kind == "GridPanel")
+        || (name == "value" && matches!(kind, "Slider" | "NumberInput" | "ProgressBar"))
     {
+        // HYUI v1 uses strictly nonnegative 0..32767 integer attributes.
+        // A float can look valid in Quark's preview but fail when Hydrogen
+        // parses the built application's layout, so never save it.
         let number = value
-            .parse::<f64>()
-            .map_err(|_| format!("{name} must be a number"))?;
-        if !number.is_finite() {
-            return Err(format!("{name} must be a finite number"));
+            .parse::<u32>()
+            .map_err(|_| format!("{name} must be a nonnegative whole number"))?;
+        if number > 32767 {
+            return Err(format!("{name} must be no greater than 32767"));
         }
+        let number = f64::from(number);
         if matches!(
             name,
             "width"
@@ -451,6 +493,15 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
         ) && number < 0.0
         {
             return Err(format!("{name} must not be negative"));
+        }
+        if name == "interval" && kind == "Timer" && number < 100.0 {
+            return Err("Timer interval must be at least 100 ms".into());
+        }
+        if name == "columns" && kind == "GridPanel" && number == 0.0 {
+            return Err("GridPanel must contain at least one column".into());
+        }
+        if matches!(name, "width" | "height" | "minItemWidth") && number == 0.0 {
+            return Err(format!("{name} must be positive"));
         }
         if name == "width" && kind == "Window" && number < 200.0 {
             return Err("Window width must be at least 200".into());
@@ -646,6 +697,10 @@ fn tag_for_toolbox(kind: &str) -> Option<&'static str> {
         "Image" => "Image",
         "Panel" => "Panel",
         "TabControl" => "Tabs",
+        "RowPanel" => "RowPanel",
+        "ColumnPanel" => "ColumnPanel",
+        "GridPanel" => "GridPanel",
+        "ScrollView" => "ScrollView",
         _ => return None,
     })
 }
@@ -668,6 +723,10 @@ fn toolbox_markup(tag: &str, id: &str) -> String {
         // a non-existent asset and cause a build failure.
         "Image" => format!(r#"{prefix} source="assets/image.png" height="120"/>"#),
         "Panel" => format!(r#"{prefix} title="Panel" padding="20"></Panel>"#),
+        "RowPanel" => format!(r#"{prefix} gap="12" breakpoint="700"></RowPanel>"#),
+        "ColumnPanel" => format!(r#"{prefix} gap="12"></ColumnPanel>"#),
+        "GridPanel" => format!(r#"{prefix} gap="12" columns="2" minItemWidth="240"></GridPanel>"#),
+        "ScrollView" => format!(r#"{prefix} height="260"></ScrollView>"#),
         "Tabs" => format!(r#"{prefix} value="0"><Tab title="Page 1"/></Tabs>"#),
         _ => unreachable!("tag_for_toolbox controls the permitted set"),
     }
@@ -838,10 +897,24 @@ pub fn move_sibling(
 /// this prevents GTK/AppKit/WinUI widgets being unparented during dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StructureEdit {
-    Insert { selected: Vec<usize>, kind: String },
-    MoveEarlier { selected: Vec<usize> },
-    MoveLater { selected: Vec<usize> },
-    Delete { selected: Vec<usize> },
+    Insert {
+        selected: Vec<usize>,
+        kind: String,
+    },
+    MoveEarlier {
+        selected: Vec<usize>,
+    },
+    MoveLater {
+        selected: Vec<usize>,
+    },
+    #[cfg(any(target_os = "linux", test))]
+    MoveInto {
+        selected: Vec<usize>,
+        target: Vec<usize>,
+    },
+    Delete {
+        selected: Vec<usize>,
+    },
 }
 
 pub fn edit_structure(source: &str, edit: &StructureEdit) -> Result<(String, Vec<usize>), String> {
@@ -849,6 +922,8 @@ pub fn edit_structure(source: &str, edit: &StructureEdit) -> Result<(String, Vec
         StructureEdit::Insert { selected, kind } => insert_toolbox_control(source, selected, kind),
         StructureEdit::MoveEarlier { selected } => move_sibling(source, selected, true),
         StructureEdit::MoveLater { selected } => move_sibling(source, selected, false),
+        #[cfg(any(target_os = "linux", test))]
+        StructureEdit::MoveInto { selected, target } => move_into(source, selected, target),
         StructureEdit::Delete { selected } => {
             let (index, parent) = selected
                 .split_last()
@@ -905,6 +980,33 @@ pub fn remove_control(source: &str, selected: &[usize]) -> Result<String, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_responsive_layout_containers_are_insertable_and_nested() {
+        let xml = r#"<Window version="1" width="900" height="700"/>"#;
+        let (row, row_path) = insert_toolbox_control(xml, &[], "RowPanel").unwrap();
+        assert_eq!(row_path, [0]);
+        assert!(row.contains("breakpoint=\"700\""));
+        let (grid, grid_path) = insert_toolbox_control(&row, &row_path, "GridPanel").unwrap();
+        assert_eq!(grid_path, [0, 0]);
+        assert!(grid.contains("minItemWidth=\"240\""));
+        let (body, body_path) = insert_toolbox_control(&grid, &grid_path, "ColumnPanel").unwrap();
+        let (changed, child_path) = insert_toolbox_control(&body, &body_path, "Button").unwrap();
+        assert_eq!(child_path, [0, 0, 0, 0]);
+        assert!(changed.contains("<Button"));
+        assert_eq!(properties(&changed, &child_path).unwrap().0, "Button");
+    }
+
+    #[test]
+    fn responsive_layout_templates_keep_valid_hydrogen_source_after_multiple_inserts() {
+        let mut xml = r#"<Window version="1"><Panel/></Window>"#.to_owned();
+        for kind in ["RowPanel", "ColumnPanel", "GridPanel", "ScrollView"] {
+            xml = insert_toolbox_control(&xml, &[0], kind).unwrap().0;
+            Document::parse(&xml).unwrap();
+        }
+        assert_eq!(element_paths(&xml).unwrap().len(), 6);
+        assert!(xml.contains("height=\"260\""));
+    }
 
     #[test]
     fn insert_into_nested_panel_keeps_handlers_and_surrounding_xml() {
@@ -964,6 +1066,36 @@ mod tests {
         assert!(!changed.contains("id=\"open\""));
         assert!(changed.contains("<Tabs"));
         assert!(remove_control(xml, &[]).is_err());
+    }
+
+    #[test]
+    fn moving_between_panels_preserves_handlers_and_nested_structure() {
+        let source = r#"<Window version="1"><RowPanel><Panel title="A"><Button id="run" text="Run" onClick="Build"/></Panel><Panel title="B"/></RowPanel></Window>"#;
+        let (updated, selected) = move_into(source, &[0, 0, 0], &[0, 1]).unwrap();
+        assert_eq!(selected, [0, 1, 0]);
+        assert_eq!(properties(&updated, &selected).unwrap().0, "Button");
+        assert!(updated.contains(r#"onClick="Build""#));
+        assert_eq!(properties(&updated, &[0, 0]).unwrap().0, "Panel");
+        assert!(!updated.contains("title=\"A\"><Button"));
+    }
+
+    #[test]
+    fn moving_popover_target_keeps_its_stable_id_and_reference() {
+        let xml = r#"<Window version="1"><RowPanel><Panel><Button id="action" text="Go"/></Panel><Panel/></RowPanel><Popover id="tip" target="action" text="Details"/></Window>"#;
+        let (moved, destination) = move_into(xml, &[0, 0, 0], &[0, 1]).unwrap();
+        assert_eq!(destination, [0, 1, 0]);
+        assert!(moved.contains("target=\"action\""));
+        assert_eq!(properties(&moved, &destination).unwrap().0, "Button");
+    }
+
+    #[test]
+    fn moving_control_rejects_self_descendants_and_special_hyui_nodes() {
+        let source = r#"<Window version="1"><Panel><ColumnPanel><Button id="go" onClick="Go"/></ColumnPanel></Panel><Tabs><Tab title="One"/></Tabs></Window>"#;
+        assert!(move_into(source, &[0], &[0, 0]).is_err());
+        assert!(move_into(source, &[0, 0], &[0, 0, 0]).is_err());
+        assert!(move_into(source, &[], &[0]).is_err());
+        assert!(move_into(source, &[1, 0], &[0]).is_err());
+        assert_eq!(properties(source, &[0, 0, 0]).unwrap().0, "Button");
     }
 
     #[test]
@@ -1101,6 +1233,34 @@ mod tests {
     }
 
     #[test]
+    fn inspector_sections_toggle_independently_and_restore_expanded_state() {
+        let mut inspector = InspectorSections::default();
+        assert!(!inspector.is_collapsed("Appearance & layout"));
+        inspector.toggle("Appearance & layout");
+        assert!(inspector.is_collapsed("Appearance & layout"));
+        assert!(!inspector.is_collapsed("Events & behaviour"));
+        inspector.toggle("Events & behaviour");
+        inspector.toggle("Appearance & layout");
+        assert!(!inspector.is_collapsed("Appearance & layout"));
+        assert!(inspector.is_collapsed("Events & behaviour"));
+    }
+
+    #[test]
+    fn inspector_folding_never_touches_runtime_xml_or_property_groups() {
+        let xml = r#"<Window version="1"><Button id="go" onClick="Go" text="Run" /></Window>"#;
+        let (_, fields) = available_properties(xml, &[0]).unwrap();
+        let mut inspector = InspectorSections::default();
+        for section in fields.iter().map(|field| field.group) {
+            inspector.toggle(section);
+        }
+        assert!(xml.contains("onClick=\"Go\""));
+        assert!(fields
+            .iter()
+            .any(|field| field.group == "Events & behaviour"));
+        assert_eq!(properties(xml, &[0]).unwrap().0, "Button");
+    }
+
+    #[test]
     fn inspector_exposes_valid_theme_font_role_and_tone_selectors() {
         let source = r#"<Window version="1"><Label role="heading" tone="accent"/></Window>"#;
         let (_, fields) = available_properties(source, &[0]).unwrap();
@@ -1113,6 +1273,29 @@ mod tests {
         );
         assert_eq!(property_choices("Label", "tone", &fields).len(), 3);
         assert!(set_attribute(source, &[0], "role", "caption").is_ok());
+    }
+
+    #[test]
+    fn inspector_numeric_values_match_hydrogen_v1_integer_schema() {
+        let xml = r#"<Window version="1" width="800"><GridPanel columns="2" minItemWidth="240"/><Timer interval="100" onTick="Tick"/></Window>"#;
+        assert!(set_attribute(xml, &[], "width", "850").is_ok());
+        assert!(set_attribute(xml, &[], "width", "850.5").is_err());
+        assert!(set_attribute(xml, &[], "width", "99999").is_err());
+        assert!(set_attribute(xml, &[0], "columns", "0").is_err());
+        assert!(set_attribute(xml, &[0], "columns", "3").is_ok());
+        assert!(set_attribute(xml, &[1], "interval", "99").is_err());
+        assert!(set_attribute(xml, &[1], "interval", "250").is_ok());
+        assert!(set_attribute(xml, &[], "version", "2").is_err());
+    }
+
+    #[test]
+    fn inspector_appearance_enums_reject_hydrogen_runtime_invalid_values() {
+        let xml = r#"<Window version="1"><Label role="heading" tone="accent"/><FilePicker mode="open" text="Choose" onPick="Pick"/></Window>"#;
+        assert!(set_attribute(xml, &[], "material", "glass").is_ok());
+        assert!(set_attribute(xml, &[], "material", "unknown").is_err());
+        assert!(set_attribute(xml, &[0], "role", "italic").is_err());
+        assert!(set_attribute(xml, &[0], "tone", "#FF00FF").is_err());
+        assert!(set_attribute(xml, &[1], "mode", "download").is_err());
     }
 
     #[test]
@@ -1170,15 +1353,16 @@ mod tests {
 
     #[test]
     fn properties_validate_native_control_ranges_and_booleans() {
-        let xml = r#"<Window title="Test"><Slider minimum="-10" maximum="30" value="5"/><CheckBox checked="true"/></Window>"#;
+        let xml = r#"<Window title="Test"><Slider minimum="10" maximum="30" value="15"/><CheckBox checked="true"/></Window>"#;
         assert!(set_attribute(xml, &[0], "minimum", "31").is_err());
         assert!(set_attribute(xml, &[0], "maximum", "-11").is_err());
         assert!(set_attribute(xml, &[0], "value", "31").is_err());
         assert!(set_attribute(xml, &[0], "value", "NaN").is_err());
         assert!(set_attribute(xml, &[1], "checked", "maybe").is_err());
-        assert!(set_attribute(xml, &[0], "value", "12.5")
+        assert!(set_attribute(xml, &[0], "value", "12.5").is_err());
+        assert!(set_attribute(xml, &[0], "value", "12")
             .unwrap()
-            .contains("value=\"12.5\""));
+            .contains("value=\"12\""));
         assert!(set_attribute(xml, &[1], "checked", "false").is_ok());
     }
 

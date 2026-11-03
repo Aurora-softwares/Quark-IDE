@@ -18,16 +18,21 @@ pub const DESIGN_VIEWPORT_INSET: f64 = 16.0;
 
 /// Stable, non-rendered identifier for mapping GTK drop coordinates back to
 /// nested HYUI element paths without adding selection chrome to the app UI.
+#[cfg(any(target_os = "linux", test))]
 fn widget_path_name(path: &[usize]) -> String {
     if path.is_empty() {
         return "quark-hyui-node:root".to_owned();
     }
     format!(
         "quark-hyui-node:{}",
-        path.iter().map(usize::to_string).collect::<Vec<_>>().join(".")
+        path.iter()
+            .map(usize::to_string)
+            .collect::<Vec<_>>()
+            .join(".")
     )
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
     let raw = name.strip_prefix("quark-hyui-node:")?;
     if raw == "root" {
@@ -36,7 +41,21 @@ fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
     if raw.is_empty() {
         return None;
     }
-    raw.split('.').map(|piece| piece.parse::<usize>().ok()).collect()
+    raw.split('.')
+        .map(|piece| piece.parse::<usize>().ok())
+        .collect()
+}
+
+/// Dragging an existing control uses stable hierarchy indices in the
+/// drag payload. The receiving widget verifies the source path still exists.
+#[cfg(any(target_os = "linux", test))]
+pub fn native_move_drag_payload(path: &[usize]) -> String {
+    format!("quark-move:{}", widget_path_name(path))
+}
+
+#[cfg(any(target_os = "linux", test))]
+pub fn native_move_drag_path(payload: &str) -> Option<Vec<usize>> {
+    parse_widget_path_name(payload.strip_prefix("quark-move:")?)
 }
 
 /// Translate a GTK pointer drop into the nearest known HYUI element. Dropping
@@ -53,8 +72,6 @@ pub fn path_at_drop(surface: &gtk4::Widget, x: f64, y: f64) -> Vec<usize> {
     }
     Vec::new()
 }
-
-
 
 #[cfg(target_os = "linux")]
 const DESIGN_FRAME_CSS: &str = "box.quark-design-frame { border-radius: 12px; \
@@ -399,7 +416,8 @@ fn render_node(
     {
         use gtk4::prelude::*;
         use naui::Widget as _;
-        row.native_widget().set_widget_name(&widget_path_name(&path));
+        row.native_widget()
+            .set_widget_name(&widget_path_name(&path));
     }
     // Honor the same common layout attributes as the Hydrogen runtime.
     // These are design-time measurements, not changes to the XML source.
@@ -408,7 +426,10 @@ fn render_node(
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
-        row.set_sizing(Sizing::new().width(Length::Fixed(width.max(available_width).min(2400.0))));
+        row.set_sizing(Sizing::new().width(Length::Fixed(responsive_control_width(
+            width,
+            available_width,
+        ))));
     } else if runtime_fills(node) {
         // Hydrogen defaults fill=true for ordinary content. A non-filling
         // wrapper lets otherwise correct GTK controls collapse to natural
@@ -1189,12 +1210,30 @@ pub fn missing_native_controls(xml: &str) -> Result<Vec<String>, String> {
     Ok(missing.into_iter().collect())
 }
 
+/// A preferred width is a maximum request for an individual element's
+/// design canvas allocation, not a mandate to overflow a narrower stacked
+/// responsive layout. The parent row gives each item its current allocation.
+fn responsive_control_width(preferred: f64, available: f64) -> f64 {
+    preferred.min(available).clamp(20.0, 2400.0)
+}
+
+/// A responsive viewport is a design-only measurement. It changes layout
+/// decisions in the preview without overwriting the application's startup
+/// Window.width or its stored XML.
+pub fn design_viewport_width(document_width: f64, design_width: Option<f64>) -> f64 {
+    design_width
+        .filter(|width| width.is_finite() && *width >= 320.0)
+        .unwrap_or(document_width)
+        .clamp(320.0, 1400.0)
+}
+
 pub fn render(
     ui: &Ui,
     xml: &str,
     document: &Path,
     on_select: SelectElement,
     design_tabs: DesignTabs,
+    design_width: Option<f64>,
 ) -> Result<naui::Stack, String> {
     let doc = roxmltree::Document::parse(xml).map_err(|e| e.to_string())?;
     let root = doc.root_element();
@@ -1216,11 +1255,12 @@ pub fn render(
         .unwrap_or(24.0)
         .clamp(0.0, 120.0);
     window.set_padding(Padding::all(body_padding));
-    let width = root
-        .attribute("width")
-        .and_then(|v| v.parse::<f64>().ok())
-        .unwrap_or(720.0)
-        .clamp(320.0, 1400.0);
+    let width = design_viewport_width(
+        root.attribute("width")
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(720.0),
+        design_width,
+    );
     let height = root
         .attribute("height")
         .and_then(|value| value.parse::<f64>().ok())
@@ -1760,11 +1800,78 @@ mod tests {
     }
 
     #[test]
+    fn native_move_payload_round_trips_selected_nested_controls() {
+        for path in [vec![0], vec![0, 2, 1], vec![5, 1]] {
+            let serialized = native_move_drag_payload(&path);
+            assert_eq!(native_move_drag_path(&serialized), Some(path));
+        }
+    }
+
+    #[test]
+    fn native_move_payload_cannot_treat_toolbox_names_as_paths() {
+        assert!(native_move_drag_path("quark-toolbox:Button").is_none());
+        assert!(native_move_drag_path("quark-move:bad").is_none());
+    }
+
+    #[test]
     fn native_drop_path_marker_rejects_untrusted_or_invalid_identifiers() {
-        for value in ["quark-hyui-node:", "quark-hyui-node:-1", "quark-hyui-node:0.x",
-            "quark-hyui-node:0..2", "not-a-hyui-node:3", "quark-hyui-node:root.1"] {
+        for value in [
+            "quark-hyui-node:",
+            "quark-hyui-node:-1",
+            "quark-hyui-node:0.x",
+            "quark-hyui-node:0..2",
+            "not-a-hyui-node:3",
+            "quark-hyui-node:root.1",
+        ] {
             assert_eq!(parse_widget_path_name(value), None, "{value}");
         }
+    }
+
+    #[test]
+    fn stacked_responsive_panel_shrinks_even_when_preferred_width_is_larger() {
+        assert_eq!(responsive_control_width(600.0, 312.0), 312.0);
+        assert_eq!(responsive_control_width(340.0, 312.0), 312.0);
+        assert_eq!(responsive_control_width(600.0, 600.0), 600.0);
+        assert_eq!(responsive_control_width(600.0, 800.0), 600.0);
+    }
+
+    #[test]
+    fn responsive_panel_widths_stay_bounded_across_viewports() {
+        assert_eq!(responsive_control_width(600.0, 10.0), 20.0);
+        assert_eq!(responsive_control_width(3000.0, 5000.0), 2400.0);
+        let xml = r#"<Window width="1120"><RowPanel breakpoint="760"><Panel preferredWidth="600"/></RowPanel></Window>"#;
+        let root = roxmltree::Document::parse(xml).unwrap();
+        let panel = root
+            .descendants()
+            .find(|n| n.has_tag_name("Panel"))
+            .unwrap();
+        assert_eq!(panel.attribute("preferredWidth"), Some("600"));
+    }
+
+    #[test]
+    fn design_viewport_presets_change_only_preview_width_not_saved_window() {
+        let xml = r#"<Window version="1" width="1120" height="900"><RowPanel breakpoint="760"/></Window>"#;
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let original = parsed
+            .root_element()
+            .attribute("width")
+            .unwrap()
+            .parse::<f64>()
+            .unwrap();
+        assert_eq!(design_viewport_width(original, None), 1120.0);
+        assert_eq!(design_viewport_width(original, Some(360.0)), 360.0);
+        assert_eq!(design_viewport_width(original, Some(800.0)), 800.0);
+        assert_eq!(design_viewport_width(original, Some(1120.0)), 1120.0);
+        assert!(xml.contains("width=\"1120\""));
+    }
+
+    #[test]
+    fn design_viewport_rejects_nonfinite_and_unreasonably_small_overrides() {
+        assert_eq!(design_viewport_width(900.0, Some(f64::NAN)), 900.0);
+        assert_eq!(design_viewport_width(900.0, Some(f64::INFINITY)), 900.0);
+        assert_eq!(design_viewport_width(900.0, Some(200.0)), 900.0);
+        assert_eq!(design_viewport_width(1600.0, None), 1400.0);
+        assert_eq!(design_viewport_width(800.0, Some(5000.0)), 1400.0);
     }
 
     #[test]

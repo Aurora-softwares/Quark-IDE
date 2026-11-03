@@ -2054,7 +2054,9 @@
       "feature": "RowPanel treats preferredWidth as a minimum, expands the trailing card into available width and wraps panels when they cannot fit even above the breakpoint",
       "tests": [
         "native_portable_preview::tests::preferred_widths_are_minimums_and_summary_expands_to_fill_remaining_row",
-        "native_portable_preview::tests::preferred_width_overflow_wraps_even_above_explicit_breakpoint"
+        "native_portable_preview::tests::preferred_width_overflow_wraps_even_above_explicit_breakpoint",
+        "native_portable_preview::tests::stacked_responsive_panel_shrinks_even_when_preferred_width_is_larger",
+        "native_portable_preview::tests::responsive_panel_widths_stay_bounded_across_viewports"
       ]
     },
     {
@@ -2087,6 +2089,131 @@
         "native_hyui_preview::tests::compiler_name_on_path_resolves_to_absolute_path_before_runtime_changes_cwd",
         "native_hyui_preview::tests::missing_compiler_is_an_error_not_an_unresponsive_window",
         "native_hyui_preview::tests::application_preview_compiles_project_using_native_runtime_not_a_shell"
+      ]
+    },
+    {
+      "id": "native-designer-toolbox-insert-nested",
+      "category": "Native Interface Designer",
+      "feature": "Toolbox controls insert into real responsive Hydrogen .hyui container hierarchy without flattening existing event handlers",
+      "tests": [
+        "native_ui_properties::tests::insert_into_nested_panel_keeps_handlers_and_surrounding_xml",
+        "native_ui_properties::tests::insert_after_leaf_and_into_self_closing_containers_preserves_paths",
+        "native_ui_properties::tests::special_controls_generate_valid_responsive_templates"
+      ]
+    },
+    {
+      "id": "native-designer-responsive-containers",
+      "category": "Native Interface Designer",
+      "feature": "Responsive row, column, grid and scroll layout controls can be inserted and nested using valid Hydrogen XML templates",
+      "tests": [
+        "native_ui_properties::tests::native_responsive_layout_containers_are_insertable_and_nested",
+        "native_ui_properties::tests::responsive_layout_templates_keep_valid_hydrogen_source_after_multiple_inserts"
+      ]
+    },
+    {
+      "id": "native-designer-reorder-reparent",
+      "category": "Native Interface Designer",
+      "feature": "Native designer can reorder and move controls between layout containers while retaining IDs, child trees and Hydrogen event handlers",
+      "tests": [
+        "native_ui_properties::tests::reorder_nodes_preserves_event_handlers_and_nested_children",
+        "native_ui_properties::tests::moving_between_panels_preserves_handlers_and_nested_structure",
+        "native_ui_properties::tests::moving_popover_target_keeps_its_stable_id_and_reference",
+        "native_ui_properties::tests::moving_control_rejects_self_descendants_and_special_hyui_nodes"
+      ]
+    },
+    {
+      "id": "native-designer-gtk-drag-payload",
+      "category": "Native Interface Designer",
+      "feature": "Linux GTK drag payloads resolve nested Hydrogen paths safely without confusing toolbox content with existing elements",
+      "tests": [
+        "native_portable_preview::tests::native_drop_path_marker_round_trips_nested_hyui_selection",
+        "native_portable_preview::tests::native_move_payload_round_trips_selected_nested_controls",
+        "native_portable_preview::tests::native_drop_path_marker_rejects_untrusted_or_invalid_identifiers",
+        "native_portable_preview::tests::native_move_payload_cannot_treat_toolbox_names_as_paths"
+      ],
+      "platforms": [
+        "linux"
+      ]
+    },
+    {
+      "id": "native-designer-collapsible-inspector",
+      "category": "Native Interface Designer",
+      "feature": "Unity-style native Inspector sections fold independently and retain state without altering underlying Hydrogen UI XML",
+      "tests": [
+        "native_ui_properties::tests::inspector_sections_toggle_independently_and_restore_expanded_state",
+        "native_ui_properties::tests::inspector_folding_never_touches_runtime_xml_or_property_groups"
+      ]
+    },
+    {
+      "id": "native-designer-safe-removal",
+      "category": "Native Interface Designer",
+      "feature": "Designer control deletion preserves nested structure and protects required tab pages, context-menu targets and root Window",
+      "tests": [
+        "native_ui_properties::tests::removal_protects_last_tabs_and_linked_popover_targets",
+        "native_ui_properties::tests::structural_edits_preserve_selection_and_support_reordering_and_deletion",
+        "native_ui_properties::tests::invalid_structure_edits_return_errors_instead_of_crashing"
+      ]
+    },
+    {
+      "id": "native-designer-schema-aware-appearance",
+      "category": "Native Interface Designer",
+      "feature": "Native Inspector offers supported Hydrogen styles and rejects unsupported state fonts, anchors and per-state colours until runtime schema implements them",
+      "tests": [
+        "native_ui_properties::tests::inspector_exposes_valid_theme_font_role_and_tone_selectors",
+        "native_ui_properties::tests::inspector_does_not_write_unsupported_font_anchor_or_hover_colours",
+        "native_ui_properties::tests::inspector_numeric_values_match_hydrogen_v1_integer_schema",
+        "native_ui_properties::tests::inspector_appearance_enums_reject_hydrogen_runtime_invalid_values"
+      ]
+    },
+    {
+      "id": "native-new-ui-app-template",
+      "category": "Native Interface Designer",
+      "feature": "New UI App creates a safe self-contained interactive Hydrogen .hyui project with valid nested native controls, event backend and vendored Hydrogen.UI library",
+      "tests": [
+        "startup::tests::native_ui_project_creates_runnable_hydrogen_manifest_and_valid_hyui",
+        "startup::tests::native_ui_project_has_functional_backend_handlers_and_is_not_overwritten"
+      ]
+    },
+    {
+      "id": "native-designer-atomic-edits",
+      "category": "Native Interface Designer",
+      "feature": "Designer-generated drag/drop and Inspector changes commit only after valid Hydrogen XML and layout checks; malformed or oversized edits never poison the last valid document",
+      "tests": [
+        "native_model::tests::designer_generated_invalid_xml_never_poison_saved_or_unsaved_source",
+        "native_model::tests::designer_generated_oversized_edits_are_rejected_atomically"
+      ]
+    },
+    {
+      "id": "native-designer-responsive-viewport-presets",
+      "category": "Native Interface Designer",
+      "feature": "Responsive Design preview offers Phone 360, Tablet 800, Desktop 1120 and document-width presets without changing the compiled Window XML",
+      "tests": [
+        "native_portable_preview::tests::design_viewport_presets_change_only_preview_width_not_saved_window",
+        "native_portable_preview::tests::design_viewport_rejects_nonfinite_and_unreasonably_small_overrides"
+      ]
+    },
+    {
+      "id": "native-macos-launch-appkit-bundle",
+      "category": "Native Mac Startup",
+      "feature": "AppKit application launch rejects incomplete or unsafe macOS bundles; CI validates the live native startup and produces a signed Finder-ready ZIP that preserves executable permissions",
+      "platforms": [
+        "darwin"
+      ],
+      "tests": [
+        "native_commands::tests::macos_ui_launch_reports_missing_bundle_executable",
+        "native_commands::tests::macos_ui_launch_rejects_symlinked_bundle_before_open"
+      ]
+    },
+    {
+      "id": "native-macos-start-to-ide-transition",
+      "category": "Native Mac Startup",
+      "feature": "The real AppKit Start Window launches a blank workspace or an existing Hydrogen project on a distinct IDE NSWindow, then safely closes the launcher after event dispatch",
+      "platforms": [
+        "darwin"
+      ],
+      "tests": [
+        "native_start_window::macos_transition_tests::smoke_transition_accepts_blank_workspaces",
+        "native_start_window::macos_transition_tests::smoke_transition_only_accepts_explicit_project_paths"
       ]
     }
   ]
