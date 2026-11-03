@@ -1924,14 +1924,12 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // Unity-style Inspector sections retain their fold state when selecting
     // controls or receiving live Properties updates.
     let collapsed_property_sections =
-        Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
+        Rc::new(RefCell::new(native_ui_properties::InspectorSections::default()));
     let toggle_property_section_later = ui.tasks().channel({
         let collapsed = collapsed_property_sections.clone();
         let refresh = reload_properties.clone();
         move |section: String| {
-            if !collapsed.borrow_mut().insert(section.clone()) {
-                collapsed.borrow_mut().remove(&section);
-            }
+            collapsed.borrow_mut().toggle(&section);
             if let Some(reload) = refresh.borrow().as_ref() {
                 reload();
             }
@@ -2223,7 +2221,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             for field in fields {
                 if field.group != last_group {
                     last_group = field.group;
-                    let folded = collapsed_property_sections.borrow().contains(last_group);
+                    let folded = collapsed_property_sections.borrow().is_collapsed(last_group);
                     if let Ok(group_heading) = ui.button(&format!(
                         "{}  {}",
                         if folded { "▸" } else { "▾" },
