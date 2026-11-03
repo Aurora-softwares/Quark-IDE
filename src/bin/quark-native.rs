@@ -1177,9 +1177,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             }
             let responsive_visible = responsive_controls
                 .iter()
-                .filter(|(_, title, _)| {
-                    query.is_empty() || title.to_lowercase().contains(&query)
-                })
+                .filter(|(_, title, _)| query.is_empty() || title.to_lowercase().contains(&query))
                 .collect::<Vec<_>>();
             if !responsive_visible.is_empty() {
                 entries.append(&responsive_heading);
@@ -1925,7 +1923,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
     // Unity-style Inspector sections retain their fold state when selecting
     // controls or receiving live Properties updates.
-    let collapsed_property_sections = Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
+    let collapsed_property_sections =
+        Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
     let toggle_property_section_later = ui.tasks().channel({
         let collapsed = collapsed_property_sections.clone();
         let refresh = reload_properties.clone();
@@ -2019,14 +2018,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let reload_preview = reload_preview.clone();
         let status = status.clone();
         move |edit: native_ui_properties::StructureEdit| {
-            let source = state.borrow().layout.as_ref().and_then(|doc| doc.source().ok());
+            let source = state
+                .borrow()
+                .layout
+                .as_ref()
+                .and_then(|doc| doc.source().ok());
             let Some(source) = source else {
                 status.set_text("Open or create a .hyui design before adding controls");
                 return;
             };
             match native_ui_properties::edit_structure(&source, &edit) {
                 Ok((next, path)) => {
-                    let changed = state.borrow_mut().layout.as_mut()
+                    let changed = state
+                        .borrow_mut()
+                        .layout
+                        .as_mut()
                         .map(|doc| doc.edit_source(next.clone()));
                     match changed {
                         Some(Ok(())) => {
@@ -2039,7 +2045,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                                 refresh();
                             }
                         }
-                        Some(Err(error)) => status.set_text(&format!("Invalid Hydrogen UI: {error}")),
+                        Some(Err(error)) => {
+                            status.set_text(&format!("Invalid Hydrogen UI: {error}"))
+                        }
                         None => {}
                     }
                 }
@@ -2161,9 +2169,24 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                 if let Ok(action_row) = ui.stack(Orientation::Horizontal) {
                     action_row.set_spacing(4.0);
                     for (label, edit) in [
-                        ("↑ Earlier", native_ui_properties::StructureEdit::MoveEarlier { selected: path.clone() }),
-                        ("↓ Later", native_ui_properties::StructureEdit::MoveLater { selected: path.clone() }),
-                        ("Delete", native_ui_properties::StructureEdit::Delete { selected: path.clone() }),
+                        (
+                            "↑ Earlier",
+                            native_ui_properties::StructureEdit::MoveEarlier {
+                                selected: path.clone(),
+                            },
+                        ),
+                        (
+                            "↓ Later",
+                            native_ui_properties::StructureEdit::MoveLater {
+                                selected: path.clone(),
+                            },
+                        ),
+                        (
+                            "Delete",
+                            native_ui_properties::StructureEdit::Delete {
+                                selected: path.clone(),
+                            },
+                        ),
                     ] {
                         if let Ok(button) = ui.button(label) {
                             let send = structural_edit_later.clone();
@@ -2319,10 +2342,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         // determines the nested HYUI insertion location. This is not a
         // painted/fake drag-and-drop surface.
         let surface: gtk4::Widget = portable_preview.native_widget().upcast();
-        let target = gtk4::DropTarget::new(
-            String::static_type(),
-            gtk4::gdk::DragAction::COPY,
-        );
+        let target = gtk4::DropTarget::new(String::static_type(), gtk4::gdk::DragAction::COPY);
         let surface_at_drop = surface.clone();
         let sender = structural_edit_later.clone();
         let state_for_drop = state.clone();
@@ -2333,14 +2353,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             let Some(kind) = payload.strip_prefix("quark-toolbox:") else {
                 return false;
             };
-            if !state_for_drop.borrow().layout.as_ref().is_some_and(|doc| doc.native_window) {
+            if !state_for_drop
+                .borrow()
+                .layout
+                .as_ref()
+                .is_some_and(|doc| doc.native_window)
+            {
                 return false;
             }
             let selected = native_portable_preview::path_at_drop(&surface_at_drop, x, y);
-            sender.send(native_ui_properties::StructureEdit::Insert {
-                selected,
-                kind: kind.to_owned(),
-            }).is_ok()
+            sender
+                .send(native_ui_properties::StructureEdit::Insert {
+                    selected,
+                    kind: kind.to_owned(),
+                })
+                .is_ok()
         });
         surface.add_controller(target);
     }
@@ -5172,8 +5199,15 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             button.native_widget().add_controller(source);
         }
         button.on_click(move || {
-            if !state.borrow().layout.as_ref().is_some_and(|doc| doc.native_window) {
-                status.set_text("Create or open a Hydrogen .hyui project before adding responsive layouts");
+            if !state
+                .borrow()
+                .layout
+                .as_ref()
+                .is_some_and(|doc| doc.native_window)
+            {
+                status.set_text(
+                    "Create or open a Hydrogen .hyui project before adding responsive layouts",
+                );
                 return;
             }
             let _ = structural_edit_later.send(native_ui_properties::StructureEdit::Insert {
@@ -5202,7 +5236,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             button.native_widget().add_controller(source);
         }
         button.on_click(move || {
-            let is_native = state.borrow().layout.as_ref().is_some_and(|doc| doc.native_window);
+            let is_native = state
+                .borrow()
+                .layout
+                .as_ref()
+                .is_some_and(|doc| doc.native_window);
             if is_native {
                 let _ = structural_edit_later.send(native_ui_properties::StructureEdit::Insert {
                     selected: selected_xml_path.borrow().clone(),
