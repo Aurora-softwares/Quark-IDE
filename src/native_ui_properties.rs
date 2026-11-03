@@ -647,6 +647,10 @@ fn tag_for_toolbox(kind: &str) -> Option<&'static str> {
         "Image" => "Image",
         "Panel" => "Panel",
         "TabControl" => "Tabs",
+        "RowPanel" => "RowPanel",
+        "ColumnPanel" => "ColumnPanel",
+        "GridPanel" => "GridPanel",
+        "ScrollView" => "ScrollView",
         _ => return None,
     })
 }
@@ -669,6 +673,10 @@ fn toolbox_markup(tag: &str, id: &str) -> String {
         // a non-existent asset and cause a build failure.
         "Image" => format!(r#"{prefix} source="assets/image.png" height="120"/>"#),
         "Panel" => format!(r#"{prefix} title="Panel" padding="20"></Panel>"#),
+        "RowPanel" => format!(r#"{prefix} gap="12" breakpoint="700"></RowPanel>"#),
+        "ColumnPanel" => format!(r#"{prefix} gap="12"></ColumnPanel>"#),
+        "GridPanel" => format!(r#"{prefix} gap="12" columns="2" minItemWidth="240"></GridPanel>"#),
+        "ScrollView" => format!(r#"{prefix} height="260"></ScrollView>"#),
         "Tabs" => format!(r#"{prefix} value="0"><Tab title="Page 1"/></Tabs>"#),
         _ => unreachable!("tag_for_toolbox controls the permitted set"),
     }
@@ -892,6 +900,33 @@ pub fn remove_control(source: &str, selected: &[usize]) -> Result<String, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_responsive_layout_containers_are_insertable_and_nested() {
+        let xml = r#"<Window version="1" width="900" height="700"/>"#;
+        let (row, row_path) = insert_toolbox_control(xml, &[], "RowPanel").unwrap();
+        assert_eq!(row_path, [0]);
+        assert!(row.contains("breakpoint=\"700\""));
+        let (grid, grid_path) = insert_toolbox_control(&row, &row_path, "GridPanel").unwrap();
+        assert_eq!(grid_path, [0, 0]);
+        assert!(grid.contains("minItemWidth=\"240\""));
+        let (body, body_path) = insert_toolbox_control(&grid, &grid_path, "ColumnPanel").unwrap();
+        let (changed, child_path) = insert_toolbox_control(&body, &body_path, "Button").unwrap();
+        assert_eq!(child_path, [0, 0, 0, 0]);
+        assert!(changed.contains("<Button"));
+        assert_eq!(properties(&changed, &child_path).unwrap().0, "Button");
+    }
+
+    #[test]
+    fn responsive_layout_templates_keep_valid_hydrogen_source_after_multiple_inserts() {
+        let mut xml = r#"<Window version="1"><Panel/></Window>"#.to_owned();
+        for kind in ["RowPanel", "ColumnPanel", "GridPanel", "ScrollView"] {
+            xml = insert_toolbox_control(&xml, &[0], kind).unwrap().0;
+            Document::parse(&xml).unwrap();
+        }
+        assert_eq!(element_paths(&xml).unwrap().len(), 6);
+        assert!(xml.contains("height=\"260\""));
+    }
 
     #[test]
     fn insert_into_nested_panel_keeps_handlers_and_surrounding_xml() {
