@@ -162,6 +162,27 @@ fn build_gtk_design_menu_bar(
     bar
 }
 
+/// Mirror Hydrogen's native `GtkFrame(card) -> padded content` hierarchy.
+/// A bare box styled as a card does not have the same requisition or border.
+#[cfg(target_os = "linux")]
+fn build_gtk_design_panel_frame(
+    content: &impl gtk4::prelude::IsA<gtk4::Widget>,
+    padding: i32,
+) -> gtk4::Frame {
+    use gtk4::prelude::*;
+
+    let frame = gtk4::Frame::new(None);
+    frame.add_css_class("card");
+    frame.set_hexpand(true);
+    frame.set_halign(gtk4::Align::Fill);
+    content.set_margin_start(padding);
+    content.set_margin_end(padding);
+    content.set_margin_top(padding);
+    content.set_margin_bottom(padding);
+    frame.set_child(Some(content));
+    frame
+}
+
 /// Runtime GTK expansion defaults from Hydrogen's native renderer.
 fn runtime_fills(node: Node<'_, '_>) -> bool {
     match node.attribute("fill") {
@@ -406,17 +427,8 @@ fn render_node(
                 use gtk4::prelude::*;
                 use naui::Widget as _;
 
-                let frame = gtk4::Frame::new(None);
-                frame.add_css_class("card");
-                frame.set_hexpand(true);
-                frame.set_halign(gtk4::Align::Fill);
                 let content = panel.size_bin();
-                let margin = padding.round() as i32;
-                content.set_margin_start(margin);
-                content.set_margin_end(margin);
-                content.set_margin_top(margin);
-                content.set_margin_bottom(margin);
-                frame.set_child(Some(&content));
+                let frame = build_gtk_design_panel_frame(&content, padding.round() as i32);
                 let host = row
                     .native_widget()
                     .downcast::<gtk4::Box>()
@@ -1411,6 +1423,25 @@ mod tests {
         // breakpoint / vertical stacking behaviour.
         assert_ne!(bar.tag_name().name(), "RowPanel");
         assert!(bar.attribute("breakpoint").is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "Needs a running GTK display; exercised with xvfb-run in CI"]
+    fn gtk_design_panel_uses_actual_native_frame_and_inner_margins() {
+        use gtk4::prelude::*;
+
+        gtk4::init().expect("GTK must initialise inside an Xvfb session");
+        let box_widget = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
+        let frame = build_gtk_design_panel_frame(&box_widget, 18);
+        assert!(frame.has_css_class("card"));
+        assert!(frame.hexpand());
+        assert_eq!(frame.halign(), gtk4::Align::Fill);
+        assert_eq!(frame.child().unwrap(), box_widget.upcast::<gtk4::Widget>());
+        assert_eq!(box_widget.margin_start(), 18);
+        assert_eq!(box_widget.margin_end(), 18);
+        assert_eq!(box_widget.margin_top(), 18);
+        assert_eq!(box_widget.margin_bottom(), 18);
     }
 
     #[cfg(target_os = "linux")]
