@@ -1923,8 +1923,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
     // Unity-style Inspector sections retain their fold state when selecting
     // controls or receiving live Properties updates.
-    let collapsed_property_sections =
-        Rc::new(RefCell::new(native_ui_properties::InspectorSections::default()));
+    let collapsed_property_sections = Rc::new(RefCell::new(
+        native_ui_properties::InspectorSections::default(),
+    ));
     let toggle_property_section_later = ui.tasks().channel({
         let collapsed = collapsed_property_sections.clone();
         let refresh = reload_properties.clone();
@@ -2221,7 +2222,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
             for field in fields {
                 if field.group != last_group {
                     last_group = field.group;
-                    let folded = collapsed_property_sections.borrow().is_collapsed(last_group);
+                    let folded = collapsed_property_sections
+                        .borrow()
+                        .is_collapsed(last_group);
                     if let Ok(group_heading) = ui.button(&format!(
                         "{}  {}",
                         if folded { "▸" } else { "▾" },
@@ -2383,7 +2386,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     selected: destination,
                     kind: kind.to_owned(),
                 }
-            } else if let Some(selected) = native_portable_preview::native_move_drag_path(&payload) {
+            } else if let Some(selected) = native_portable_preview::native_move_drag_path(&payload)
+            {
                 native_ui_properties::StructureEdit::MoveInto {
                     selected,
                     target: destination,
