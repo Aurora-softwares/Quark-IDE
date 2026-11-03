@@ -893,6 +893,89 @@ pub fn move_sibling(
     Ok((result, path))
 }
 
+/// Move a control into another visual container, preserving its entire XML
+/// subtree (including IDs, event handlers and nested controls).
+/// Paths are recalculated after removal so moving across sibling branches works.
+#[cfg(any(target_os = "linux", test))]
+pub fn move_into(
+    source: &str,
+    selected: &[usize],
+    target: &[usize],
+) -> Result<(String, Vec<usize>), String> {
+    let (&source_index, source_parent) = selected
+        .split_last()
+        .ok_or("The root Window cannot be moved")?;
+    if target.starts_with(selected) {
+        return Err("A control cannot be moved into itself or its descendants".into());
+    }
+
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    if !doc.root_element().has_tag_name("Window") {
+        return Err("Expected a Hydrogen <Window> document".into());
+    }
+    let node = element_at(&doc, selected)?;
+    let destination = element_at(&doc, target)?;
+    if !visual_container(destination.tag_name().name()) {
+        return Err("The destination cannot contain visual controls".into());
+    }
+    // Tab pages and menu/toolbar entries have special schema requirements:
+    // they must not become ordinary layout children.
+    if matches!(
+        node.tag_name().name(),
+        "Tab" | "Menu" | "MenuItem" | "MenuBar" | "Toolbar"
+            | "ToolButton" | "ContextMenu" | "Popover"
+    ) {
+        return Err("This special Hydrogen UI node cannot be moved into a visual container".into());
+    }
+
+    let moved_markup = source[node.range()].to_owned();
+    let mut updated = source.to_owned();
+    updated.replace_range(node.range(), "");
+
+    // Removing a sibling before the destination shifts its index by one.
+    let mut adjusted_target = target.to_vec();
+    if target.len() > source_parent.len()
+        && target.starts_with(source_parent)
+        && target[source_parent.len()] > source_index
+    {
+        adjusted_target[source_parent.len()] -= 1;
+    }
+    let remaining = Document::parse(&updated).map_err(|e| e.to_string())?;
+    let destination = element_at(&remaining, &adjusted_target)?;
+    let next_index = destination.children().filter(|child| child.is_element()).count();
+    let start = destination.range().start;
+    let end = tag_end(&updated, start)?;
+    let opening = &updated[start..=end];
+    let is_empty = opening.trim_end_matches('>').trim_end().ends_with('/');
+    let indent = child_indent(&updated, start);
+
+    if is_empty {
+        let prefix = opening.trim_end_matches('>').trim_end_matches('/').trim_end();
+        let parent_indent = updated[..start]
+            .rsplit('\n')
+            .next()
+            .filter(|line| line.bytes().all(|b| b == b' ' || b == b'\t'))
+            .unwrap_or("");
+        updated.replace_range(
+            start..=end,
+            &format!(
+                "{prefix}>\n{indent}{moved_markup}\n{parent_indent}</{}>",
+                destination.tag_name().name()
+            ),
+        );
+    } else {
+        let closing = updated[destination.range()]
+            .rfind("</")
+            .ok_or("Cannot locate Hydrogen container closing tag")?
+            + start;
+        updated.insert_str(closing, &format!("\n{indent}{moved_markup}\n"));
+    }
+
+    Document::parse(&updated).map_err(|e| e.to_string())?;
+    adjusted_target.push(next_index);
+    Ok((updated, adjusted_target))
+}
+
 /// A structure edit is applied only after native drag/click callbacks finish;
 /// this prevents GTK/AppKit/WinUI widgets being unparented during dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
