@@ -2725,9 +2725,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     terminal_input_row.append(&terminal_send);
     #[cfg(not(target_os = "linux"))]
     terminal_section.append(&terminal_input_row);
-    #[cfg(not(target_os = "linux"))]
     #[cfg(target_os = "macos")]
     macos_transition_checkpoint("2719: let terminal_keys = ui.stack(Orientation::Horizontal)?;");
+    #[cfg(not(target_os = "linux"))]
     let terminal_keys = ui.stack(Orientation::Horizontal)?;
     #[cfg(not(target_os = "linux"))]
     {
