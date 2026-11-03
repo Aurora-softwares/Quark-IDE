@@ -1949,7 +1949,9 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     }
     let delete_control = ui.button("Delete Selected Control")?;
     flat_properties.append(&delete_control);
-    properties_pane.append(&flat_properties);
+    // Build the complete Properties editor before inserting it. Reparenting
+    // an already mounted NSView (or removing the section header and inserting
+    // it again) can raise an Objective-C AppKit exception during Start -> IDE.
     let native_property_content = ui.stack(Orientation::Vertical)?;
     native_property_content.set_spacing(4.0);
     let native_property_scroll = ui.scroll()?;
@@ -1960,8 +1962,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let property_editor = ui.stack(Orientation::Vertical)?;
     property_editor.set_sizing(Sizing::fill());
     property_editor.append(&flat_properties);
-    properties_pane.clear();
-    properties_pane.append(&properties_toolbar);
+    // section_panel already inserted properties_toolbar; retain its original
+    // parent and add only the content. Do not clear/re-add the header.
     properties_pane.append(&property_editor);
     properties_pane.set_sizing(Sizing::fill());
 
