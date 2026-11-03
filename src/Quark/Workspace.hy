@@ -70,11 +70,15 @@ namespace Quark {
                             return Slice(text, first, cursor - first);
                         }
                         if (cursor < end && text[cursor] == "[") {
-                            while (cursor < end && text[cursor] != "\"") { cursor = cursor + 1; }
-                            if (cursor < end) {
+                            // sources arrays may be formatted over several lines.
+                            cursor = cursor + 1;
+                            while (cursor < text.Length && text[cursor] != "\"" && text[cursor] != "]") {
+                                cursor = cursor + 1;
+                            }
+                            if (cursor < text.Length && text[cursor] == "\"") {
                                 int first = cursor + 1;
                                 cursor = first;
-                                while (cursor < end && text[cursor] != "\"") { cursor = cursor + 1; }
+                                while (cursor < text.Length && text[cursor] != "\"") { cursor = cursor + 1; }
                                 return Slice(text, first, cursor - first);
                             }
                         }

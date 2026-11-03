@@ -7,7 +7,7 @@ namespace Quark {
         private string captured;
         public CommandResult(int code, string output) { exitCode = code; captured = output; }
         public int Code() { return exitCode; }
-        public string Text() { return captured + "\\n\\nExit code: " + exitCode; }
+        public string Text() { return captured + "\n\nExit code: " + exitCode; }
     }
 
     public class BuildService {
@@ -41,7 +41,7 @@ namespace Quark {
             string output = "";
             if (System.IO.File.Exists(logPath)) { output = Workspace.Preview(System.IO.File.ReadAllText(logPath)); }
             if (output == "") { output = "(No command output captured)"; }
-            return output + "\n\nExit code: " + exitCode;
+            return new CommandResult(exitCode, output);
         }
 
         public static string Execute(string compiler, string project, string action, bool hasUI) {
@@ -63,8 +63,8 @@ namespace Quark {
                 return RunLogged(command + " ui " + projectArg, log).Text();
             }
             CommandResult built = RunLogged(command + " build " + projectArg + " -o " + outputArg, log);
-            if (built.Code() != 0) { return "Build failed.\\n" + built.Text(); }
-            if (action == "Build") { return "Build completed.\\n" + built.Text(); }
+            if (built.Code() != 0) { return "Build failed.\n" + built.Text(); }
+            if (action == "Build") { return "Build completed.\n" + built.Text(); }
             if (action == "Run") {
                 if (hasUI) {
                     // The native host is launched through Hydrogen's packaging pipeline.
@@ -73,11 +73,11 @@ namespace Quark {
                 string executable = output;
                 if (System.Host.Process.IsWindows()) { executable = executable + ".exe"; }
                 if (!System.IO.File.Exists(executable)) {
-                    return "Compiler reported success, but the host executable could not be found: " + executable + "\\n" + built.Text();
+                    return "Compiler reported success, but the host executable could not be found: " + executable + "\n" + built.Text();
                 }
                 string executableArg = Quote(executable);
-                if (executableArg == "") { return "Unsafe executable path; cannot run.\\n" + built.Text(); }
-                return "Build output:\\n" + built.Text() + "\\n\\nProgram output:\\n" + RunLogged(executableArg, log).Text();
+                if (executableArg == "") { return "Unsafe executable path; cannot run.\n" + built.Text(); }
+                return "Build output:\n" + built.Text() + "\n\nProgram output:\n" + RunLogged(executableArg, log).Text();
             }
             return "Unknown build action.";
         }
