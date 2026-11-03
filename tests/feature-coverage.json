@@ -2169,6 +2169,15 @@
         "startup::tests::native_ui_project_creates_runnable_hydrogen_manifest_and_valid_hyui",
         "startup::tests::native_ui_project_has_functional_backend_handlers_and_is_not_overwritten"
       ]
+    },
+    {
+      "id": "native-designer-atomic-edits",
+      "category": "Native Interface Designer",
+      "feature": "Designer-generated drag/drop and Inspector changes commit only after valid Hydrogen XML and layout checks; malformed or oversized edits never poison the last valid document",
+      "tests": [
+        "native_model::tests::designer_generated_invalid_xml_never_poison_saved_or_unsaved_source",
+        "native_model::tests::designer_generated_oversized_edits_are_rejected_atomically"
+      ]
     }
   ]
 }
