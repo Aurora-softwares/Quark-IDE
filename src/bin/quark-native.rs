@@ -5508,9 +5508,13 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     _ => Err("Choose a new Hydrogen project".into()),
                 }
             });
-            if let Err(error) =
-                native_start_window::create_project_wizard(&ui, window.clone(), launch, false, false)
-            {
+            if let Err(error) = native_start_window::create_project_wizard(
+                &ui,
+                window.clone(),
+                launch,
+                false,
+                false,
+            ) {
                 status.set_text(&format!("Cannot open project wizard: {error}"));
             }
         }
