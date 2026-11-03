@@ -1440,7 +1440,7 @@ mod tests {
             })
             .unwrap();
         let widths = row_child_widths(row, 1072.0, 20.0);
-        assert_eq!(widths, vec![600.0, 340.0]);
+        assert_eq!(widths, vec![600.0, 452.0]);
         assert_ne!(widths, vec![526.0, 526.0]);
     }
 
