@@ -861,7 +861,6 @@ pub fn move_sibling(
     Ok((result, path))
 }
 
-
 /// Move a visual control to a different responsive container or place it
 /// after another control. The original XML subtree is copied verbatim so
 /// event handlers, IDs, child controls, and existing style attributes survive.
@@ -879,10 +878,24 @@ pub fn move_into(
     let doc = Document::parse(source).map_err(|e| e.to_string())?;
     let moving = element_at(&doc, from)?;
     let moving_tag = moving.tag_name().name();
-    if matches!(moving_tag, "Tab" | "Menu" | "MenuItem" | "MenuBar" | "Toolbar"
-        | "ToolButton" | "ContextMenu" | "Popover" | "Clipboard" | "Dialog" | "Timer" | "State")
-    {
-        return Err("Move this special Hydrogen element using the Inspector's sibling buttons".into());
+    if matches!(
+        moving_tag,
+        "Tab"
+            | "Menu"
+            | "MenuItem"
+            | "MenuBar"
+            | "Toolbar"
+            | "ToolButton"
+            | "ContextMenu"
+            | "Popover"
+            | "Clipboard"
+            | "Dialog"
+            | "Timer"
+            | "State"
+    ) {
+        return Err(
+            "Move this special Hydrogen element using the Inspector's sibling buttons".into(),
+        );
     }
     let fragment = source[moving.range()].to_owned();
     let removed_parent = &from[..from.len() - 1];
@@ -910,25 +923,43 @@ pub fn move_into(
     let opening = &removed[parent.range().start..=parent_open_end];
     if let Some(index) = after {
         let selected_sibling = parent
-            .children().filter(|child| child.is_element()).nth(index)
+            .children()
+            .filter(|child| child.is_element())
+            .nth(index)
             .ok_or("Drop target is no longer available")?;
         let indentation = child_indent(&removed, selected_sibling.range().start);
-        result.insert_str(selected_sibling.range().end, &format!("\n{indentation}{fragment}"));
+        result.insert_str(
+            selected_sibling.range().end,
+            &format!("\n{indentation}{fragment}"),
+        );
         new_path.push(index + 1);
     } else if opening.trim_end_matches('>').trim_end().ends_with('/') {
-        let prefix = opening.trim_end_matches('>').trim_end_matches('/').trim_end();
+        let prefix = opening
+            .trim_end_matches('>')
+            .trim_end_matches('/')
+            .trim_end();
         let indentation = child_indent(&removed, parent.range().start);
         result.replace_range(
             parent.range().start..=parent_open_end,
-            &format!("{prefix}>\n{indentation}{fragment}\n</{}>", parent.tag_name().name()),
+            &format!(
+                "{prefix}>\n{indentation}{fragment}\n</{}>",
+                parent.tag_name().name()
+            ),
         );
         new_path.push(0);
     } else {
         let children = parent.children().filter(|child| child.is_element()).count();
         let closing = removed[parent.range()]
             .rfind("</")
-            .ok_or("Cannot locate target container closing tag")? + parent.range().start;
-        result.insert_str(closing, &format!("\n{}{fragment}\n", child_indent(&removed, parent.range().start)));
+            .ok_or("Cannot locate target container closing tag")?
+            + parent.range().start;
+        result.insert_str(
+            closing,
+            &format!(
+                "\n{}{fragment}\n",
+                child_indent(&removed, parent.range().start)
+            ),
+        );
         new_path.push(children);
     }
     Document::parse(&result).map_err(|e| e.to_string())?;
@@ -939,11 +970,23 @@ pub fn move_into(
 /// this prevents GTK/AppKit/WinUI widgets being unparented during dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StructureEdit {
-    Insert { selected: Vec<usize>, kind: String },
-    MoveEarlier { selected: Vec<usize> },
-    MoveLater { selected: Vec<usize> },
-    MoveInto { selected: Vec<usize>, target: Vec<usize> },
-    Delete { selected: Vec<usize> },
+    Insert {
+        selected: Vec<usize>,
+        kind: String,
+    },
+    MoveEarlier {
+        selected: Vec<usize>,
+    },
+    MoveLater {
+        selected: Vec<usize>,
+    },
+    MoveInto {
+        selected: Vec<usize>,
+        target: Vec<usize>,
+    },
+    Delete {
+        selected: Vec<usize>,
+    },
 }
 
 pub fn edit_structure(source: &str, edit: &StructureEdit) -> Result<(String, Vec<usize>), String> {
@@ -1282,7 +1325,9 @@ mod tests {
             inspector.toggle(section);
         }
         assert!(xml.contains("onClick=\"Go\""));
-        assert!(fields.iter().any(|field| field.group == "Events & behaviour"));
+        assert!(fields
+            .iter()
+            .any(|field| field.group == "Events & behaviour"));
         assert_eq!(properties(xml, &[0]).unwrap().0, "Button");
     }
 
