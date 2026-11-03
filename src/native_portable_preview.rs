@@ -183,6 +183,25 @@ fn build_gtk_design_panel_frame(
     frame
 }
 
+/// Match Hydrogen's GTK stylesheet identifiers instead of translating
+/// roles into a second set of cross-platform font/colour settings.
+#[cfg(any(target_os = "linux", test))]
+fn hydrogen_gtk_label_classes(role: &str, tone: &str) -> Vec<&'static str> {
+    let mut classes = Vec::new();
+    match role {
+        "title" => classes.push("title-1"),
+        "heading" => classes.push("title-3"),
+        "caption" => classes.push("caption"),
+        _ => {}
+    }
+    match tone {
+        "muted" => classes.push("dim-label"),
+        "accent" => classes.push("accent"),
+        _ => {}
+    }
+    classes
+}
+
 /// Runtime GTK expansion defaults from Hydrogen's native renderer.
 fn runtime_fills(node: Node<'_, '_>) -> bool {
     match node.attribute("fill") {
@@ -431,7 +450,13 @@ fn render_node(
             );
             if let Some(title) = node.attribute("title").filter(|s| !s.is_empty()) {
                 let label = ui.label(title).map_err(|e| e.to_string())?;
+                #[cfg(not(target_os = "linux"))]
                 label.set_style(naui::TextStyle::Heading);
+                #[cfg(target_os = "linux")]
+                {
+                    use naui::Widget as _;
+                    label.native_widget().add_css_class("heading");
+                }
                 // Hydrogen places panel headings at the start of each card,
                 // rather than allowing the generic Stack cross-axis to
                 // centre them.
@@ -757,16 +782,29 @@ fn render_node(
             if runtime_fills(node) {
                 label.set_sizing(Sizing::fill_width());
             }
-            match node.attribute("role").unwrap_or("") {
-                "title" => label.set_style(naui::TextStyle::LargeTitle),
-                "heading" => label.set_style(naui::TextStyle::Heading),
-                "caption" => label.set_style(naui::TextStyle::Caption),
-                _ => {}
+            #[cfg(target_os = "linux")]
+            {
+                use naui::Widget as _;
+                for class in hydrogen_gtk_label_classes(
+                    node.attribute("role").unwrap_or(""),
+                    node.attribute("tone").unwrap_or(""),
+                ) {
+                    label.native_widget().add_css_class(class);
+                }
             }
-            match node.attribute("tone").unwrap_or("") {
-                "accent" => label.set_color(naui::TextColor::Accent),
-                "muted" => label.set_color(naui::TextColor::Secondary),
-                _ => {}
+            #[cfg(not(target_os = "linux"))]
+            {
+                match node.attribute("role").unwrap_or("") {
+                    "title" => label.set_style(naui::TextStyle::LargeTitle),
+                    "heading" => label.set_style(naui::TextStyle::Heading),
+                    "caption" => label.set_style(naui::TextStyle::Caption),
+                    _ => {}
+                }
+                match node.attribute("tone").unwrap_or("") {
+                    "accent" => label.set_color(naui::TextColor::Accent),
+                    "muted" => label.set_color(naui::TextColor::Secondary),
+                    _ => {}
+                }
             }
             row.append(&label);
         }
@@ -1585,6 +1623,14 @@ mod tests {
         assert!(!runtime_fills(elements[1]));
         assert!(runtime_fills(elements[2]));
         assert!(!runtime_fills(elements[3]));
+    }
+
+    #[test]
+    fn hydrogen_gtk_labels_use_runtime_style_classes_not_generic_ide_accent() {
+        assert_eq!(hydrogen_gtk_label_classes("title", ""), ["title-1"]);
+        assert_eq!(hydrogen_gtk_label_classes("heading", "accent"), ["title-3", "accent"]);
+        assert_eq!(hydrogen_gtk_label_classes("caption", "muted"), ["caption", "dim-label"]);
+        assert!(hydrogen_gtk_label_classes("", "").is_empty());
     }
 
     #[test]
