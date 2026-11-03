@@ -92,9 +92,128 @@ pub fn create_project(parent: &Path, name: &str, template: Template) -> Result<P
     result
 }
 
+
+/// Create a genuinely runnable native Hydrogen UI app rather than a legacy
+/// flat design document. The Hydrogen.UI library is vendored as Hydrogen
+/// source inside the new project, so a fresh user's project can build
+/// without a hard-coded path back into Hydrogen's repository.
+pub fn create_native_ui_project(parent: &Path, name: &str) -> Result<PathBuf, String> {
+    let manifest = create_project(parent, name, Template::Linux)?;
+    let folder = manifest
+        .parent()
+        .ok_or("Missing project directory")?
+        .to_path_buf();
+    let result = (|| -> Result<(), String> {
+        let library = folder.join("Hydrogen.UI");
+        fs::create_dir(&library).map_err(|error| error.to_string())?;
+        fs::write(
+            library.join("Hydrogen.UI.hyproj"),
+            "format = 2\nname = \"Hydrogen.UI\"\nversion = \"0.1.0\"\ntype = \"lib\"\nsources = [\"Application.hy\"]\n",
+        )
+        .map_err(|error| error.to_string())?;
+        fs::write(
+            library.join("Application.hy"),
+            include_str!("../templates/hydrogen_ui_application.hy"),
+        )
+        .map_err(|error| error.to_string())?;
+
+        let source = r#"using Hydrogen.UI;
+
+public class Program {
+    public static int Main(string[] args) {
+        if (!Application.IsEvent(args)) {
+            Application.Open("Main.hyui");
+            return 0;
+        }
+        if (Application.Handler(args) == "ShowGreeting") {
+            Application.SetText(
+                "greeting",
+                "Hello, " + Application.Value(args, "projectName") + "!"
+            );
+        }
+        return 0;
+    }
+}
+"#;
+        fs::write(folder.join("Program.hy"), source).map_err(|error| error.to_string())?;
+        let ui = format!(
+            r#"<Window version="1" title="{name}" width="960" height="700" padding="24" theme="system">
+  <ColumnPanel gap="20">
+    <Label role="title" text="Welcome to {name}"/>
+    <Label tone="muted" text="Build your app with native Hydrogen controls."/>
+    <RowPanel gap="20" breakpoint="760">
+      <Panel title="Getting started" padding="20">
+        <ColumnPanel gap="12">
+          <Label role="caption" text="PROJECT NAME"/>
+          <Input id="projectName" text="{name}" placeholder="Project name"/>
+          <Button id="greet" text="Say hello" primary="true" onClick="ShowGreeting"/>
+        </ColumnPanel>
+      </Panel>
+      <Panel title="Preview" padding="20">
+        <Label id="greeting" text="Your UI is ready to edit."/>
+      </Panel>
+    </RowPanel>
+  </ColumnPanel>
+</Window>
+"#
+        );
+        fs::write(folder.join("Main.hyui"), ui).map_err(|error| error.to_string())?;
+        fs::write(
+            &manifest,
+            format!(
+                "format = 2\nname = \"{name}\"\nversion = \"0.1.0\"\ntype = \"exe\"\nui = \"Main.hyui\"\nsources = [\"Program.hy\"]\nproject_references = [\"Hydrogen.UI/Hydrogen.UI.hyproj\"]\n"
+            ),
+        )
+        .map_err(|error| error.to_string())?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        // create_project only succeeds for a newly created directory. Never
+        // remove the user's pre-existing folders when scaffolding fails.
+        let _ = fs::remove_dir_all(&folder);
+        return Err(error);
+    }
+    Ok(manifest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_ui_project_creates_runnable_hydrogen_manifest_and_valid_hyui() {
+        let directory = tempfile::tempdir().unwrap();
+        let manifest = create_native_ui_project(directory.path(), "QuarkApp").unwrap();
+        let folder = manifest.parent().unwrap();
+        let project = fs::read_to_string(&manifest).unwrap();
+        assert!(project.contains("ui = \"Main.hyui\""));
+        assert!(project.contains("type = \"exe\""));
+        assert!(project.contains("project_references = [\"Hydrogen.UI/Hydrogen.UI.hyproj\"]"));
+        let ui = fs::read_to_string(folder.join("Main.hyui")).unwrap();
+        let parsed = roxmltree::Document::parse(&ui).unwrap();
+        assert!(parsed.root_element().has_tag_name("Window"));
+        assert!(parsed.descendants().any(|node| {
+            node.attribute("onClick") == Some("ShowGreeting")
+        }));
+        assert!(folder.join("Hydrogen.UI/Application.hy").exists());
+        assert!(folder.join("Program.hy").exists());
+    }
+
+    #[test]
+    fn native_ui_project_has_functional_backend_handlers_and_is_not_overwritten() {
+        let directory = tempfile::tempdir().unwrap();
+        let manifest = create_native_ui_project(directory.path(), "MyEditor").unwrap();
+        let root = manifest.parent().unwrap();
+        let backend = fs::read_to_string(root.join("Program.hy")).unwrap();
+        let library = fs::read_to_string(root.join("Hydrogen.UI/Application.hy")).unwrap();
+        assert!(backend.contains("Application.Open(\"Main.hyui\")"));
+        assert!(backend.contains("Application.Handler(args) == \"ShowGreeting\""));
+        assert!(backend.contains("Application.SetText("));
+        assert!(library.contains("public class Application"));
+        assert!(create_native_ui_project(directory.path(), "MyEditor").is_err());
+        assert!(root.join("Main.hyui").exists());
+        assert!(create_native_ui_project(directory.path(), "../escape").is_err());
+    }
+
     #[test]
     fn valid_and_invalid_project_names() {
         assert!(valid_name("Hello_World-2"));
