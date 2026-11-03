@@ -842,6 +842,77 @@ pub fn move_sibling(
     Ok((result, path))
 }
 
+
+/// Move a visual control to a different responsive container or place it
+/// after another control. The original XML subtree is copied verbatim so
+/// event handlers, IDs, child controls, and existing style attributes survive.
+pub fn move_into(
+    source: &str,
+    from: &[usize],
+    target: &[usize],
+) -> Result<(String, Vec<usize>), String> {
+    if from.is_empty() {
+        return Err("Cannot drag the root Hydrogen Window".into());
+    }
+    if target.starts_with(from) {
+        return Err("Cannot move a UI element inside itself or its descendants".into());
+    }
+    let doc = Document::parse(source).map_err(|e| e.to_string())?;
+    let moving = element_at(&doc, from)?;
+    let moving_tag = moving.tag_name().name();
+    if matches!(moving_tag, "Tab" | "Menu" | "MenuItem" | "MenuBar" | "Toolbar"
+        | "ToolButton" | "ContextMenu" | "Popover" | "Clipboard" | "Dialog" | "Timer" | "State")
+    {
+        return Err("Move this special Hydrogen element using the Inspector's sibling buttons".into());
+    }
+    let fragment = source[moving.range()].to_owned();
+    let removed_parent = &from[..from.len() - 1];
+    let removed_index = *from.last().unwrap();
+    let removed = remove_control(source, from)?;
+    let mut destination = target.to_vec();
+    if destination.starts_with(removed_parent) && destination.len() > removed_parent.len() {
+        let slot = &mut destination[removed_parent.len()];
+        if *slot > removed_index {
+            *slot -= 1;
+        }
+    }
+    let next_doc = Document::parse(&removed).map_err(|e| e.to_string())?;
+    let (parent_path, after) = resolve_insert_parent(&next_doc, &destination)?;
+    let parent = element_at(&next_doc, &parent_path)?;
+    if !visual_container(parent.tag_name().name()) {
+        return Err("Drop the widget inside a responsive Hydrogen container".into());
+    }
+    let mut result = removed.clone();
+    let mut new_path = parent_path;
+    let parent_open_end = tag_end(&removed, parent.range().start)?;
+    let opening = &removed[parent.range().start..=parent_open_end];
+    if let Some(index) = after {
+        let selected_sibling = parent
+            .children().filter(|child| child.is_element()).nth(index)
+            .ok_or("Drop target is no longer available")?;
+        let indentation = child_indent(&removed, selected_sibling.range().start);
+        result.insert_str(selected_sibling.range().end, &format!("\n{indentation}{fragment}"));
+        new_path.push(index + 1);
+    } else if opening.trim_end_matches('>').trim_end().ends_with('/') {
+        let prefix = opening.trim_end_matches('>').trim_end_matches('/').trim_end();
+        let indentation = child_indent(&removed, parent.range().start);
+        result.replace_range(
+            parent.range().start..=parent_open_end,
+            &format!("{prefix}>\n{indentation}{fragment}\n</{}>", parent.tag_name().name()),
+        );
+        new_path.push(0);
+    } else {
+        let children = parent.children().filter(|child| child.is_element()).count();
+        let closing = removed[parent.range()]
+            .rfind("</")
+            .ok_or("Cannot locate target container closing tag")? + parent.range().start;
+        result.insert_str(closing, &format!("\n{}{fragment}\n", child_indent(&removed, parent.range().start)));
+        new_path.push(children);
+    }
+    Document::parse(&result).map_err(|e| e.to_string())?;
+    Ok((result, new_path))
+}
+
 /// A structure edit is applied only after native drag/click callbacks finish;
 /// this prevents GTK/AppKit/WinUI widgets being unparented during dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -849,6 +920,7 @@ pub enum StructureEdit {
     Insert { selected: Vec<usize>, kind: String },
     MoveEarlier { selected: Vec<usize> },
     MoveLater { selected: Vec<usize> },
+    MoveInto { selected: Vec<usize>, target: Vec<usize> },
     Delete { selected: Vec<usize> },
 }
 
@@ -857,6 +929,7 @@ pub fn edit_structure(source: &str, edit: &StructureEdit) -> Result<(String, Vec
         StructureEdit::Insert { selected, kind } => insert_toolbox_control(source, selected, kind),
         StructureEdit::MoveEarlier { selected } => move_sibling(source, selected, true),
         StructureEdit::MoveLater { selected } => move_sibling(source, selected, false),
+        StructureEdit::MoveInto { selected, target } => move_into(source, selected, target),
         StructureEdit::Delete { selected } => {
             let (index, parent) = selected
                 .split_last()
@@ -999,6 +1072,27 @@ mod tests {
         assert!(!changed.contains("id=\"open\""));
         assert!(changed.contains("<Tabs"));
         assert!(remove_control(xml, &[]).is_err());
+    }
+
+    #[test]
+    fn moving_between_panels_preserves_handlers_and_nested_structure() {
+        let source = r#"<Window version="1"><RowPanel><Panel title="A"><Button id="run" text="Run" onClick="Build"/></Panel><Panel title="B"/></RowPanel></Window>"#;
+        let (updated, selected) = move_into(source, &[0, 0, 0], &[0, 1]).unwrap();
+        assert_eq!(selected, [0, 1, 0]);
+        assert_eq!(properties(&updated, &selected).unwrap().0, "Button");
+        assert!(updated.contains(r#"onClick="Build""#));
+        assert_eq!(properties(&updated, &[0, 0]).unwrap().0, "Panel");
+        assert!(!updated.contains("title=\"A\"><Button"));
+    }
+
+    #[test]
+    fn moving_control_rejects_self_descendants_and_special_hyui_nodes() {
+        let source = r#"<Window version="1"><Panel><ColumnPanel><Button id="go" onClick="Go"/></ColumnPanel></Panel><Tabs><Tab title="One"/></Tabs></Window>"#;
+        assert!(move_into(source, &[0], &[0, 0]).is_err());
+        assert!(move_into(source, &[0, 0], &[0, 0, 0]).is_err());
+        assert!(move_into(source, &[], &[0]).is_err());
+        assert!(move_into(source, &[1, 0], &[0]).is_err());
+        assert_eq!(properties(source, &[0, 0, 0]).unwrap().0, "Button");
     }
 
     #[test]
