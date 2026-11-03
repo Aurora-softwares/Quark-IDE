@@ -2056,6 +2056,18 @@
         "native_portable_preview::tests::preferred_widths_are_minimums_and_summary_expands_to_fill_remaining_row",
         "native_portable_preview::tests::preferred_width_overflow_wraps_even_above_explicit_breakpoint"
       ]
+    },
+    {
+      "id": "native-designer-gtk-label-role-parity",
+      "category": "Native Interface Designer",
+      "feature": "Linux HYUI designer labels use Hydrogen runtime GTK CSS classes for title, heading, caption, muted and accent styling",
+      "tests": [
+        "native_portable_preview::tests::hydrogen_gtk_labels_use_runtime_style_classes_not_generic_ide_accent",
+        "native_portable_preview::tests::studio_fixture_title_caption_and_muted_labels_match_hydrogen_css"
+      ],
+      "platforms": [
+        "linux"
+      ]
     }
   ]
 }
