@@ -791,6 +791,9 @@ pub fn move_sibling(
         index.checked_add(1).filter(|i| *i < children.len())
             .ok_or("Already at the end of this container")?
     };
+    if index >= children.len() {
+        return Err("The selected control no longer exists".into());
+    }
     let first = children[index.min(target)].range();
     let second = children[index.max(target)].range();
     let mut result = String::with_capacity(source.len());
@@ -803,6 +806,39 @@ pub fn move_sibling(
     let mut path = parent_path.to_vec();
     path.push(target);
     Ok((result, path))
+}
+
+
+/// A structure edit is applied only after native drag/click callbacks finish;
+/// this prevents GTK/AppKit/WinUI widgets being unparented during dispatch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StructureEdit {
+    Insert { selected: Vec<usize>, kind: String },
+    MoveEarlier { selected: Vec<usize> },
+    MoveLater { selected: Vec<usize> },
+    Delete { selected: Vec<usize> },
+}
+
+pub fn edit_structure(
+    source: &str,
+    edit: &StructureEdit,
+) -> Result<(String, Vec<usize>), String> {
+    match edit {
+        StructureEdit::Insert { selected, kind } => insert_toolbox_control(source, selected, kind),
+        StructureEdit::MoveEarlier { selected } => move_sibling(source, selected, true),
+        StructureEdit::MoveLater { selected } => move_sibling(source, selected, false),
+        StructureEdit::Delete { selected } => {
+            let (index, parent) = selected
+                .split_last()
+                .ok_or("Cannot delete the root Window")?;
+            let updated = remove_control(source, selected)?;
+            let mut new_path = parent.to_vec();
+            if *index > 0 {
+                new_path.push(index - 1);
+            }
+            Ok((updated, new_path))
+        }
+    }
 }
 
 /// Remove a visual node, guarding root, required tab pages and any
@@ -898,6 +934,32 @@ mod tests {
         assert!(!changed.contains("id=\"open\""));
         assert!(changed.contains("<Tabs"));
         assert!(remove_control(xml, &[]).is_err());
+    }
+
+    #[test]
+    fn structural_edits_preserve_selection_and_support_reordering_and_deletion() {
+        let xml = r#"<Window version="1"><ColumnPanel><Button text="A"/><Button text="B"/></ColumnPanel></Window>"#;
+        let (added, path) = edit_structure(
+            xml,
+            &StructureEdit::Insert { selected: vec![0], kind: "Slider".into() },
+        ).unwrap();
+        assert_eq!(path, [0, 2]);
+        let (earlier, path) = edit_structure(&added, &StructureEdit::MoveEarlier { selected: path }).unwrap();
+        assert_eq!(path, [0, 1]);
+        assert_eq!(properties(&earlier, &path).unwrap().0, "Slider");
+        let (deleted, selected) = edit_structure(&earlier, &StructureEdit::Delete { selected: path }).unwrap();
+        assert_eq!(selected, [0, 0]);
+        assert!(!deleted.contains("<Slider"));
+        assert!(deleted.contains("text=\"B\""));
+    }
+
+    #[test]
+    fn invalid_structure_edits_return_errors_instead_of_crashing() {
+        let xml = r#"<Window version="1"><ColumnPanel><Label text="Only"/></ColumnPanel></Window>"#;
+        assert!(edit_structure(xml, &StructureEdit::MoveEarlier { selected: vec![0, 30] }).is_err());
+        assert!(edit_structure(xml, &StructureEdit::MoveLater { selected: vec![0, 30] }).is_err());
+        assert!(edit_structure(xml, &StructureEdit::Delete { selected: vec![] }).is_err());
+        assert!(edit_structure(xml, &StructureEdit::Insert { selected: vec![], kind: "Unknown".into() }).is_err());
     }
 
     #[test]
