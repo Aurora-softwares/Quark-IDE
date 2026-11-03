@@ -18,6 +18,7 @@ pub const DESIGN_VIEWPORT_INSET: f64 = 16.0;
 
 /// Stable, non-rendered identifier for mapping GTK drop coordinates back to
 /// nested HYUI element paths without adding selection chrome to the app UI.
+#[cfg(any(target_os = "linux", test))]
 fn widget_path_name(path: &[usize]) -> String {
     if path.is_empty() {
         return "quark-hyui-node:root".to_owned();
@@ -31,6 +32,7 @@ fn widget_path_name(path: &[usize]) -> String {
     )
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
     let raw = name.strip_prefix("quark-hyui-node:")?;
     if raw == "root" {
@@ -46,10 +48,12 @@ fn parse_widget_path_name(name: &str) -> Option<Vec<usize>> {
 
 /// Dragging an existing control uses stable hierarchy indices in the
 /// drag payload. The receiving widget verifies the source path still exists.
+#[cfg(any(target_os = "linux", test))]
 pub fn native_move_drag_payload(path: &[usize]) -> String {
     format!("quark-move:{}", widget_path_name(path))
 }
 
+#[cfg(any(target_os = "linux", test))]
 pub fn native_move_drag_path(payload: &str) -> Option<Vec<usize>> {
     parse_widget_path_name(payload.strip_prefix("quark-move:")?)
 }
