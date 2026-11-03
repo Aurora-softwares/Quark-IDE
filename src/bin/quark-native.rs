@@ -1881,6 +1881,21 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
 
     type PropertyRefresh = Rc<dyn Fn()>;
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
+    // Unity-style Inspector sections retain their fold state when selecting
+    // controls or receiving live Properties updates.
+    let collapsed_property_sections = Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
+    let toggle_property_section_later = ui.tasks().channel({
+        let collapsed = collapsed_property_sections.clone();
+        let refresh = reload_properties.clone();
+        move |section: String| {
+            if !collapsed.borrow_mut().insert(section.clone()) {
+                collapsed.borrow_mut().remove(&section);
+            }
+            if let Some(reload) = refresh.borrow().as_ref() {
+                reload();
+            }
+        }
+    });
     // Deliver selection after native click callbacks return, avoiding removal
     // of the active AppKit/WinUI/GTK control from within its own handler.
     let select_element_later = ui.tasks().channel({
@@ -1979,6 +1994,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
         let select_element_later = select_element_later.clone();
         let design_tab_selection = design_tab_selection.clone();
         let change_design_page_later = change_design_page_later.clone();
+        let collapsed_property_sections = collapsed_property_sections.clone();
+        let toggle_property_section_later = toggle_property_section_later.clone();
         move || {
             native_property_content.clear();
             let Some(xml) = state
@@ -2051,15 +2068,36 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     }
                 }
             }
+            // The Inspector groups fields into collapsible native sections.
+            // Each section is a real widget container (not an HTML/webview
+            // imitation) and stays folded while the selection changes.
             let all_fields = fields.clone();
             let mut last_group = "";
+            let mut current_section: Option<naui::Stack> = None;
             for field in fields {
                 if field.group != last_group {
                     last_group = field.group;
-                    if let Ok(group_heading) = ui.label(last_group) {
-                        group_heading.set_style(naui::TextStyle::Heading);
-                        group_heading.set_color(naui::TextColor::Accent);
+                    let folded = collapsed_property_sections.borrow().contains(last_group);
+                    if let Ok(group_heading) = ui.button(&format!(
+                        "{}  {}",
+                        if folded { "▸" } else { "▾" },
+                        last_group
+                    )) {
+                        group_heading.set_sizing(Sizing::fill_width());
+                        let section = last_group.to_owned();
+                        let dispatch = toggle_property_section_later.clone();
+                        group_heading.on_click(move || {
+                            let _ = dispatch.send(section.clone());
+                        });
                         native_property_content.append(&group_heading);
+                    }
+                    current_section = ui.stack(Orientation::Vertical).ok();
+                    if let Some(content) = current_section.as_ref() {
+                        content.set_spacing(5.0);
+                        content.set_sizing(Sizing::fill_width());
+                        if !folded {
+                            native_property_content.append(content);
+                        }
                     }
                 }
                 let name = field.name;
@@ -2136,9 +2174,11 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
                     edit_row.append(&value_field);
                 }
                 row.append(&edit_row);
-                native_property_content.append(&row);
+                if let Some(content) = current_section.as_ref() {
+                    content.append(&row);
+                }
             }
-            if let Ok(label) = ui.label("Add or update an attribute") {
+            if let Ok(label) = ui.label("Advanced · Add or update an attribute") {
                 native_property_content.append(&label);
             }
             let new_name = Rc::new(RefCell::new(String::new()));
