@@ -434,8 +434,29 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
     {
         return Err(format!("{name} must be true or false"));
     }
-    if name == "theme" && kind == "Window" && !matches!(value, "system" | "light" | "dark") {
+    if kind == "Window" && name == "version" && value != "1" {
+        return Err("Hydrogen v1 requires Window version=1".into());
+    }
+    if kind == "Window" && name == "theme" && !matches!(value, "system" | "light" | "dark") {
         return Err("Window theme must be system, light or dark".into());
+    }
+    if kind == "Window" && name == "material" && !matches!(value, "auto" | "glass" | "solid") {
+        return Err("Window material must be auto, glass or solid".into());
+    }
+    if kind == "Label" && name == "role"
+        && !matches!(value, "title" | "heading" | "body" | "caption")
+    {
+        return Err("Label role must be title, heading, body or caption".into());
+    }
+    if kind == "Label" && name == "tone"
+        && !matches!(value, "normal" | "muted" | "accent")
+    {
+        return Err("Label tone must be normal, muted or accent".into());
+    }
+    if kind == "FilePicker" && name == "mode"
+        && !matches!(value, "open" | "save" | "folder")
+    {
+        return Err("FilePicker mode must be open, save or folder".into());
     }
     if matches!(
         name,
@@ -449,14 +470,19 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
             | "minimum"
             | "maximum"
             | "interval"
-    ) || (name == "value" && matches!(kind, "Slider" | "NumberInput" | "ProgressBar"))
+    ) || (name == "columns" && kind == "GridPanel")
+        || (name == "value" && matches!(kind, "Slider" | "NumberInput" | "ProgressBar"))
     {
+        // HYUI v1 uses strictly nonnegative 0..32767 integer attributes.
+        // A float can look valid in Quark's preview but fail when Hydrogen
+        // parses the built application's layout, so never save it.
         let number = value
-            .parse::<f64>()
-            .map_err(|_| format!("{name} must be a number"))?;
-        if !number.is_finite() {
-            return Err(format!("{name} must be a finite number"));
+            .parse::<u32>()
+            .map_err(|_| format!("{name} must be a nonnegative whole number"))?;
+        if number > 32767 {
+            return Err(format!("{name} must be no greater than 32767"));
         }
+        let number = f64::from(number);
         if matches!(
             name,
             "width"
@@ -470,6 +496,15 @@ fn validate_known_property(node: Node<'_, '_>, name: &str, value: &str) -> Resul
         ) && number < 0.0
         {
             return Err(format!("{name} must not be negative"));
+        }
+        if name == "interval" && kind == "Timer" && number < 100.0 {
+            return Err("Timer interval must be at least 100 ms".into());
+        }
+        if name == "columns" && kind == "GridPanel" && number == 0.0 {
+            return Err("GridPanel must contain at least one column".into());
+        }
+        if matches!(name, "width" | "height" | "minItemWidth") && number == 0.0 {
+            return Err(format!("{name} must be positive"));
         }
         if name == "width" && kind == "Window" && number < 200.0 {
             return Err("Window width must be at least 200".into());
@@ -1351,6 +1386,29 @@ mod tests {
     }
 
     #[test]
+    fn inspector_numeric_values_match_hydrogen_v1_integer_schema() {
+        let xml = r#"<Window version="1" width="800"><GridPanel columns="2" minItemWidth="240"/><Timer interval="100" onTick="Tick"/></Window>"#;
+        assert!(set_attribute(xml, &[], "width", "850").is_ok());
+        assert!(set_attribute(xml, &[], "width", "850.5").is_err());
+        assert!(set_attribute(xml, &[], "width", "99999").is_err());
+        assert!(set_attribute(xml, &[0], "columns", "0").is_err());
+        assert!(set_attribute(xml, &[0], "columns", "3").is_ok());
+        assert!(set_attribute(xml, &[1], "interval", "99").is_err());
+        assert!(set_attribute(xml, &[1], "interval", "250").is_ok());
+        assert!(set_attribute(xml, &[], "version", "2").is_err());
+    }
+
+    #[test]
+    fn inspector_appearance_enums_reject_hydrogen_runtime_invalid_values() {
+        let xml = r#"<Window version="1"><Label role="heading" tone="accent"/><FilePicker mode="open" text="Choose" onPick="Pick"/></Window>"#;
+        assert!(set_attribute(xml, &[], "material", "glass").is_ok());
+        assert!(set_attribute(xml, &[], "material", "unknown").is_err());
+        assert!(set_attribute(xml, &[0], "role", "italic").is_err());
+        assert!(set_attribute(xml, &[0], "tone", "#FF00FF").is_err());
+        assert!(set_attribute(xml, &[1], "mode", "download").is_err());
+    }
+
+    #[test]
     fn inspector_does_not_write_unsupported_font_anchor_or_hover_colours() {
         let original = r#"<Window version="1"><Button text="Run"/></Window>"#;
         for field in [
@@ -1405,15 +1463,16 @@ mod tests {
 
     #[test]
     fn properties_validate_native_control_ranges_and_booleans() {
-        let xml = r#"<Window title="Test"><Slider minimum="-10" maximum="30" value="5"/><CheckBox checked="true"/></Window>"#;
+        let xml = r#"<Window title="Test"><Slider minimum="10" maximum="30" value="15"/><CheckBox checked="true"/></Window>"#;
         assert!(set_attribute(xml, &[0], "minimum", "31").is_err());
         assert!(set_attribute(xml, &[0], "maximum", "-11").is_err());
         assert!(set_attribute(xml, &[0], "value", "31").is_err());
         assert!(set_attribute(xml, &[0], "value", "NaN").is_err());
         assert!(set_attribute(xml, &[1], "checked", "maybe").is_err());
-        assert!(set_attribute(xml, &[0], "value", "12.5")
+        assert!(set_attribute(xml, &[0], "value", "12.5").is_err());
+        assert!(set_attribute(xml, &[0], "value", "12")
             .unwrap()
-            .contains("value=\"12.5\""));
+            .contains("value=\"12\""));
         assert!(set_attribute(xml, &[1], "checked", "false").is_ok());
     }
 
