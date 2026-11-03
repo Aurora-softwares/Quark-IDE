@@ -2012,7 +2012,7 @@
       "feature": "Hydrogen MenuBar groups remain semantic native menus rather than becoming direct action buttons in design mode",
       "tests": [
         "native_portable_preview::tests::hydrogen_studio_declares_top_level_native_menu_groups",
-        "native_portable_preview::tests::row_preferred_widths_follow_hydrogen_studio_not_even_distribution"
+        "native_portable_preview::tests::hydrogen_menu_bar_groups_keep_source_order_and_a_single_horizontal_row"
       ]
     },
     {
@@ -2034,6 +2034,27 @@
       "tests": [
         "native_portable_preview::tests::hydrogen_default_control_expansion_matches_runtime_except_buttons",
         "native_portable_preview::tests::runtime_expansion_respects_opt_out_and_explicit_overrides"
+      ]
+    },
+    {
+      "id": "native-designer-gtk-visual-differences",
+      "category": "Native Interface Designer",
+      "feature": "Design surface renders Hydrogen menus side by side, GTK primary-action styling, and left-aligned controls rather than generic centred widgets",
+      "tests": [
+        "native_portable_preview::tests::hydrogen_menu_bar_groups_keep_source_order_and_a_single_horizontal_row",
+        "native_portable_preview::tests::hydrogen_studio_primary_button_uses_exact_runtime_attribute"
+      ],
+      "platforms": [
+        "linux"
+      ]
+    },
+    {
+      "id": "native-designer-responsive-preferred-widths",
+      "category": "Native Interface Designer",
+      "feature": "RowPanel treats preferredWidth as a minimum, expands the trailing card into available width and wraps panels when they cannot fit even above the breakpoint",
+      "tests": [
+        "native_portable_preview::tests::preferred_widths_are_minimums_and_summary_expands_to_fill_remaining_row",
+        "native_portable_preview::tests::preferred_width_overflow_wraps_even_above_explicit_breakpoint"
       ]
     }
   ]
