@@ -61,6 +61,7 @@ mod native_syntax;
 mod native_terminal;
 #[path = "../native_terminal_screen.rs"]
 mod native_terminal_screen;
+#[allow(dead_code)] // HYUI structural editing API is staged; native presenter callbacks are being integrated.
 #[path = "../native_ui_properties.rs"]
 mod native_ui_properties;
 #[path = "../problems.rs"]
@@ -1883,7 +1884,8 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     let reload_properties: Rc<RefCell<Option<PropertyRefresh>>> = Rc::new(RefCell::new(None));
     // Unity-style Inspector sections retain their fold state when selecting
     // controls or receiving live Properties updates.
-    let collapsed_property_sections = Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
+    let collapsed_property_sections =
+        Rc::new(RefCell::new(std::collections::HashSet::<String>::new()));
     let toggle_property_section_later = ui.tasks().channel({
         let collapsed = collapsed_property_sections.clone();
         let refresh = reload_properties.clone();
