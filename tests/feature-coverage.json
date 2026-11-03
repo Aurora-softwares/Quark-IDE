@@ -2158,7 +2158,9 @@
       "feature": "Native Inspector offers supported Hydrogen styles and rejects unsupported state fonts, anchors and per-state colours until runtime schema implements them",
       "tests": [
         "native_ui_properties::tests::inspector_exposes_valid_theme_font_role_and_tone_selectors",
-        "native_ui_properties::tests::inspector_does_not_write_unsupported_font_anchor_or_hover_colours"
+        "native_ui_properties::tests::inspector_does_not_write_unsupported_font_anchor_or_hover_colours",
+        "native_ui_properties::tests::inspector_numeric_values_match_hydrogen_v1_integer_schema",
+        "native_ui_properties::tests::inspector_appearance_enums_reject_hydrogen_runtime_invalid_values"
       ]
     },
     {
