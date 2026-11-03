@@ -454,6 +454,7 @@ fn render_node(
                 label.set_style(naui::TextStyle::Heading);
                 #[cfg(target_os = "linux")]
                 {
+                    use gtk4::prelude::*;
                     use naui::Widget as _;
                     label.native_widget().add_css_class("heading");
                 }
@@ -784,6 +785,7 @@ fn render_node(
             }
             #[cfg(target_os = "linux")]
             {
+                use gtk4::prelude::*;
                 use naui::Widget as _;
                 for class in hydrogen_gtk_label_classes(
                     node.attribute("role").unwrap_or(""),
