@@ -372,6 +372,26 @@ impl LayoutDocument {
         Ok(())
     }
 
+    /// Commit a programmatically generated native design edit only when its
+    /// XML and projected layout are fully valid. Unlike typing in XML Source,
+    /// a failed drag/drop or Properties edit must NOT replace the last valid
+    /// draft with a malformed document.
+    pub fn apply_designer_source(&mut self, text: String) -> Result<(), String> {
+        if text.len() > MAX_LAYOUT_BYTES as usize {
+            return Err("Hydrogen UI XML exceeds the 1 MiB size limit".into());
+        }
+        if !crate::ui_xml::is_native_window(&text) {
+            return Err("Designer operations require a Hydrogen <Window> document".into());
+        }
+        let next_layout: Layout = crate::ui_xml::load(&self.path, &text)?;
+        next_layout.validate()?;
+        // All fallible operations completed. Update model and source together.
+        self.layout = next_layout;
+        self.source_draft = Some(text);
+        self.native_window = true;
+        Ok(())
+    }
+
     /// A designer mutation invalidates an older XML draft only when the
     /// draft is valid; invalid text must be resolved before visual edits.
     pub fn refresh_designer_xml(&mut self) -> Result<String, String> {
@@ -851,6 +871,41 @@ mod tests {
             LayoutDocument::open(&path).unwrap().layout.controls[0].text,
             "Launch"
         );
+    }
+
+    #[test]
+    fn designer_generated_invalid_xml_never_poison_saved_or_unsaved_source() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("Main.hyui");
+        let xml = r#"<Window version="1" title="Demo" width="800" height="600"><ColumnPanel><Label text="Ready"/></ColumnPanel></Window>"#;
+        std::fs::write(&path, xml).unwrap();
+        let mut layout = LayoutDocument::open(&path).unwrap();
+        assert!(!layout.dirty());
+        assert!(layout.apply_designer_source("<Window><Button".into()).is_err());
+        assert_eq!(layout.source().unwrap(), xml);
+        assert!(!layout.dirty());
+        let edited = xml.replace(
+            "</ColumnPanel>",
+            r#"<Button id="run" text="Run"/></ColumnPanel>"#,
+        );
+        layout.apply_designer_source(edited.clone()).unwrap();
+        assert_eq!(layout.source().unwrap(), edited);
+        assert!(layout.dirty());
+        assert!(layout.apply_designer_source("<NotAWindow/>".into()).is_err());
+        assert_eq!(layout.source().unwrap(), edited);
+    }
+
+    #[test]
+    fn designer_generated_oversized_edits_are_rejected_atomically() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("Main.hyui");
+        let xml = r#"<Window version="1" title="Demo" width="800" height="600"><ColumnPanel/></Window>"#;
+        std::fs::write(&path, xml).unwrap();
+        let mut layout = LayoutDocument::open(&path).unwrap();
+        let huge = format!("{}{}", xml, "x".repeat(MAX_LAYOUT_BYTES as usize));
+        assert!(layout.apply_designer_source(huge).is_err());
+        assert_eq!(layout.source().unwrap(), xml);
+        assert_eq!(std::fs::read_to_string(path).unwrap(), xml);
     }
 
     #[test]
