@@ -43,25 +43,25 @@
 			</ColumnPanel>
 			<RowPanel breakpoint="840" gap="20">
 				<Panel title="Open recent / Open project" preferredWidth="500" gap="13">
-				<Label text="YOUR WORKSPACE" role="caption" tone="accent" />
-				<Label text="Choose an existing Hydrogen project or pick up a source file." role="heading" />
-				<FilePicker id="startProjectPicker" mode="open" text="Open a .hyproj project" onPick="ProjectPicked" onCancel="PickerCancelled" />
-				<FilePicker id="startSourcePicker" mode="open" text="Open a .hy source file" onPick="SourcePicked" onCancel="PickerCancelled" />
-				<FilePicker id="startUIPicker" mode="open" text="Open a .hyui layout" onPick="UIPicked" onCancel="PickerCancelled" />
-				<Separator />
-				<Label text="Recent projects and pinned workspaces are planned. Current source is loaded from your local files; Quark does not silently move or delete them." tone="muted" />
-				<Button id="blankWorkspace" text="Continue without code" onClick="Continue" />
+					<Label text="YOUR WORKSPACE" role="caption" tone="accent" />
+					<Label text="Choose an existing Hydrogen project or pick up a source file." role="heading" />
+					<FilePicker id="startProjectPicker" mode="open" text="Open a .hyproj project" onPick="ProjectPicked" onCancel="PickerCancelled" />
+					<FilePicker id="startSourcePicker" mode="open" text="Open a .hy source file" onPick="SourcePicked" onCancel="PickerCancelled" />
+					<FilePicker id="startUIPicker" mode="open" text="Open a .hyui layout" onPick="UIPicked" onCancel="PickerCancelled" />
+					<Separator />
+					<Label text="Recent projects and pinned workspaces are planned. Current source is loaded from your local files; Quark does not silently move or delete them." tone="muted" />
+					<Button id="blankWorkspace" text="Continue without code" onClick="Continue" />
 				</Panel>
 				<Panel title="Get started" preferredWidth="540" gap="12">
-				<Label text="NEW HYDROGEN APPLICATION" role="caption" tone="accent" />
-				<Label text="Create a project in an existing folder" role="heading" />
-				<Input id="newName" text="MyHydrogenApp" placeholder="Project name" accessibleName="New project name" />
-				<CheckBox id="newUI" text="Include Hydrogen UI and a working event handler" checked="true" />
-				<FilePicker id="projectFolderPicker" mode="folder" text="Choose folder and create project" onPick="CreateProject" onCancel="PickerCancelled" />
-				<Label text="Quark never overwrites a starter file. Select an existing empty or separate destination folder." tone="muted" />
-				<Separator />
-				<Label text="ONE LANGUAGE · NATIVE DESKTOP" role="caption" tone="accent" />
-				<Label text="Use .hy for logic and .hyui for your interface. Build the result through Hydrogen's native compiler." tone="muted" />
+					<Label text="NEW HYDROGEN APPLICATION" role="caption" tone="accent" />
+					<Label text="Create a project in an existing folder" role="heading" />
+					<Input id="newName" text="MyHydrogenApp" placeholder="Project name" accessibleName="New project name" />
+					<CheckBox id="newUI" text="Include Hydrogen UI and a working event handler" checked="true" />
+					<FilePicker id="projectFolderPicker" mode="folder" text="Choose folder and create project" onPick="CreateProject" onCancel="PickerCancelled" />
+					<Label text="Quark never overwrites a starter file. Select an existing empty or separate destination folder." tone="muted" />
+					<Separator />
+					<Label text="ONE LANGUAGE · NATIVE DESKTOP" role="caption" tone="accent" />
+					<Label text="Use .hy for logic and .hyui for your interface. Build the result through Hydrogen's native compiler." tone="muted" />
 				</Panel>
 			</RowPanel>
 			<Label id="startStatus" text="Welcome to Quark. Nothing is opened yet." tone="muted" />
