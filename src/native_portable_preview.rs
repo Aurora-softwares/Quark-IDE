@@ -697,6 +697,28 @@ fn render_node(
                 .button(node.attribute("text").unwrap_or("Button"))
                 .map_err(|e| e.to_string())?;
             button.set_enabled(enabled);
+            if node.attribute("primary") == Some("true") {
+                #[cfg(target_os = "linux")]
+                {
+                    use gtk4::prelude::*;
+                    use naui::Widget as _;
+                    // This is the exact GTK style class used by Hydrogen.
+                    button.native_widget().add_css_class("suggested-action");
+                }
+            }
+            if runtime_fills(node) {
+                button.set_sizing(Sizing::fill_width());
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                button.native_widget().set_halign(if runtime_fills(node) {
+                    gtk4::Align::Fill
+                } else {
+                    gtk4::Align::Start
+                });
+            }
             let selected = on_select.clone();
             button.on_click(move || selected(path.clone()));
             row.append(&button);
@@ -774,6 +796,12 @@ fn render_node(
                 .map_err(|e| e.to_string())?;
             input.set_checked(node.attribute("checked") == Some("true"));
             input.set_enabled(enabled);
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                input.native_widget().set_halign(gtk4::Align::Start);
+            }
             let select = on_select.clone();
             input.on_toggle(move |_| select(path.clone()));
             row.append(&input);
@@ -784,6 +812,12 @@ fn render_node(
                 .map_err(|e| e.to_string())?;
             input.set_on(node.attribute("checked") == Some("true"));
             input.set_enabled(enabled);
+            #[cfg(target_os = "linux")]
+            {
+                use gtk4::prelude::*;
+                use naui::Widget as _;
+                input.native_widget().set_halign(gtk4::Align::Start);
+            }
             let select = on_select.clone();
             input.on_toggle(move |_| select(path.clone()));
             row.append(&input);
@@ -1394,6 +1428,25 @@ mod tests {
         assert!(!runtime_fills(elements[1]));
         assert!(runtime_fills(elements[2]));
         assert!(!runtime_fills(elements[3]));
+    }
+
+    #[test]
+    fn hydrogen_studio_primary_button_uses_exact_runtime_attribute() {
+        let xml = include_str!("../tests/fixtures/Studio.hyui");
+        let parsed = roxmltree::Document::parse(xml).unwrap();
+        let build = parsed
+            .descendants()
+            .find(|node| node.attribute("id") == Some("build"))
+            .unwrap();
+        assert_eq!(build.tag_name().name(), "Button");
+        assert_eq!(build.attribute("primary"), Some("true"));
+        assert!(runtime_fills(build));
+        let cancel = parsed
+            .descendants()
+            .find(|node| node.attribute("id") == Some("cancel"))
+            .unwrap();
+        assert_ne!(cancel.attribute("primary"), Some("true"));
+        assert!(runtime_fills(cancel));
     }
 
     #[test]
