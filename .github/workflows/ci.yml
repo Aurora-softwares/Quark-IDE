@@ -64,6 +64,27 @@ jobs:
         run: cargo test --no-default-features --features native-ui --bin quark-native
       - name: Build native UI frontend
         run: cargo build --release --no-default-features --features native-ui --bin quark-native
+      - name: AppKit startup lifetime on macOS
+        if: runner.os == 'macOS'
+        run: python3 scripts/macos-startup-smoke.py target/release/quark-native
+      - name: Package macOS AppKit application
+        if: runner.os == 'macOS'
+        run: bash scripts/package-macos-app.sh target/release/quark-native dist
+      - name: Validate macOS application bundle and restored executable
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dist/check-unzip
+          ditto -x -k dist/Quark-IDE-macOS.zip dist/check-unzip
+          test -x "dist/check-unzip/Quark IDE.app/Contents/MacOS/quark-native"
+          plutil -lint "dist/check-unzip/Quark IDE.app/Contents/Info.plist"
+          codesign --verify --strict "dist/check-unzip/Quark IDE.app"
+      - name: Upload Finder-ready macOS application
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quark-macos-app
+          path: dist/Quark-IDE-macOS.zip
+          if-no-files-found: error
       - name: GTK startup lifetime under Xvfb
         if: runner.os == 'Linux'
         run: xvfb-run -a -s '-screen 0 1600x1000x24' python3 scripts/native-startup-smoke.py target/release/quark-native
