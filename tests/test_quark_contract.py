@@ -101,7 +101,8 @@ class QuarkContracts(unittest.TestCase):
         self.assertIn("Session.RecentItems", START_CODE)
         self.assertIn("Session.RecentAt", START_CODE)
         self.assertIn("Session.Forget", START_CODE)
-        self.assertIn("Session.Remember", SESSION)
+        self.assertIn("public static void Remember", SESSION)
+        self.assertIn("Remember(path);", SESSION)
 
     def test_start_project_and_folder_actions(self):
         self.assertEqual(by_id(START, "startProjectPicker").attrib["onPick"], "ProjectPicked")
