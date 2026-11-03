@@ -268,9 +268,10 @@ fn row_child_widths(node: Node<'_, '_>, available_width: f64, gap: f64) -> Vec<f
         // FlowBox grants remaining space to its final expanding child.
         // At 1120px Studio keeps settings at 600 and expands its summary
         // beyond the 340px requested minimum.
-        if let Some(last) = children.iter().rposition(|child| {
-            child.attribute("visible") != Some("false") && runtime_fills(*child)
-        }) {
+        if let Some(last) = children
+            .iter()
+            .rposition(|child| child.attribute("visible") != Some("false") && runtime_fills(*child))
+        {
             assigned[last] += remaining;
         }
     }
@@ -361,9 +362,7 @@ fn render_node(
         .and_then(|value| value.parse::<f64>().ok())
         .filter(|value| value.is_finite() && *value >= 20.0)
     {
-        row.set_sizing(Sizing::new().width(Length::Fixed(
-            width.max(available_width).min(2400.0),
-        )));
+        row.set_sizing(Sizing::new().width(Length::Fixed(width.max(available_width).min(2400.0))));
     } else if runtime_fills(node) {
         // Hydrogen defaults fill=true for ordinary content. A non-filling
         // wrapper lets otherwise correct GTK controls collapse to natural
@@ -1630,8 +1629,14 @@ mod tests {
     #[test]
     fn hydrogen_gtk_labels_use_runtime_style_classes_not_generic_ide_accent() {
         assert_eq!(hydrogen_gtk_label_classes("title", ""), ["title-1"]);
-        assert_eq!(hydrogen_gtk_label_classes("heading", "accent"), ["title-3", "accent"]);
-        assert_eq!(hydrogen_gtk_label_classes("caption", "muted"), ["caption", "dim-label"]);
+        assert_eq!(
+            hydrogen_gtk_label_classes("heading", "accent"),
+            ["title-3", "accent"]
+        );
+        assert_eq!(
+            hydrogen_gtk_label_classes("caption", "muted"),
+            ["caption", "dim-label"]
+        );
         assert!(hydrogen_gtk_label_classes("", "").is_empty());
     }
 
