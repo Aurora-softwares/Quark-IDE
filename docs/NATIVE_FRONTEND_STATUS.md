@@ -61,6 +61,14 @@ New regression tests cover nested insertion, order, parent changing, event-handl
 4. 🟡 **Designer and native architecture — [#98](https://github.com/Aurora-softwares/Quark-IDE/issues/98), [#99](https://github.com/Aurora-softwares/Quark-IDE/issues/99), [#89](https://github.com/Aurora-softwares/Quark-IDE/issues/89), [#100](https://github.com/Aurora-softwares/Quark-IDE/issues/100):** make design mode safe, compare standalone Hydrogen renderers, and replace transitional UI wrappers with direct OS frameworks.
 5. 🔴 **Source debugger — [#91](https://github.com/Aurora-softwares/Quark-IDE/issues/91):** agree and verify Hydrogen debug metadata/transport before enabling Quark debugger controls. Australis OS images need separate QEMU/remote debugging; they are not host executables.
 
+## macOS launch reliability — current Development
+
+- 🟡 **AppKit IDE startup and Finder application:** New native-project-wizard transitions are delivered after the AppKit button callback returns, rather than mutating/destroying a native window inside its own action. CI now exercises the actual macOS `quark-native` process lifetime; static compilation and Rust unit tests alone do not establish GUI startup correctness.
+- 🟡 **Distributable macOS package:** `scripts/package-macos-app.sh` creates `dist/Quark IDE.app`, adds a native `Info.plist`, verifies an ad-hoc code signature, and archives it in `Quark-IDE-macOS.zip` using `ditto`. This retains Unix executable permissions, unlike a bare GitHub Actions binary download. The macOS CI job extracts and checks the ZIP before upload.
+- 🟡 **Hydrogen UI application launch:** Existing Quark Run commands launch a fresh native `.app` bundle through macOS LaunchServices, with tests guarding missing bundles and unsafe symlinks. Full AppKit application-content, exit/crash and Hydrogen event acceptance still requires hands-on desktop validation.
+- 🔴 **Signing and installation:** Ad-hoc signing is for local/CI validation only. Developer ID signing, notarization and a release installer are not yet done; do not present this as a Gatekeeper-cleared public release.
+- 🔴 **Actual macOS GUI acceptance:** Confirm Finder open, launcher navigation, project creation, native `.hyui` design editing, packaged Hydrogen UI events, restart and clean quit on both Apple Silicon and Intel (or Rosetta as appropriate). GitHub CI smoke is an additional guard, not full visual acceptance.
+
 ## Remaining release gates
 
 - 🔴 Record interactive GUI acceptance, accessibility, focus, high-DPI, theme, resizing, file pickers and native window behavior on each OS. Use the [manual acceptance matrix](../scripts/manual-acceptance.md); mark only observed cases complete.
