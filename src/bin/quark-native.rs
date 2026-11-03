@@ -6469,6 +6469,20 @@ fn build(ui: &Ui) -> naui::Result<()> {
     // The launcher buttons retain the launch closure. Avoid a strong
     // Window -> button -> closure -> Window cycle across all backends.
     let ide_window = window.downgrade();
+    // Reparenting the complete Start Window tree into an IDE NSWindow can
+    // invalidate AppKit views while its native responder chain is active.
+    // On macOS construct the IDE in a *new* NSWindow, show it first, then
+    // close the launcher on a subsequent UI task. The task owns only a weak
+    // reference so it does not retain the old window indefinitely.
+    #[cfg(target_os = "macos")]
+    let close_launcher_later = ui.tasks().channel({
+        let start = ide_window.clone();
+        move |()| {
+            if let Some(old_window) = start.upgrade() {
+                old_window.close();
+            }
+        }
+    });
     let launch: Rc<dyn Fn(native_start_window::Action) -> Result<(), String>> =
         Rc::new(move |action| {
             {
@@ -6501,10 +6515,27 @@ fn build(ui: &Ui) -> naui::Result<()> {
                     }
                 }
             }
-            let window = ide_window
-                .upgrade()
-                .ok_or("The Start Window has already closed")?;
-            build_ide(&handle, launch_state.clone(), window).map_err(|error| error.to_string())
+            #[cfg(target_os = "macos")]
+            {
+                let workspace_window = handle
+                    .window("Quark IDE — Hydrogen Development Environment", 1480.0, 940.0)
+                    .map_err(|error| format!("Cannot create AppKit IDE window: {error}"))?;
+                // No NSView from the launcher is transferred to this window.
+                // Leave the launcher alive if building the IDE fails.
+                build_ide(&handle, launch_state.clone(), workspace_window)
+                    .map_err(|error| format!("Cannot construct AppKit IDE: {error}"))?;
+                eprintln!("Quark: AppKit IDE workspace ready");
+                close_launcher_later.send(()).map_err(|error| error.to_string())?;
+                Ok(())
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let window = ide_window
+                    .upgrade()
+                    .ok_or("The Start Window has already closed")?;
+                build_ide(&handle, launch_state.clone(), window)
+                    .map_err(|error| error.to_string())
+            }
         });
     native_start_window::show(
         ui,
