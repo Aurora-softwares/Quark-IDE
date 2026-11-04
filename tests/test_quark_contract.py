@@ -96,6 +96,12 @@ class QuarkContracts(unittest.TestCase):
         self.assertIn('if (Dirty(args))', IDE_CODE)
         self.assertIn("Session.OpenStart()", IDE_CODE)
 
+    def test_native_session_uses_heap_built_paths_for_legacy_runtime(self):
+        session = (ROOT / "src/Quark/Session.hy").read_text()
+        self.assertIn('Workspace.Join("build", ".quark-open-request")', session)
+        self.assertIn('Workspace.Join("build", ".quark-recent")', session)
+        self.assertNotIn('return "build/.quark-open-request"', session)
+
     def test_recent_workspace_history_is_real(self):
         self.assertEqual(START.attrib.get("onLoad"), "StartReady")
         self.assertIn("Session.RecentItems", START_CODE)

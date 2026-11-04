@@ -11,12 +11,8 @@ namespace Quark {
             }
             string handler = Application.Handler(args);
             if (handler == "LoadSession") {
-                System.Console.WriteLine("QUARK_SESSION_TRACE: handler entered");
-                Trace("0: LoadSession entered");
                 string kind = Session.Kind();
-                Trace("1: Kind read: " + kind);
                 string selected = Session.Path();
-                Trace("2: Path read");
                 if (kind == "P") { LoadProject(args, selected); }
                 else if (kind == "S") { LoadDocument(args, selected, false); }
                 else if (kind == "U") { LoadDocument(args, selected, true); }
@@ -28,9 +24,7 @@ namespace Quark {
                     Application.SetText("propertyType", "Folder workspace (file enumeration not implemented)");
                     Status("Opened folder " + selected);
                 } else { Status("Empty workspace. Open a project, source file or HYUI document."); }
-                Trace("6: About to clear request");
                 Session.Clear();
-                Trace("7: Session consumed");
             }
             if (handler == "BackToStart") {
                 if (Dirty(args)) { Status("Save your changes before returning to Start."); }
@@ -168,12 +162,6 @@ namespace Quark {
             return 0;
         }
 
-        private static void Trace(string step) {
-            // Emit a short marker before file I/O so a signal-terminated
-            // backend still tells us which step executed.
-            System.Console.WriteLine("QUARK_SESSION_TRACE: " + step);
-        }
-
         private static void ShowEditor(int page) {
             Application.SetValue("editorTabs", page);
             Application.SetText("fileMode", page == 0 ? "Hydrogen source" : "Hydrogen UI XML");
@@ -198,38 +186,29 @@ namespace Quark {
         }
 
         private static void LoadProject(string[] args, string path) {
-            Trace("3a: LoadProject entered");
             if (path == "" || !System.IO.File.Exists(path)) { Status("Selected project does not exist."); return; }
             if (Dirty(args)) { Status("Save all changed documents before opening another project."); return; }
-            Trace("3b: Project validated");
             string manifest = System.IO.File.ReadAllText(path);
-            Trace("3c: Manifest read");
             string code = Workspace.Source(path, manifest);
             string layout = Workspace.Layout(path, manifest);
-            Trace("3d: Source and UI paths resolved");
             Application.SetText("projectState", path);
             Application.SetText("manifestState", manifest);
             Application.SetText("projectTitle", Workspace.QuotedSetting(manifest, "name"));
             Application.SetText("startupProject", Workspace.QuotedSetting(manifest, "name"));
             Application.SetText("projectPathLabel", path);
             Application.SetText("projectFileList", Workspace.ExplorerItems(path, manifest));
-            Trace("3e: Explorer generated");
             Application.SetValue("projectFileNumber", 1);
             Application.SetText("propertyName", Workspace.BaseName(path));
             Application.SetText("propertyType", "Hydrogen project (.hyproj)");
             Application.SetText("codePath", code);
             Application.SetText("uiPath", layout);
-            Trace("3f: Before code buffer");
             Application.SetText("codeText", code != "" && System.IO.File.Exists(code) ? System.IO.File.ReadAllText(code) : "");
-            Trace("3g: Code buffer serialized");
             Application.SetText("uiText", layout != "" && System.IO.File.Exists(layout) ? System.IO.File.ReadAllText(layout) : "");
-            Trace("3h: UI buffer serialized");
             Application.SetText("codeName", code == "" ? "No source in manifest" : Workspace.BaseName(code));
             Application.SetText("uiName", layout == "" ? "No HYUI layout in manifest" : Workspace.BaseName(layout));
             Application.SetText("documentTitle", Workspace.BaseName(path));
             ShowEditor(0);
             Status("Opened " + path);
-            Trace("3i: LoadProject completed");
         }
 
         private static void LoadDocument(string[] args, string path, bool ui) {

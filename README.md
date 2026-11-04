@@ -63,6 +63,19 @@ still needs manual platform verification; on macOS, launching a `.app` through
 `open` may not preserve Quark's working directory. The Linux split-window
 launch path is the primary development target for this iteration.
 
+### Runtime file-path compatibility
+
+The early native Hydrogen Linux runtime called `rt_create_parents` by
+temporarily editing the caller's string, which could segfault on a read-only
+ELF string literal. Quark still constructs session file paths through
+`Workspace.Join` for compatibility with older compiler builds. Hydrogen's
+Development runtime has also been corrected to copy path strings to writable
+stack memory before creating directory components.
+
+The launcher writes native startup logs to `build/.quark-ide.log` and
+`build/.quark-start.log`; these are ignored by Git and can be inspected if
+window startup fails. Build both executables again after updating Hydrogen.
+
 ### Functional workspace backend
 
 The IDE can open `.hyproj`, `.hy` and `.hyui` files, navigate source paths
