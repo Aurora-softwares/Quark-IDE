@@ -168,8 +168,9 @@ namespace Quark {
         }
 
         private static void Trace(string step) {
-            // Development trace: preserves the last completed step if the
-            // self-hosted Hydrogen backend crashes before returning an event.
+            // Emit a short marker before file I/O so a signal-terminated
+            // backend still tells us which step executed.
+            System.Console.WriteLine("QUARK_SESSION_TRACE: " + step);
             System.IO.File.WriteAllText("build/.quark-onload.trace", step + "\n");
         }
 
