@@ -65,8 +65,11 @@ namespace Quark {
             string executable = "./build/" + target;
             if (!System.IO.File.Exists("build/" + target)) { return 127; }
             // Detach the second native window. We may close this one afterwards.
+            // Keep native host/backend diagnostics instead of throwing away
+            // the exact reason for a failed second-window launch.
+            string logFile = target == "QuarkIDE" ? "build/.quark-ide.log" : "build/.quark-start.log";
             return System.Host.Process.Run("nohup " + Quote(executable) +
-                " >/dev/null 2>&1 </dev/null &");
+                " > " + Quote(logFile) + " 2>&1 </dev/null &");
         }
 
         private static bool ValidRequest(string kind, string path) {
