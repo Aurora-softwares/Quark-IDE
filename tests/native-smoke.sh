@@ -8,6 +8,7 @@ trap 'rm -rf -- "$work"' EXIT
 "$compiler" build Quark.WorkspaceTests.hyproj -o "$work/quark-workspace-tests"
 "$work/quark-workspace-tests"
 mkdir -p build
+: > build/.quark-open-request
 "$compiler" build Quark.SessionTests.hyproj -o "$work/quark-session-tests"
 "$work/quark-session-tests"
 "$compiler" build Quark.IDE.hyproj -o "$work/QuarkIDE"

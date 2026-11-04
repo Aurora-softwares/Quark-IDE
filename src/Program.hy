@@ -172,7 +172,6 @@ namespace Quark {
             // Emit a short marker before file I/O so a signal-terminated
             // backend still tells us which step executed.
             System.Console.WriteLine("QUARK_SESSION_TRACE: " + step);
-            System.IO.File.WriteAllText("build/.quark-onload.trace", step + "\n");
         }
 
         private static void ShowEditor(int page) {
