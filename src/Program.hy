@@ -11,6 +11,7 @@ namespace Quark {
             }
             string handler = Application.Handler(args);
             if (handler == "LoadSession") {
+                System.Console.WriteLine("QUARK_SESSION_TRACE: handler entered");
                 Trace("0: LoadSession entered");
                 string kind = Session.Kind();
                 Trace("1: Kind read: " + kind);
