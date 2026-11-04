@@ -56,6 +56,21 @@ if [[ "${HYUI_NATIVE_UI_SMOKE:-0}" == "1" ]]; then
     }
   test ! -s build/.quark-open-request || {
     echo "Quark IDE did not consume its launch request" >&2
+    echo "---- GTK stderr ----" >&2
+    cat "$work/project-load.stderr" >&2
+    echo "---- backend stdout ----" >&2
+    cat "$work/project-load.stdout" >&2
+    echo "---- UI state (selected fields) ----" >&2
+    python3 - "$work/project-loaded.json" <<'PYDIAG'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if path.exists():
+    state = json.loads(path.read_text())
+    for key in ('projectTitle.text', 'status.text', 'codeName.text', 'projectState.text'):
+        print(f"{key}: {state.get(key, '<missing>')}", file=sys.stderr)
+else:
+    print("No HYUI state was saved", file=sys.stderr)
+PYDIAG
     exit 1
   }
   printf 'S\n%s\n' "$root/src/Quark/Workspace.hy" > build/.quark-open-request
