@@ -5,8 +5,11 @@ namespace Quark {
     // The two HYUI applications do not share a process. Persist only the
     // requested project location (not document contents) during hand-off.
     public class Session {
-        public static string RequestFile() { return "build/.quark-open-request"; }
-        public static string RecentFile() { return "build/.quark-recent"; }
+        // The current Hydrogen Linux runtime's rt_create_parents temporarily
+        // mutates the supplied path. Construct writable heap strings rather
+        // than passing immutable string literals to File.WriteAllText.
+        public static string RequestFile() { return Workspace.Join("build", ".quark-open-request"); }
+        public static string RecentFile() { return Workspace.Join("build", ".quark-recent"); }
 
         public static string Kind() {
             if (!System.IO.File.Exists(RequestFile())) { return ""; }
