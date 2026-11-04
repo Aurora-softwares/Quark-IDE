@@ -56,6 +56,8 @@ if [[ "${HYUI_NATIVE_UI_SMOKE:-0}" == "1" ]]; then
     }
   test ! -s build/.quark-open-request || {
     echo "Quark IDE did not consume its launch request" >&2
+    echo "---- last Hydrogen LoadSession checkpoint ----" >&2
+    if [[ -f build/.quark-onload.trace ]]; then cat build/.quark-onload.trace >&2; else echo "(none)" >&2; fi
     echo "---- GTK stderr ----" >&2
     cat "$work/project-load.stderr" >&2
     echo "---- backend stdout ----" >&2
