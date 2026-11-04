@@ -183,6 +183,24 @@ class QuarkContracts(unittest.TestCase):
                 self.assertIsNotNone(by_id(IDE, name))
         self.assertIn("SOLUTION EXPLORER", (ROOT / "Quark.hyui").read_text())
 
+    def test_replace_buttons_and_unsaved_edit_handling(self):
+        self.assertEqual(by_id(IDE, "replaceFirstButton").attrib["onClick"], "ReplaceFirst")
+        self.assertEqual(by_id(IDE, "replaceAllButton").attrib["onClick"], "ReplaceAll")
+        self.assertIsNotNone(by_id(IDE, "replaceQuery"))
+        for name in ("ReplaceFirst", "ReplaceAll"):
+            self.assertIn('handler == "' + name + '"', IDE_CODE)
+        self.assertIn('Application.SetText(field, updated);', IDE_CODE)
+        self.assertIn('save before building.', IDE_CODE)
+
+    def test_replace_helper_handles_no_match_empty_and_nonoverlap(self):
+        for function in ("FindAt", "CountMatches", "ReplaceFirst", "ReplaceAll"):
+            self.assertIn("public static " + ("int" if function in ("FindAt", "CountMatches") else "string") + " " + function, WORKSPACE)
+        self.assertIn('if (needle.Length == 0)', WORKSPACE)
+        self.assertIn('at + needle.Length', WORKSPACE)
+        native = (ROOT / "tests/WorkspaceSmoke.hy").read_text()
+        self.assertIn('Workspace.ReplaceAll("aaa", "aa", "z")', native)
+        self.assertIn('Workspace.ReplaceAll("text", "", "x")', native)
+
     def test_not_yet_supported_features_are_not_fake(self):
         self.assertIn("not implemented", README.lower())
         self.assertIn("not a fake in-editor picture", (ROOT / "Quark.hyui").read_text())

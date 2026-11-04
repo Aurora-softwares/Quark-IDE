@@ -207,6 +207,52 @@ namespace Quark {
             return 0;
         }
 
+        // Non-overlapping search, shared by the editor's Find and Replace actions.
+        // Empty search strings are deliberately rejected (never loop forever).
+        public static int FindAt(string body, string needle, int start) {
+            if (needle.Length == 0 || start < 0) { return -1; }
+            int i = start;
+            while (i + needle.Length <= body.Length) {
+                int j = 0;
+                while (j < needle.Length && body[i + j] == needle[j]) { j = j + 1; }
+                if (j == needle.Length) { return i; }
+                i = i + 1;
+            }
+            return -1;
+        }
+
+        public static int CountMatches(string body, string needle) {
+            if (needle.Length == 0) { return 0; }
+            int count = 0;
+            int at = FindAt(body, needle, 0);
+            while (at >= 0) {
+                count = count + 1;
+                at = FindAt(body, needle, at + needle.Length);
+            }
+            return count;
+        }
+
+        public static string ReplaceFirst(string body, string needle, string replacement) {
+            int at = FindAt(body, needle, 0);
+            if (at < 0) { return body; }
+            return Slice(body, 0, at) + replacement +
+                Slice(body, at + needle.Length, body.Length - at - needle.Length);
+        }
+
+        public static string ReplaceAll(string body, string needle, string replacement) {
+            if (needle.Length == 0) { return body; }
+            int at = FindAt(body, needle, 0);
+            if (at < 0) { return body; }
+            int from = 0;
+            string result = "";
+            while (at >= 0) {
+                result = result + Slice(body, from, at - from) + replacement;
+                from = at + needle.Length;
+                at = FindAt(body, needle, from);
+            }
+            return result + Slice(body, from, body.Length - from);
+        }
+
         public static string Preview(string input) {
             if (input.Length > 12000) { return Slice(input, 0, 12000) + "\n… output truncated at 12,000 characters"; }
             return input;

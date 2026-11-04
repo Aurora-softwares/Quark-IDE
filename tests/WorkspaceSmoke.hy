@@ -23,6 +23,19 @@ public class Program {
         if (Workspace.FindLine("one\ntwo\nthree", "three") != 3 ||
             Workspace.FindLine("one\ntwo", "missing") != 0) { return 14; }
         if (Workspace.Preview("short") != "short") { return 15; }
+        if (Workspace.FindAt("aabba", "bb", 0) != 2 ||
+            Workspace.FindAt("aabba", "bb", 3) != -1) { return 16; }
+        if (Workspace.CountMatches("abababa", "aba") != 2 ||
+            Workspace.CountMatches("abc", "") != 0) { return 17; }
+        if (Workspace.ReplaceFirst("alpha beta alpha", "alpha", "next") !=
+            "next beta alpha") { return 18; }
+        if (Workspace.ReplaceAll("alpha beta alpha", "alpha", "next") !=
+            "next beta next") { return 19; }
+        if (Workspace.ReplaceAll("aaa", "aa", "z") != "za" ||
+            Workspace.ReplaceAll("text", "", "x") != "text" ||
+            Workspace.ReplaceFirst("abc", "missing", "z") != "abc") { return 20; }
+        if (Workspace.ReplaceAll("one\ntwo\none", "one", "") != "\ntwo\n" ||
+            Workspace.ReplaceAll("hi", "hi", "hi hi") != "hi hi") { return 21; }
         System.Console.WriteLine("Quark Hydrogen workspace tests passed");
         return 0;
     }

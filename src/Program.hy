@@ -112,6 +112,29 @@ namespace Quark {
                     Application.SetText("propertyType", "Hydrogen format 2 project manifest");
                 }
             }
+            if (handler == "ReplaceFirst" || handler == "ReplaceAll") {
+                bool onUI = Application.Value(args, "editorTabs") == "1";
+                string field = onUI ? "uiText" : "codeText";
+                string data = Application.Value(args, field);
+                string term = Application.Value(args, "searchQuery");
+                string replacement = Application.Value(args, "replaceQuery");
+                if (term == "") {
+                    Application.SetText("searchResult", "Enter a non-empty search term.");
+                } else {
+                    int count = Workspace.CountMatches(data, term);
+                    if (count == 0) {
+                        Application.SetText("searchResult", "No match in the open document.");
+                    } else {
+                        bool all = handler == "ReplaceAll";
+                        string updated = all ? Workspace.ReplaceAll(data, term, replacement) :
+                            Workspace.ReplaceFirst(data, term, replacement);
+                        Application.SetText(field, updated);
+                        int changed = all ? count : 1;
+                        Application.SetText("searchResult", "Replaced " + changed + " occurrence(s). Save to keep your edits.");
+                        Status("Document modified (" + changed + " replacement(s)); save before building.");
+                    }
+                }
+            }
             if (handler == "Find") {
                 bool onUI = Application.Value(args, "editorTabs") == "1";
                 string data = Application.Value(args, onUI ? "uiText" : "codeText");
