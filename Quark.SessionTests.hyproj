@@ -1,0 +1,5 @@
+format = 2
+name = "QuarkSessionSmoke"
+version = "0.1.0"
+type = "exe"
+sources = ["tests/SessionSmoke.hy", "src/Quark/Session.hy", "src/Quark/Workspace.hy"]

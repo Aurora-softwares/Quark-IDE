@@ -7,6 +7,9 @@ work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 "$compiler" build Quark.WorkspaceTests.hyproj -o "$work/quark-workspace-tests"
 "$work/quark-workspace-tests"
+mkdir -p build
+"$compiler" build Quark.SessionTests.hyproj -o "$work/quark-session-tests"
+"$work/quark-session-tests"
 "$compiler" build Quark.IDE.hyproj -o "$work/QuarkIDE"
 "$compiler" build Quark.hyproj -o "$work/Quark"
 test -f "$work/QuarkIDE" || test -d "$work/QuarkIDE.app" || test -f "$work/QuarkIDE.exe"
