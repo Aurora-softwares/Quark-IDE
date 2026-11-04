@@ -43,6 +43,30 @@ if [[ "${HYUI_NATIVE_UI_SMOKE:-0}" == "1" ]]; then
   timeout 12s "$work/QuarkIDE" --event ShowCode:toolbarCode --state-output "$work/code.json"
   timeout 12s "$work/QuarkIDE" --event ShowOutput:bottomTabs --state-output "$work/output.json"
 
+  # A working editor window is not enough: real user selections trigger
+  # LoadSession on the second window, which was previously untested.
+  # The IDE must read the handoff, open the project and consume the request.
+  mkdir -p build
+  printf 'P\n%s\n' "$root/Quark.IDE.hyproj" > build/.quark-open-request
+  timeout 12s "$work/QuarkIDE" --state-output "$work/project-loaded.json" \
+    > "$work/project-load.stdout" 2> "$work/project-load.stderr" || {
+      cat "$work/project-load.stderr" >&2
+      echo "Quark IDE failed to load the project handoff" >&2
+      exit 1
+    }
+  test ! -s build/.quark-open-request || {
+    echo "Quark IDE did not consume its launch request" >&2
+    exit 1
+  }
+  printf 'S\n%s\n' "$root/src/Quark/Workspace.hy" > build/.quark-open-request
+  timeout 12s "$work/QuarkIDE" --state-output "$work/source-loaded.json" \
+    > "$work/source-load.stdout" 2> "$work/source-load.stderr" || {
+      cat "$work/source-load.stderr" >&2
+      echo "Quark IDE failed to load the source-file handoff" >&2
+      exit 1
+    }
+  test ! -s build/.quark-open-request
+
   python3 - "$work" <<'PY'
 import json
 from pathlib import Path
@@ -56,7 +80,13 @@ assert states['code']['editorTabs.value'] == 0, states['code']
 assert states['output']['bottomTabs.value'] == 0, states['output']
 for name, state in states.items():
     assert state['__hyui.visible_popovers'] == '0', name
-print('Native Quark Start and IDE lifecycle and event integration passed.')
+project = json.loads((work / 'project-loaded.json').read_text())
+source = json.loads((work / 'source-loaded.json').read_text())
+assert project['projectTitle.text'] == 'QuarkIDE', project
+assert project['codeName.text'] == 'Program.hy', project
+assert source['codeName.text'] == 'Workspace.hy', source
+assert 'public class Workspace' in source['codeText.text'], source
+print('Native Quark Start, IDE event dispatch and actual launch handoffs passed.')
 PY
 else
   echo "Native GTK4 interactions not run; set HYUI_NATIVE_UI_SMOKE=1 under Xvfb."
