@@ -16,3 +16,32 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Verify every shipped feature has at least two tests
         run: python3 scripts/check-feature-coverage.py
+
+  native-gtk-integration:
+    name: Build and interact with both Hydrogen GTK4 windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Aurora-softwares/Hylang-Compiler
+          ref: Development
+          path: hydrogen
+      - name: Install native GTK4 build and virtual desktop requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake binutils pkg-config libgtk-4-dev xvfb dbus-x11 file python3
+      - name: Bootstrap a real Hydrogen Stage 1
+        run: |
+          cmake -S hydrogen -B hydrogen/build/bootstrap -DCMAKE_BUILD_TYPE=Release -DHYDROGEN_BUILD_UI=OFF
+          cmake --build hydrogen/build/bootstrap --target hy --parallel 3
+          mkdir -p hydrogen/build/self_hosting/linux
+          (cd hydrogen && ./build/bootstrap/hy build src/Hydrogen.Compiler.Cli/Hydrogen.Compiler.Cli.hyproj -o build/self_hosting/linux/hydrogen-stage1)
+      - name: Build Quark and exercise native GTK4 lifecycle/events
+        env:
+          HY: ${{ github.workspace }}/hydrogen/build/self_hosting/linux/hydrogen-stage1
+          HYUI_NATIVE_UI_SMOKE: "1"
+        run: |
+          dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1200x24' \
+            bash tests/native-smoke.sh

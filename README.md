@@ -95,11 +95,15 @@ python3 scripts/check-feature-coverage.py
 HY=hy bash tests/native-smoke.sh
 ```
 
-The Python tests validate XML and source contracts, not actual native UI
-behavior. The native smoke script compiles and executes the standalone
-Hydrogen workspace test and packages both desktop frontends; it does not
-exercise the interactive GTK/WinUI/AppKit transition. Visual and
-interaction acceptance on real systems is still required.
+The Python tests validate XML and source contracts; the native smoke script
+compiles the standalone Hydrogen workspace test and both desktop frontends.
+CI additionally bootstraps the latest Hydrogen Development Stage 1 and runs
+both GTK4 applications under Xvfb with `HYUI_NATIVE_UI_SMOKE=1`, verifying
+window shutdown, event dispatch and live GTK widget-state transitions.
+On Linux you can run the same integration suite using
+`HYUI_NATIVE_UI_SMOKE=1 HY=/path/to/hydrogen-stage1 dbus-run-session -- xvfb-run -a bash tests/native-smoke.sh`.
+Full Start-to-IDE handoff, file pickers, macOS AppKit/Windows WinUI, accessibility
+and visual acceptance still require manual or platform-native UI automation.
 
 ### Development progress / release gates
 
