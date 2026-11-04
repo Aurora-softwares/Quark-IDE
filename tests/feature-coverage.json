@@ -55,6 +55,11 @@
     "real native UI preview": [
       "test_compiler_output_and_preview_are_real",
       "test_not_yet_supported_features_are_not_fake"
+    ],
+    "text search and replace": [
+      "test_editor_can_search_active_file",
+      "test_replace_buttons_and_unsaved_edit_handling",
+      "test_replace_helper_handles_no_match_empty_and_nonoverlap"
     ]
   }
 }

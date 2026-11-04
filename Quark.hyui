@@ -101,7 +101,12 @@
         <Input id="compiler" text="hy" placeholder="Path to Hydrogen compiler" accessibleName="Hydrogen compiler executable" />
         <Label text="TEXT SEARCH" role="caption" tone="accent" />
         <Input id="searchQuery" text="" placeholder="Find in current file…" accessibleName="Search in current editor" />
-        <Button id="findButton" text="Find first match" onClick="Find" />
+        <Input id="replaceQuery" text="" placeholder="Replace with…" accessibleName="Replacement text" />
+        <RowPanel gap="6">
+          <Button id="findButton" text="Find" onClick="Find" />
+          <Button id="replaceFirstButton" text="Replace first" onClick="ReplaceFirst" />
+          <Button id="replaceAllButton" text="Replace all" onClick="ReplaceAll" />
+        </RowPanel>
         <Label id="searchResult" text="Ready to search" tone="muted" />
       </Panel>
     </ColumnPanel>

@@ -68,7 +68,7 @@ launch path is the primary development target for this iteration.
 The IDE can open `.hyproj`, `.hy` and `.hyui` files, navigate source paths
 declared in a Hydrogen manifest, edit and save named documents, protect
 unsaved buffers when opening another file or changing workspaces, create
-starter console and native UI projects, search within the active buffer,
+starter console and native UI projects, search and replace within either active editor buffer,
 inspect the manifest, and invoke Hydrogen `check`, `build`, run-without-
 debugging, and actual native UI preview. Build logs and exit codes are shown
 in Output. The project remains strict about not presenting Run as Debug.
@@ -84,7 +84,7 @@ about 24,000 characters shared across live fields; larger documents need
 a dedicated source-editor backend. Processes run synchronously inside
 Hydrogen event callbacks, so compiler commands can temporarily block the
 IDE and a long-running preview can wait for the preview window to close.
-A source-level debugger, rich editor, Git staging, persistent docking and
+A source-level debugger, rich editor (including cursor jump-to-match), Git staging, persistent docking and
 full source recovery are not implemented.
 
 ### Tests
