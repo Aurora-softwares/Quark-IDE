@@ -61,7 +61,11 @@ The HYUI `Exit()` protocol is now implemented for the legacy native host and
 the Windows WinUI runtime too. Quark starts the macOS bundle's native
 `hyui-launcher` from the repository root and uses that same entry point for the
 second window, retaining the working directory needed by the handoff file.
-Companion launch and full interaction still need macOS and Windows validation.
+The [Apple Silicon CI job](https://github.com/Aurora-softwares/Quark-IDE/actions/runs/42609813943/job/129135042042)
+built both arm64 AppKit bundles, launched each native window, and exercised
+Quark's Build and Run service against a real arm64 console project. The full
+Start-to-IDE handoff and interactive controls still need macOS validation;
+Windows companion launch also remains open.
 
 The IDE's Properties panel has a **Build target** selector. Host CPU remains the
 default. On macOS, **macOS arm64 (Apple Silicon)** passes `--target macos-arm64`
@@ -71,8 +75,8 @@ HYUI projects also need its `hyui` tool and exported `macos-arm64.app` runtime.
 On an Intel Mac, Build can cross-compile arm64 output but Run asks you to move
 it to Apple Silicon. On Apple Silicon, Run executes a console binary or opens
 the packaged `.app`. Preview continues to use the host UI runtime. Quark's
-target selection has native Linux regression tests; its macOS build and launch
-path still needs Quark-specific platform validation.
+target selection has native Linux regression tests and an Apple Silicon CI
+Build/Run test; launching a HYUI project through Quark's Run action remains open.
 
 ### Runtime file-path compatibility
 
@@ -124,6 +128,9 @@ compiles the standalone Hydrogen workspace test and both desktop frontends.
 CI additionally bootstraps the latest Hydrogen Development Stage 1 and runs
 both GTK4 applications under Xvfb with `HYUI_NATIVE_UI_SMOKE=1`, verifying
 window shutdown, event dispatch and live GTK widget-state transitions.
+The Apple Silicon job builds both AppKit bundles with Hydrogen's C backend,
+checks their arm64 host/backend binaries, launches both windows, and runs a
+console application through Quark's target-aware Build/Run service.
 On Linux you can run the same integration suite using
 `HYUI_NATIVE_UI_SMOKE=1 HY=/path/to/hydrogen-stage1 dbus-run-session -- xvfb-run -a bash tests/native-smoke.sh`.
 Full Start-to-IDE handoff, file pickers, macOS AppKit/Windows WinUI, accessibility
@@ -137,9 +144,8 @@ applications and an explicit close-after-launch handoff.
 🟢 Visual Studio-style three-column workspace, project/file actions, compiler
 integration, project generation, recent paths and source contract CI.
 
-🟡 Verify opening and closing both windows on Linux, macOS and Windows;
-complete native packaging, Apple Silicon target selection and launch,
-portability and accessibility checks.
+🟡 Verify complete Start-to-IDE handoff on macOS and Windows; complete HYUI
+Build/Run through Quark, portability and accessibility checks.
 
 🔴 Rich editor APIs, asynchronous process execution, robust secure session
 storage, project trees, Git integration, live UI designer, debugger, test
