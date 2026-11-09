@@ -79,11 +79,14 @@ jobs:
           done
       - name: Exercise Quark Apple Silicon Build and Run with the real compiler
         run: |
+          export HYUI_RUNTIME_ROOT="$PWD/hydrogen/build/arm64/native-sdk"
           hydrogen/build/arm64/hy build Quark.ArmTargetTests.hyproj \
             -o build/quark-arm-target-tests --hide-progress --hide-spinner --hide-log
           mkdir -p build/arm-target-fixture
-          build/quark-arm-target-tests "$PWD/hydrogen/build/arm64/hy" "$PWD/build/arm-target-fixture"
+          build/quark-arm-target-tests "$PWD/hydrogen/build/arm64/hy" \
+            "$PWD/build/arm-target-fixture" "$PWD/Quark.IDE.hyproj"
           lipo -archs build/arm-target-fixture/App.hyproj.quark-build | grep -qx arm64
+          lipo -archs Quark.IDE.hyproj.quark-build.app/Contents/Resources/app/__hyui_backend | grep -qx arm64
       - name: Launch both native Quark windows
         run: |
           python3 - <<'PY'
