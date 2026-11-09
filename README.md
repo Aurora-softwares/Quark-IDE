@@ -63,6 +63,17 @@ still needs manual platform verification; on macOS, launching a `.app` through
 `open` may not preserve Quark's working directory. The Linux split-window
 launch path is the primary development target for this iteration.
 
+The IDE's Properties panel has a **Build target** selector. Host CPU remains the
+default. On macOS, **macOS arm64 (Apple Silicon)** passes `--target macos-arm64`
+to Hydrogen's C++ bootstrap compiler for console and HYUI project builds.
+Point the compiler field to the Development source checkout's `build/arm64/hy`;
+HYUI projects also need its `hyui` tool and exported `macos-arm64.app` runtime.
+On an Intel Mac, Build can cross-compile arm64 output but Run asks you to move
+it to Apple Silicon. On Apple Silicon, Run executes a console binary or opens
+the packaged `.app`. Preview continues to use the host UI runtime. Quark's
+target selection has native Linux regression tests; its macOS build and launch
+path still needs Quark-specific platform validation.
+
 ### Runtime file-path compatibility
 
 The early native Hydrogen Linux runtime called `rt_create_parents` by
@@ -127,7 +138,8 @@ applications and an explicit close-after-launch handoff.
 integration, project generation, recent paths and source contract CI.
 
 🟡 Verify opening and closing both windows on Linux, macOS and Windows;
-complete native packaging, portability and accessibility checks.
+complete native packaging, Apple Silicon target selection and launch,
+portability and accessibility checks.
 
 🔴 Rich editor APIs, asynchronous process execution, robust secure session
 storage, project trees, Git integration, live UI designer, debugger, test

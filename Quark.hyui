@@ -40,7 +40,7 @@
   <RowPanel breakpoint="800" gap="12">
     <Label text="Q  /  QUARK" role="caption" tone="accent" />
     <Label text="Configuration: Debug" role="caption" />
-    <Label text="Target: host CPU" role="caption" tone="muted" />
+    <Label id="targetSummary" text="Target: host CPU" role="caption" tone="muted" />
     <Label id="startupProject" text="No startup project selected" role="caption" tone="muted" />
   </RowPanel>
   <RowPanel breakpoint="1180" gap="9">
@@ -99,6 +99,7 @@
         <Separator />
         <Label text="BUILD TOOLS" role="caption" tone="accent" />
         <Input id="compiler" text="hy" placeholder="Path to Hydrogen compiler" accessibleName="Hydrogen compiler executable" />
+        <Select id="buildTarget" items="Host CPU|macOS arm64 (Apple Silicon)" value="0" onChange="TargetChanged" accessibleName="Application build target" />
         <Label text="TEXT SEARCH" role="caption" tone="accent" />
         <Input id="searchQuery" text="" placeholder="Find in current file…" accessibleName="Search in current editor" />
         <Input id="replaceQuery" text="" placeholder="Replace with…" accessibleName="Replacement text" />

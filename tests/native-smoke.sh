@@ -10,6 +10,8 @@ trap 'rm -rf -- "$work"' EXIT
 mkdir -p build
 "$compiler" build Quark.SessionTests.hyproj -o "$work/quark-session-tests"
 "$work/quark-session-tests"
+"$compiler" build Quark.BuildTargetTests.hyproj -o "$work/quark-target-tests"
+"$work/quark-target-tests" "$work"
 "$compiler" build Quark.IDE.hyproj -o "$work/QuarkIDE"
 "$compiler" build Quark.hyproj -o "$work/Quark"
 test -f "$work/QuarkIDE" || test -d "$work/QuarkIDE.app" || test -f "$work/QuarkIDE.exe"
@@ -45,6 +47,7 @@ if [[ "${HYUI_NATIVE_UI_SMOKE:-0}" == "1" ]]; then
   timeout 12s "$work/QuarkIDE" --event ShowUI:toolbarUI --state-output "$work/ui.json"
   timeout 12s "$work/QuarkIDE" --event ShowCode:toolbarCode --state-output "$work/code.json"
   timeout 12s "$work/QuarkIDE" --event ShowOutput:bottomTabs --state-output "$work/output.json"
+  timeout 12s "$work/QuarkIDE" --event TargetChanged:buildTarget --state-output "$work/target.json"
 
   # A working editor window is not enough: real user selections trigger
   # LoadSession on the second window, which was previously untested.
@@ -91,11 +94,12 @@ from pathlib import Path
 import sys
 work = Path(sys.argv[1])
 states = {name: json.loads((work / (name + '.json')).read_text())
-          for name in ('start', 'ui', 'code', 'output')}
+          for name in ('start', 'ui', 'code', 'output', 'target')}
 assert 'recentList.text' in states['start']
 assert states['ui']['editorTabs.value'] == 1, states['ui']
 assert states['code']['editorTabs.value'] == 0, states['code']
 assert states['output']['bottomTabs.value'] == 0, states['output']
+assert states['target']['targetSummary.text'] == 'Target: host CPU', states['target']
 for name, state in states.items():
     assert state['__hyui.visible_popovers'] == '0', name
 project = json.loads((work / 'project-loaded.json').read_text())

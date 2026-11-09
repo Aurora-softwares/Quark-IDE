@@ -39,6 +39,11 @@ namespace Quark {
             if (handler == "ShowCode") { ShowEditor(0); }
             if (handler == "ShowUI") { ShowEditor(1); }
             if (handler == "ShowOutput") { Application.SetValue("bottomTabs", 0); }
+            if (handler == "TargetChanged") {
+                bool arm64 = Application.Value(args, "buildTarget") == "1";
+                Application.SetText("targetSummary", arm64 ? "Target: macOS arm64" : "Target: host CPU");
+                Status(arm64 ? "Apple Silicon build target selected." : "Host CPU build target selected.");
+            }
             if (handler == "About") { Application.SetOpen("aboutDialog", true); }
             if (handler == "PickerCancelled") { Status("File selection cancelled."); }
 
@@ -154,7 +159,8 @@ namespace Quark {
                 if (compiler == "") { Status("Enter a compiler executable in Properties."); return 0; }
                 string manifest = Application.Value(args, "manifestState");
                 bool hasUI = Workspace.QuotedSetting(manifest, "ui") != "";
-                string result = BuildService.Execute(compiler, projectPath, handler, hasUI);
+                string target = Application.Value(args, "buildTarget") == "1" ? "macos-arm64" : "host";
+                string result = BuildService.Execute(compiler, projectPath, handler, hasUI, target);
                 Application.SetText("output", result);
                 Application.SetText("status", handler + " finished — see Output for the command result.");
                 Application.SetValue("bottomTabs", 0);

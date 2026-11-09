@@ -1,0 +1,5 @@
+format = 2
+name = "QuarkBuildTargetTests"
+version = "0.2.0"
+type = "exe"
+sources = ["tests/BuildTargetSmoke.hy", "src/Quark/BuildService.hy", "src/Quark/Workspace.hy"]

@@ -168,7 +168,7 @@ class QuarkContracts(unittest.TestCase):
     def test_compiler_check_build_run_are_real_processes(self):
         self.assertIn("System.Host.Process.Run(", BUILD)
         self.assertIn('command + " check " + projectArg', BUILD)
-        self.assertIn('command + " build " + projectArg + " -o " + outputArg', BUILD)
+        self.assertIn('command + " build " + projectArg + targetArg + " -o " + outputArg', BUILD)
         self.assertIn("if (built.Code() != 0)", BUILD)
 
     def test_compiler_output_and_preview_are_real(self):
