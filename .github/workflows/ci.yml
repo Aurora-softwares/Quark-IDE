@@ -45,3 +45,58 @@ jobs:
         run: |
           dbus-run-session -- xvfb-run -a -s '-screen 0 1600x1200x24' \
             bash tests/native-smoke.sh
+
+  native-apple-silicon:
+    name: Build and launch both Hydrogen AppKit windows on Apple Silicon
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Aurora-softwares/Hylang-Compiler
+          ref: Development
+          path: hydrogen
+      - name: Build Apple Silicon Hydrogen and native AppKit runtime
+        run: |
+          test "$(uname -m)" = arm64
+          brew install qtbase
+          cmake -S hydrogen -B hydrogen/build/arm64 -DCMAKE_BUILD_TYPE=Release \
+            -DHYDROGEN_BUILD_UI=ON -DCMAKE_PREFIX_PATH="$(brew --prefix qtbase)"
+          cmake --build hydrogen/build/arm64 --target hy hyui hydrogen-ui-sdk --parallel 3
+      - name: Build Quark Start and IDE as arm64 AppKit bundles
+        run: |
+          HY="$PWD/hydrogen/build/arm64/hy" \
+            HYUI_RUNTIME_ROOT="$PWD/hydrogen/build/arm64/native-sdk" \
+            bash scripts/build.sh
+          for app in Quark QuarkIDE; do
+            bundle="build/$app.app/Contents"
+            test -f "$bundle/hyui-runtime.json"
+            lipo -archs "$bundle/MacOS/hyui" | grep -qx arm64
+            lipo -archs "$bundle/MacOS/hyui-launcher" | grep -qx arm64
+            lipo -archs "$bundle/Resources/app/__hyui_backend" | grep -qx arm64
+            plutil -lint "$bundle/Info.plist"
+          done
+      - name: Exercise Quark Apple Silicon Build and Run with the real compiler
+        run: |
+          hydrogen/build/arm64/hy build Quark.ArmTargetTests.hyproj \
+            -o build/quark-arm-target-tests --hide-progress --hide-spinner --hide-log
+          mkdir -p build/arm-target-fixture
+          build/quark-arm-target-tests "$PWD/hydrogen/build/arm64/hy" "$PWD/build/arm-target-fixture"
+          lipo -archs build/arm-target-fixture/App.hyproj.quark-build | grep -qx arm64
+      - name: Launch both native Quark windows
+        run: |
+          python3 - <<'PY'
+          import os, signal, subprocess, time
+          for name in ('Quark', 'QuarkIDE'):
+              launcher = f'build/{name}.app/Contents/MacOS/hyui-launcher'
+              app = subprocess.Popen([launcher], stderr=subprocess.PIPE, start_new_session=True)
+              try:
+                  time.sleep(4)
+                  if app.poll() is not None:
+                      raise AssertionError(f'{name} exited early ({app.returncode}): {app.stderr.read().decode()}')
+              finally:
+                  if app.poll() is None:
+                      os.killpg(app.pid, signal.SIGTERM)
+                      app.wait(timeout=10)
+          PY

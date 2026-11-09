@@ -8,4 +8,4 @@ mkdir -p build
 "$hy" build Quark.hyproj -o build/Quark
 echo
 echo "Built both native Hydrogen windows."
-echo "Run from this directory: ./build/Quark"
+echo "Run from this directory: bash scripts/run.sh"

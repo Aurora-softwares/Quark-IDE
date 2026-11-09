@@ -61,9 +61,13 @@ namespace Quark {
                 return System.Host.Process.Run("start \"\" " + Quote(executable));
             }
             if (System.Host.Process.Run("test \"$(uname -s)\" = Darwin") == 0) {
-                string bundle = "build/" + target + ".app";
-                if (System.Host.Process.Run("test -d " + Quote(bundle)) != 0) { return 127; }
-                return System.Host.Process.Run("open " + Quote(bundle));
+                string launcher = "./build/" + target + ".app/Contents/MacOS/hyui-launcher";
+                if (!System.IO.File.Exists(launcher)) { return 127; }
+                string logFile = target == "QuarkIDE" ? "build/.quark-ide.log" : "build/.quark-start.log";
+                // Launch the native bundle entry point from this working
+                // directory so the second window can find the handoff file.
+                return System.Host.Process.Run("nohup " + Quote(launcher) +
+                    " > " + Quote(logFile) + " 2>&1 </dev/null &");
             }
             string executable = "./build/" + target;
             if (!System.IO.File.Exists("build/" + target)) { return 127; }

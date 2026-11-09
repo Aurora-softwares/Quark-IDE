@@ -58,10 +58,10 @@ detached with `nohup` before the Start Window exits.
 
 Both native UI manifests can be packaged with a host-specific Hydrogen SDK.
 The HYUI `Exit()` protocol is now implemented for the legacy native host and
-the Windows WinUI runtime too. Companion launch/working-directory packaging
-still needs manual platform verification; on macOS, launching a `.app` through
-`open` may not preserve Quark's working directory. The Linux split-window
-launch path is the primary development target for this iteration.
+the Windows WinUI runtime too. Quark starts the macOS bundle's native
+`hyui-launcher` from the repository root and uses that same entry point for the
+second window, retaining the working directory needed by the handoff file.
+Companion launch and full interaction still need macOS and Windows validation.
 
 The IDE's Properties panel has a **Build target** selector. Host CPU remains the
 default. On macOS, **macOS arm64 (Apple Silicon)** passes `--target macos-arm64`
