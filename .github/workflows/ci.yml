@@ -15,6 +15,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     # Trusted Linux and Windows jobs use self-hosted runners; fork PRs and macOS stay hosted.
     runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && '["self-hosted","Linux","X64"]' || matrix.os == 'windows-latest' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && '["self-hosted","Windows","X64"]' || format('["{0}"]', matrix.os)) }}
+    env:
+      PSExecutionPolicyPreference: ${{ startsWith(matrix.os, 'windows-') && 'Bypass' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -90,6 +92,8 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     # Trusted Linux and Windows jobs use self-hosted runners; fork PRs and macOS stay hosted.
     runs-on: ${{ fromJSON(matrix.os == 'ubuntu-latest' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && '["self-hosted","Linux","X64"]' || matrix.os == 'windows-latest' && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && '["self-hosted","Windows","X64"]' || format('["{0}"]', matrix.os)) }}
+    env:
+      PSExecutionPolicyPreference: ${{ startsWith(matrix.os, 'windows-') && 'Bypass' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
