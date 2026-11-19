@@ -1414,7 +1414,7 @@ fn build_ide(ui: &Ui, state: Rc<RefCell<Ide>>, window: naui::Window) -> naui::Re
     // The actual editor viewport is drawn again after native window resize.
     // Defer AppKit splitter correction until the redraw callback returns.
     #[cfg(target_os = "macos")]
-    let mac_dock_relayout: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let mac_dock_relayout: Rc<RefCell<Option<DocumentRelayout>>> = Rc::new(RefCell::new(None));
     let width_signal = ui.tasks().channel({
         let width = document_width.clone();
         let relayout = document_relayout.clone();
