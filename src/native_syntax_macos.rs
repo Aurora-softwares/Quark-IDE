@@ -124,11 +124,7 @@ pub fn highlight(editor: &naui::TextArea, text: &str, xml: bool) {
         .name()
         .to_string()
         .contains("Dark");
-    let base = if dark {
-        NSColor::textColor()
-    } else {
-        NSColor::textColor()
-    };
+    let base = NSColor::textColor();
     view.setTextColor_range(Some(&base), full);
     let spans = if xml {
         xml_spans(text)
