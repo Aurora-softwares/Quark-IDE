@@ -922,8 +922,14 @@ pub fn move_into(
     // they must not become ordinary layout children.
     if matches!(
         node.tag_name().name(),
-        "Tab" | "Menu" | "MenuItem" | "MenuBar" | "Toolbar"
-            | "ToolButton" | "ContextMenu" | "Popover"
+        "Tab"
+            | "Menu"
+            | "MenuItem"
+            | "MenuBar"
+            | "Toolbar"
+            | "ToolButton"
+            | "ContextMenu"
+            | "Popover"
     ) {
         return Err("This special Hydrogen UI node cannot be moved into a visual container".into());
     }
@@ -942,7 +948,10 @@ pub fn move_into(
     }
     let remaining = Document::parse(&updated).map_err(|e| e.to_string())?;
     let destination = element_at(&remaining, &adjusted_target)?;
-    let next_index = destination.children().filter(|child| child.is_element()).count();
+    let next_index = destination
+        .children()
+        .filter(|child| child.is_element())
+        .count();
     let start = destination.range().start;
     let end = tag_end(&updated, start)?;
     let opening = &updated[start..=end];
@@ -950,7 +959,10 @@ pub fn move_into(
     let indent = child_indent(&updated, start);
 
     if is_empty {
-        let prefix = opening.trim_end_matches('>').trim_end_matches('/').trim_end();
+        let prefix = opening
+            .trim_end_matches('>')
+            .trim_end_matches('/')
+            .trim_end();
         let parent_indent = updated[..start]
             .rsplit('\n')
             .next()
