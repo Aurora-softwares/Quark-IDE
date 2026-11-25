@@ -4,6 +4,10 @@ on:
     branches: [Development]
   pull_request:
     branches: [Development]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   source-contracts:
     runs-on: ubuntu-latest
